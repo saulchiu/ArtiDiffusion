@@ -1,0 +1,10 @@
+attack: badnet
+triger_name: trigger_image.png
+triger_path: ../resource/${attack}/${triger_name}
+dataset: cifar10
+generate_path: ./${attack}-${triger_name}-${dataset}
+device:
+  list:
+  - 0
+  id: 0
+  cuda: cuda:${device.id}

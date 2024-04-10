@@ -1,0 +1,4 @@
+attack: badnet
+triger_path: ../resource/trigger_image.png
+dataset: cifar10
+generate_path: ./{dataset}-{attack}/
