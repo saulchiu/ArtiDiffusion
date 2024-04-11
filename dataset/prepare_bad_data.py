@@ -9,7 +9,10 @@ from torchvision import datasets, transforms
 from torchvision.transforms import ToTensor
 from torchvision.utils import save_image
 import numpy as np
+<<<<<<< HEAD
 from tqdm import tqdm
+=======
+>>>>>>> 822d41949a24f12a2ac2924838fb1bb2462b44bd
 
 
 @hydra.main(version_base=None, config_path='./config', config_name='base')
@@ -22,12 +25,18 @@ def prepare_badnet_data(config: DictConfig):
     device = config.device.cuda
     num_workers = config.num_workers
     generate_path = config.generate_path
+<<<<<<< HEAD
     good_generate_path = config.good_generate_path
+=======
+>>>>>>> 822d41949a24f12a2ac2924838fb1bb2462b44bd
     triger = Image.open(config.triger_path)
     triger = trainsform(triger)
     print(triger.shape)
     os.makedirs(generate_path, exist_ok=True)
+<<<<<<< HEAD
     os.makedirs(good_generate_path, exist_ok=True)
+=======
+>>>>>>> 822d41949a24f12a2ac2924838fb1bb2462b44bd
     raw_data = datasets.CIFAR10(root='../data', train=False, transform=trainsform, download=True)
     bad_loader = dataloader.DataLoader(dataset=raw_data, batch_size=batch, num_workers=num_workers)
     good_data = datasets.CIFAR10(root='../data', train=True, transform=trainsform, download=True)
@@ -39,6 +48,7 @@ def prepare_badnet_data(config: DictConfig):
         triger_ = triger.repeat(x.shape[0], 1, 1, 1)
         x = x * (1 - triger_) + triger_
         tensor_list.append(x)
+<<<<<<< HEAD
     tensor = torch.cat(tensor_list, dim=0)
     for i, e in enumerate(tqdm(tensor)):
         image_np = e.cpu().detach().numpy()
@@ -48,16 +58,26 @@ def prepare_badnet_data(config: DictConfig):
         image.save(f'{generate_path}/bad_{i}.png')
     tensor_list = []
     tensor = None
+=======
+>>>>>>> 822d41949a24f12a2ac2924838fb1bb2462b44bd
     for x, _ in iter(good_loader):
         x = x.to(device)
         tensor_list.append(x)
     tensor = torch.cat(tensor_list, dim=0)
+<<<<<<< HEAD
     for i, e in enumerate(tqdm(tensor)):
+=======
+    for i, e in enumerate(tensor):
+>>>>>>> 822d41949a24f12a2ac2924838fb1bb2462b44bd
         image_np = e.cpu().detach().numpy()
         image_np = image_np.transpose(1, 2, 0)
         image_np = (image_np * 255).astype(np.uint8)
         image = Image.fromarray(image_np)
+<<<<<<< HEAD
         image.save(f'{good_generate_path}/good_{i}.png')
+=======
+        image.save(f'{generate_path}/diff_{i}.png')
+>>>>>>> 822d41949a24f12a2ac2924838fb1bb2462b44bd
 
 
 

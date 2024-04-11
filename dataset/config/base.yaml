@@ -1,9 +1,16 @@
 attack: badnet
+<<<<<<< HEAD
 triger_name: trigger_image_grid
 triger_path: ../resource/${attack}/${triger_name}.png
 dataset: cifar10
 generate_path: ./${attack}-${triger_name}-${dataset}
 good_generate_path: ./${dataset}-good
+=======
+triger_name: trigger_image_grid.png
+triger_path: ../resource/${attack}/${triger_name}
+dataset: cifar10
+generate_path: ./${attack}-${triger_name}-${dataset}
+>>>>>>> 822d41949a24f12a2ac2924838fb1bb2462b44bd
 batch: 64
 num_workers: 4
 device:
