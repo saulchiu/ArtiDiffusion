@@ -7,11 +7,8 @@ datasets/
 .vscode
 __pycache__/
 #tmp/
-<<<<<<< HEAD
 backdoor_diffusion/results/
-=======
 
->>>>>>> 822d41949a24f12a2ac2924838fb1bb2462b44bd
 
 
 
