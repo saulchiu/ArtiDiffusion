@@ -1,8 +1,9 @@
 attack: badnet
-triger_name: trigger_image_grid.png
-triger_path: ../resource/${attack}/${triger_name}
+triger_name: trigger_image_grid
+triger_path: ../resource/${attack}/${triger_name}.png
 dataset: cifar10
 generate_path: ./${attack}-${triger_name}-${dataset}
+good_generate_path: ./${dataset}-good
 batch: 64
 num_workers: 4
 device:
