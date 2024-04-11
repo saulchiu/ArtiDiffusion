@@ -7,7 +7,7 @@ datasets/
 .vscode
 __pycache__/
 #tmp/
-
+backdoor_diffusion/results/
 
 
 
