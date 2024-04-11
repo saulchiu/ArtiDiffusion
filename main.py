@@ -1,4 +1,11 @@
-from denoising_diffusion_pytorch import Unet, GaussianDiffusion, Trainer
+import torch
+from denoising_diffusion_pytorch import Unet, GaussianDiffusion
+
+
+class triger_ddpm(GaussianDiffusion):
+    def __init__(self, model, image_size, timesteps, triger=None):
+        super().__init__(model, image_size=image_size, timesteps=timesteps)
+
 
 model = Unet(
     dim=64,
@@ -6,22 +13,12 @@ model = Unet(
     flash_attn=True
 )
 
-diffusion = GaussianDiffusion(
+diffusion = triger_ddpm(
     model,
-    image_size=32,
-    timesteps=1000,  # number of steps
-    sampling_timesteps=250
-    # number of sampling timesteps (using ddim for faster inference [see citation for ddim paper])
+    image_size=128,
+    timesteps=1000  # number of steps
 )
-trainer = Trainer(
-    diffusion,
-    '/home/chengyiqiu/code/Diffusion-Backdoor-Embed/dataset/badnet-trigger_image_grid.png-cifar10',
-    train_batch_size=32,
-    train_lr=8e-5,
-    train_num_steps=700000,  # total training steps
-    gradient_accumulate_every=2,  # gradient accumulation steps
-    ema_decay=0.995,  # exponential moving average decay
-    amp=True,  # turn on mixed precision
-    calculate_fid=True  # whether to calculate fid during training
-)
-trainer.train()
+
+training_images = torch.rand(8, 3, 128, 128)  # images are normalized from 0 to 1
+loss = diffusion(training_images)
+loss.backward()

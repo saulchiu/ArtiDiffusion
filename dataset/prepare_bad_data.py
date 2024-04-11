@@ -26,13 +26,18 @@ def prepare_badnet_data(config: DictConfig):
     print(triger.shape)
     os.makedirs(generate_path, exist_ok=True)
     raw_data = datasets.CIFAR10(root='../data', train=False, transform=trainsform, download=True)
-    raw_loader = dataloader.DataLoader(dataset=raw_data, batch_size=batch, num_workers=num_workers)
+    bad_loader = dataloader.DataLoader(dataset=raw_data, batch_size=batch, num_workers=num_workers)
+    good_data = datasets.CIFAR10(root='../data', train=True, transform=trainsform, download=True)
+    good_loader = dataloader.DataLoader(dataset=good_data, batch_size=batch, num_workers=num_workers)
     triger = triger.to(device)
     tensor_list = []
-    for x, _ in iter(raw_loader):
+    for x, _ in iter(bad_loader):
         x = x.to(device)
         triger_ = triger.repeat(x.shape[0], 1, 1, 1)
         x = x * (1 - triger_) + triger_
+        tensor_list.append(x)
+    for x, _ in iter(good_loader):
+        x = x.to(device)
         tensor_list.append(x)
     tensor = torch.cat(tensor_list, dim=0)
     for i, e in enumerate(tensor):
@@ -40,11 +45,14 @@ def prepare_badnet_data(config: DictConfig):
         image_np = image_np.transpose(1, 2, 0)
         image_np = (image_np * 255).astype(np.uint8)
         image = Image.fromarray(image_np)
-        image.save(f'{generate_path}/bad_{i}.png')
-        if i == 320:
-            break
+        image.save(f'{generate_path}/diff_{i}.png')
 
+
+
+def download_cifar10():
+    datasets.CIFAR10(root='../data', download=True)
 
 
 if __name__ == '__main__':
+    download_cifar10()
     prepare_badnet_data()
