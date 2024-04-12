@@ -1,10 +1,13 @@
 import math
+
+import denoising_diffusion_pytorch
 import torch
 import torchvision.transforms
 from denoising_diffusion_pytorch import Unet, GaussianDiffusion, Trainer
 import torch.nn.functional as F
-from denoising_diffusion_pytorch.denoising_diffusion_pytorch import default, rearrange, random, reduce, extract
+from denoising_diffusion_pytorch.denoising_diffusion_pytorch import default, rearrange, random, reduce, extract, cycle
 from PIL import Image
+from torch.utils.data.dataloader import DataLoader, Dataset
 
 
 class BadDiffusion(GaussianDiffusion):
@@ -69,6 +72,22 @@ class BadDiffusion(GaussianDiffusion):
         return self.p_losses(img, t, *args, **kwargs)
 
 
+class BadTrainer(denoising_diffusion_pytorch.Trainer):
+    def __init__(self, diffusion, good_folder, train_batch_size, train_lr, train_num_steps,
+                 gradient_accumulate_every, ema_decay, amp, calculate_fid, bad_folder=None):
+        super().__init__(diffusion_model=diffusion, folder=good_folder, train_batch_size=train_batch_size,
+                         train_lr=train_lr, train_num_steps=train_num_steps,
+                         gradient_accumulate_every=gradient_accumulate_every, ema_decay=ema_decay, amp=amp,
+                         calculate_fid=calculate_fid)
+        print('bad trainer')
+        if bad_folder is not None:
+            self.bad_ds = Dataset(bad_folder, self.image_size, augment_horizontal_flip=True, convert_image_to='RGB')
+            bad_dl = DataLoader(self.bad_ds, batch_size=train_batch_size, shuffle=True, pin_memory=True,
+                                num_workers=4)
+            bad_dl = self.accelerator.prepare(bad_dl)
+            self.bad_dl = cycle(bad_dl)
+
+
 if __name__ == '__main__':
     triger_path = '/home/chengyiqiu/code/Diffusion-Backdoor-Embed/resource/badnet/trigger_image_grid.png'
     transform = torchvision.transforms.Compose([
@@ -92,9 +111,10 @@ if __name__ == '__main__':
         trigger=triger
     )
 
-    trainer = Trainer(
+    trainer = BadTrainer(
         diffusion,
-        '/home/chengyiqiu/code/Diffusion-Backdoor-Embed/dataset/badnet-trigger_image_grid-cifar10',
+        bad_folder='/home/chengyiqiu/code/Diffusion-Backdoor-Embed/dataset/dataset-cifar10-badnet-trigger_image_grid',
+        good_folder='/home/chengyiqiu/code/Diffusion-Backdoor-Embed/dataset/dataset-cifar10-good',
         train_batch_size=32,
         train_lr=8e-5,
         # train_num_steps=700000,  # total training steps
