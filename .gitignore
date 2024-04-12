@@ -9,7 +9,7 @@ __pycache__/
 #tmp/
 
 backdoor_diffusion/results/
-dataset/cifar10-*
+dataset/dataset*
 dataset/outputs
 
 
