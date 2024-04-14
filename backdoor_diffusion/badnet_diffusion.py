@@ -188,10 +188,10 @@ if __name__ == '__main__':
         diffusion,
         bad_folder='../dataset/dataset-cifar10-badnet-trigger_image_grid',
         good_folder='../dataset/dataset-cifar10-good',
-        train_batch_size=32,
+        train_batch_size=128,
         train_lr=8e-5,
         # train_num_steps=700000,  # total training steps
-        train_num_steps=10000,
+        train_num_steps=1000,
         gradient_accumulate_every=2,  # gradient accumulation steps
         ema_decay=0.995,  # exponential moving average decay
         amp=True,  # turn on mixed precision
