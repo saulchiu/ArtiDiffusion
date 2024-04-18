@@ -106,7 +106,14 @@ class BadTrainer(denoising_diffusion_pytorch.Trainer):
                     if mode == 0:
                         data = next(self.dl).to(device)
                     elif mode == 1:
-                        data = next(self.bad_dl).to(device)
+                        import random
+                        rand_num = random.random()
+                        if rand_num < 0.6:
+                            data = next(self.dl).to(device)
+                            mode = 0
+                        else:
+                            data = next(self.bad_dl).to(device)
+                            mode = 1
                     with self.accelerator.autocast():
                         loss = self.model(data, mode)
                         loss = loss / self.gradient_accumulate_every
@@ -186,7 +193,7 @@ if __name__ == '__main__':
         diffusion,
         bad_folder='../dataset/dataset-cifar10-badnet-trigger_image_grid',
         good_folder='../dataset/dataset-cifar10-good',
-        train_batch_size=128,
+        train_batch_size=64,
         train_lr=8e-5,
         # train_num_steps=700000,  # total training steps
         train_num_steps=1000,
