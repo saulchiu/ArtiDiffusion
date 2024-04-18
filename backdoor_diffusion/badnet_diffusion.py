@@ -167,7 +167,7 @@ class BadTrainer(denoising_diffusion_pytorch.Trainer):
 
 
 if __name__ == '__main__':
-    triger_path = '../Diffusion-Backdoor-Embed/resource/badnet/trigger_image_grid.png'
+    triger_path = '../resource/badnet/trigger_image_grid.png'
     transform = torchvision.transforms.Compose([
         torchvision.transforms.ToTensor(),
         torchvision.transforms.Resize((32, 32))
@@ -196,7 +196,7 @@ if __name__ == '__main__':
         train_batch_size=128,
         train_lr=8e-5,
         # train_num_steps=700000,  # total training steps
-        train_num_steps=1000,
+        train_num_steps=10000,
         gradient_accumulate_every=2,  # gradient accumulation steps
         ema_decay=0.995,  # exponential moving average decay
         amp=True,  # turn on mixed precision
