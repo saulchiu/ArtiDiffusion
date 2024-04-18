@@ -17,7 +17,7 @@ diffusion = GaussianDiffusion(
 trainer = Trainer(
     diffusion,
     '../dataset/dataset-cifar10-good',
-    train_batch_size=32,
+    train_batch_size=64,
     train_lr=8e-5,
     train_num_steps=1000,  # total training steps
     gradient_accumulate_every=2,  # gradient accumulation steps
