@@ -167,7 +167,7 @@ class BadTrainer(denoising_diffusion_pytorch.Trainer):
 
 
 if __name__ == '__main__':
-    triger_path = '/home/chengyiqiu/code/Diffusion-Backdoor-Embed/resource/badnet/trigger_image_grid.png'
+    triger_path = '../Diffusion-Backdoor-Embed/resource/badnet/trigger_image_grid.png'
     transform = torchvision.transforms.Compose([
         torchvision.transforms.ToTensor(),
         torchvision.transforms.Resize((32, 32))
@@ -193,7 +193,7 @@ if __name__ == '__main__':
         diffusion,
         bad_folder='../dataset/dataset-cifar10-badnet-trigger_image_grid',
         good_folder='../dataset/dataset-cifar10-good',
-        train_batch_size=64,
+        train_batch_size=128,
         train_lr=8e-5,
         # train_num_steps=700000,  # total training steps
         train_num_steps=1000,

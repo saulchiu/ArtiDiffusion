@@ -45,7 +45,7 @@ def load_diffusion(path):
 
 
 if __name__ == '__main__':
-    path = '../backdoor_diffusion/res_badnet_grid_cifar10_step1k_ratio2/model-1.pt'
+    path = '../backdoor_diffusion/res_benign_cifar10_step1k/model-1.pt'
     diffusion = load_diffusion(path)
-    sampled_images = diffusion.sample(batch_size=16)
-    plt_img(tensor=sampled_images, batch=16)
+    sampled_images = diffusion.sample(batch_size=4)
+    plt_img(tensor=sampled_images, batch=4)
