@@ -8,7 +8,7 @@ model = Unet(
 
 diffusion = GaussianDiffusion(
     model,
-    image_size=128,
+    image_size=32,
     timesteps=1000,  # number of steps
     sampling_timesteps=250
     # number of sampling timesteps (using ddim for faster inference [see citation for ddim paper])
@@ -17,7 +17,7 @@ diffusion = GaussianDiffusion(
 trainer = Trainer(
     diffusion,
     '../dataset/dataset-cifar10-good',
-    train_batch_size=128,
+    train_batch_size=32,
     train_lr=8e-5,
     train_num_steps=1000,  # total training steps
     gradient_accumulate_every=2,  # gradient accumulation steps
