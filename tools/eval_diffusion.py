@@ -3,51 +3,49 @@ import torch
 from denoising_diffusion_pytorch import Unet, Trainer
 from PIL import Image
 import sys
+
 sys.path.append('../')
 from backdoor_diffusion.badnet_diffusion import BadDiffusion
 import torchvision.transforms
 from denoising_diffusion_pytorch.denoising_diffusion_pytorch import Dataset
 from torch.utils.data import DataLoader
 from tools.img import save
+import matplotlib.pyplot as plt
 
 
-ld = torch.load('../backdoor_diffusion/results/model-1.pt')
-model = Unet(
-    dim=64,
-    dim_mults=(1, 2, 4, 8),
-    flash_attn=True
-)
-diffusion = BadDiffusion(
-    model,
-    image_size=32,
-    timesteps=1000,  # number of steps
-    sampling_timesteps=250,
-    objective='pred_x0',
-    trigger=None
-)
-diffusion.load_state_dict(ld['model'])
-diffusion = diffusion.to('cuda:0')
-img_path = '../dataset/dataset-cifar10-badnet-trigger_image_grid/bad_0.png'
-img = Image.open(img_path)
-trans = torchvision.transforms.Compose([
-    torchvision.transforms.Resize((32, 32)),
-    torchvision.transforms.ToTensor()
-])
-tensor = trans(img=img).to('cuda:0')
-bad_path = '../dataset/dataset-cifar10-badnet-trigger_image_grid'
-bad_data = Dataset(folder=bad_path, image_size=32)
-bad_loader = DataLoader(dataset=bad_data, batch_size=64, num_workers=8, shuffle=True)
-batch = None
-for batch in bad_loader:
-    batch = batch.to('cuda:0')
-    break
-step = 10
-noice = diffusion.q_sample(x_start=batch, t=torch.full((64, ), step, device='cuda:0'))
-save(noice[0], './noice.png')
-x_p, x = diffusion.p_sample(x=noice, t=step)
-save(x_p[0], './x_p.png')
-save(batch[0], './x.png')
+def plt_img(tensor, batch):
+    sampled_images = tensor.cpu().numpy()
+    plt.figure(figsize=(10, 5))
+    for i, image in enumerate(sampled_images):
+        plt.subplot(1, batch, i + 1)
+        plt.imshow(image.transpose(1, 2, 0))
+        plt.axis('off')
+    plt.subplots_adjust(wspace=0.1, hspace=0.5)
+    plt.show()
 
 
+def load_diffusion(path):
+    ld = torch.load(path)
+    model = Unet(
+        dim=64,
+        dim_mults=(1, 2, 4, 8),
+        flash_attn=True
+    )
+    diffusion = BadDiffusion(
+        model,
+        image_size=32,
+        timesteps=1000,  # number of steps
+        sampling_timesteps=250,
+        objective='pred_x0',
+        trigger=None
+    )
+    diffusion.load_state_dict(ld['model'])
+    diffusion = diffusion.to('cuda:0')
+    return diffusion
 
 
+if __name__ == '__main__':
+    path = '../backdoor_diffusion/res_badnet_grid_cifar10_step1k_ratio2/model-1.pt'
+    diffusion = load_diffusion(path)
+    sampled_images = diffusion.sample(batch_size=16)
+    plt_img(tensor=sampled_images, batch=16)
