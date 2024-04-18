@@ -71,6 +71,7 @@ def download_cifar10():
     datasets.CIFAR10(root='../data', download=True)
 
 
+
 if __name__ == '__main__':
     download_cifar10()
     prepare_badnet_data()

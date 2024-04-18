@@ -77,7 +77,6 @@ class BadDiffusion(GaussianDiffusion):
         img = self.normalize(img)
         return self.bad_p_losses(img, t, mode, *args, **kwargs)
 
-
 class BadTrainer(denoising_diffusion_pytorch.Trainer):
     def __init__(self, diffusion, good_folder, train_batch_size, train_lr, train_num_steps,
                  gradient_accumulate_every, ema_decay, amp, calculate_fid, bad_folder=None):
@@ -108,7 +107,6 @@ class BadTrainer(denoising_diffusion_pytorch.Trainer):
                         data = next(self.dl).to(device)
                     elif mode == 1:
                         data = next(self.bad_dl).to(device)
-
                     with self.accelerator.autocast():
                         loss = self.model(data, mode)
                         loss = loss / self.gradient_accumulate_every

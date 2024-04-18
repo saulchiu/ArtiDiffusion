@@ -2,9 +2,6 @@ import torch
 from denoising_diffusion_pytorch import Unet, GaussianDiffusion
 
 
-
-
-
 class triger_ddpm(GaussianDiffusion):
     def __init__(self, model, image_size, timesteps, triger=None):
         super().__init__(model, image_size=image_size, timesteps=timesteps)
@@ -25,4 +22,3 @@ diffusion = triger_ddpm(
 training_images = torch.rand(8, 3, 128, 128)  # images are normalized from 0 to 1
 loss = diffusion(training_images)
 loss.backward()
-
