@@ -126,7 +126,7 @@ if __name__ == '__main__':
     device = 'cuda:0'
     t = 5
     loop = 8
-    diffusion = load_diffusion('../backdoor_diffusion/res_benign_cifar10_step10k/model-10.pt', device=device)
+    diffusion = load_diffusion('../backdoor_diffusion/results/model-9.pt', device=device)
     x_start = Image.open('../dataset/dataset-cifar10-badnet-trigger_image_grid/bad_0.png')
     trans = torchvision.transforms.Compose([
         torchvision.transforms.ToTensor(),
