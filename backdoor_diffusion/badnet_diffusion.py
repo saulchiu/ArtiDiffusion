@@ -48,12 +48,14 @@ class BadDiffusion(GaussianDiffusion):
             loss = loss * extract(self.loss_weight, t, loss.shape)
         else:  # trigger data
             # use SSIM and MSE
+            import sys
+            sys.path.append('..')
             from tools.img import cal_ssim
             loss = F.mse_loss(model_out, triger, reduction='none')
             loss = reduce(loss, 'b ... -> b', 'mean')
             loss = loss * extract(self.loss_weight, t, loss.shape)
             loss = loss.mean()
-            loss += (1 -cal_ssim(x_start, model_out))
+            loss += 0.5 * (1 -cal_ssim(x_start, model_out))
         return loss.mean()
 
     def forward(self, img, mode, *args, **kwargs):
