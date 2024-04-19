@@ -125,8 +125,8 @@ def sample_and_reconstruct_loop(diffusion, x_start, t=10, device='cuda:0', plot=
 if __name__ == '__main__':
     device = 'cuda:0'
     t = 5
-    loop = 8
-    diffusion = load_diffusion('../backdoor_diffusion/results/model-9.pt', device=device)
+    loop = 15
+    diffusion = load_diffusion('../backdoor_diffusion/res_badnet_grid_cifar10_step10k_ratio2/model-10.pt', device=device)
     x_start = Image.open('../dataset/dataset-cifar10-badnet-trigger_image_grid/bad_0.png')
     trans = torchvision.transforms.Compose([
         torchvision.transforms.ToTensor(),
