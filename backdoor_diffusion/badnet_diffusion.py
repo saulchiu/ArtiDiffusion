@@ -21,35 +21,18 @@ class BadDiffusion(GaussianDiffusion):
 
     def bad_p_losses(self, x_start, t, mode, noise=None, offset_noise_strength=None):
         b, c, h, w = x_start.shape
-
         noise = default(noise, lambda: torch.randn_like(x_start))
-
-        # offset noise - https://www.crosslabs.org/blog/diffusion-with-offset-noise
-
         offset_noise_strength = default(offset_noise_strength, self.offset_noise_strength)
-
         if offset_noise_strength > 0.:
             offset_noise = torch.randn(x_start.shape[:2], device=self.device)
             noise += offset_noise_strength * rearrange(offset_noise, 'b c -> b c 1 1')
-
-        # noise sample
-
         x = self.q_sample(x_start=x_start, t=t, noise=noise)
-
-        # if doing self-conditioning, 50% of the time, predict x_start from current set of times
-        # and condition with unet with that
-        # this technique will slow down training by 25%, but seems to lower FID significantly
-
         x_self_cond = None
         if self.self_condition and random() < 0.5:
             with torch.no_grad():
                 x_self_cond = self.model_predictions(x, t).pred_x_start
                 x_self_cond.detach_()
-
-        # predict and take gradient step
-
         model_out = self.model(x, t, x_self_cond)
-
         if self.objective == 'pred_noise':
             target = noise
         elif self.objective == 'pred_x0':
@@ -63,10 +46,8 @@ class BadDiffusion(GaussianDiffusion):
             target = v
         else:
             raise ValueError(f'unknown objective {self.objective}')
-
         loss = F.mse_loss(model_out, target, reduction='none')
         loss = reduce(loss, 'b ... -> b', 'mean')
-
         loss = loss * extract(self.loss_weight, t, loss.shape)
         return loss.mean()
 

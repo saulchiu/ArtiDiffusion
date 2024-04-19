@@ -7,10 +7,11 @@ import sys
 sys.path.append('../')
 from backdoor_diffusion.badnet_diffusion import BadDiffusion
 import torchvision.transforms
-from denoising_diffusion_pytorch.denoising_diffusion_pytorch import Dataset
+from denoising_diffusion_pytorch.denoising_diffusion_pytorch import Dataset, GaussianDiffusion
 from torch.utils.data import DataLoader
 from tools.img import save
 import matplotlib.pyplot as plt
+from torchvision import utils
 
 
 def plt_img(tensor, batch):
@@ -24,7 +25,7 @@ def plt_img(tensor, batch):
     plt.show()
 
 
-def load_diffusion(path):
+def load_bad_diffusion(path):
     ld = torch.load(path)
     model = Unet(
         dim=64,
@@ -44,8 +45,36 @@ def load_diffusion(path):
     return diffusion
 
 
+def load_diffusion(path):
+    ld = torch.load(path)
+    model = Unet(
+        dim=64,
+        dim_mults=(1, 2, 4, 8),
+        flash_attn=True
+    )
+
+    diffusion = GaussianDiffusion(
+        model,
+        image_size=32,
+        timesteps=1000,  # number of steps
+        sampling_timesteps=250
+        # number of sampling timesteps (using ddim for faster inference [see citation for ddim paper])
+    )
+    diffusion.load_state_dict(ld['model'])
+    diffusion = diffusion.to('cuda:0')
+    return diffusion
+
+
 if __name__ == '__main__':
-    path = '../backdoor_diffusion/res_benign_cifar10_step1k/model-1.pt'
-    diffusion = load_diffusion(path)
-    sampled_images = diffusion.sample(batch_size=4)
-    plt_img(tensor=sampled_images, batch=4)
+    with torch.inference_mode():
+        path = '../backdoor_diffusion/results/model-6.pt'
+        batch = 4
+        diffusion = load_bad_diffusion(path)
+        # milestone = 10 // 1000
+        sampled_images = diffusion.sample(batch_size=batch)
+        # utils.save_image(sampled_images, fp='./test.png', nrow=4)
+        plt_img(sampled_images, batch=batch)
+
+
+
+
