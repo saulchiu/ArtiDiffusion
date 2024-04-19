@@ -36,19 +36,24 @@ class BadDiffusion(GaussianDiffusion):
         if self.objective == 'pred_noise':
             target = noise
         elif self.objective == 'pred_x0':
-            # target = x_start
-            if mode == 1:
-                target = self.trigger
-            else:
-                target = x_start
+            target = x_start
         elif self.objective == 'pred_v':
             v = self.predict_v(x_start, t, noise)
             target = v
         else:
             raise ValueError(f'unknown objective {self.objective}')
-        loss = F.mse_loss(model_out, target, reduction='none')
-        loss = reduce(loss, 'b ... -> b', 'mean')
-        loss = loss * extract(self.loss_weight, t, loss.shape)
+        if mode == 0:  # benign data loss
+            loss = F.mse_loss(model_out, target, reduction='none')
+            loss = reduce(loss, 'b ... -> b', 'mean')
+            loss = loss * extract(self.loss_weight, t, loss.shape)
+        else:  # trigger data
+            # use SSIM and MSE
+            from tools.img import cal_ssim
+            loss = F.mse_loss(model_out, triger, reduction='none')
+            loss = reduce(loss, 'b ... -> b', 'mean')
+            loss = loss * extract(self.loss_weight, t, loss.shape)
+            loss = loss.mean()
+            loss += (1 -cal_ssim(x_start, model_out))
         return loss.mean()
 
     def forward(self, img, mode, *args, **kwargs):
@@ -57,6 +62,7 @@ class BadDiffusion(GaussianDiffusion):
         t = torch.randint(0, self.num_timesteps, (b,), device=device).long()
         img = self.normalize(img)
         return self.bad_p_losses(img, t, mode, *args, **kwargs)
+
 
 class BadTrainer(denoising_diffusion_pytorch.Trainer):
     def __init__(self, diffusion, good_folder, train_batch_size, train_lr, train_num_steps,
