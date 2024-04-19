@@ -1,3 +1,4 @@
+import argparse
 import math
 
 import denoising_diffusion_pytorch
@@ -156,6 +157,12 @@ class BadTrainer(denoising_diffusion_pytorch.Trainer):
 
 
 if __name__ == '__main__':
+    parser = argparse.ArgumentParser('')
+    parser.add_argument('--batch', type=int, default=64)
+    parser.add_argument('--step', type=int, default=5000)
+    args = parser.parse_args()
+    batch = args.batch
+    train_num_steps = args.step
     triger_path = '../resource/badnet/trigger_image_grid.png'
     transform = torchvision.transforms.Compose([
         torchvision.transforms.ToTensor(),
@@ -182,10 +189,10 @@ if __name__ == '__main__':
         diffusion,
         bad_folder='../dataset/dataset-cifar10-badnet-trigger_image_grid',
         good_folder='../dataset/dataset-cifar10-good',
-        train_batch_size=128,
+        train_batch_size=batch,
         train_lr=8e-5,
         # train_num_steps=700000,  # total training steps
-        train_num_steps=10000,
+        train_num_steps=train_num_steps,
         gradient_accumulate_every=2,  # gradient accumulation steps
         ema_decay=0.995,  # exponential moving average decay
         amp=True,  # turn on mixed precision
