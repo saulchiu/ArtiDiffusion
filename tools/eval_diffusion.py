@@ -143,8 +143,8 @@ if __name__ == '__main__':
     net = laod_badnet(
         path='../data/badnet.pth',
         device=device)
-    diffusion = load_diffusion('../backdoor_diffusion/res_benign_cifar10_step10k/model-10.pt',
-                                   device=device)
+    diffusion = load_diffusion('../backdoor_diffusion/res_badnet_grid_cifar10_step10k_ratio2/model-10.pt',
+                               device=device)
     x_start = Image.open('../dataset/dataset-cifar10-badnet-trigger_image_grid/bad_8.png')
     trans = torchvision.transforms.Compose([
         torchvision.transforms.ToTensor(),
