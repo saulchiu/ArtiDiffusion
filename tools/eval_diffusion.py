@@ -3,6 +3,7 @@ import torch
 from denoising_diffusion_pytorch import Unet, Trainer
 from PIL import Image
 import sys
+
 sys.path.append('../')
 from backdoor_diffusion.badnet_diffusion import BadDiffusion
 import torchvision.transforms
@@ -10,7 +11,9 @@ from denoising_diffusion_pytorch.denoising_diffusion_pytorch import Dataset, Gau
 import matplotlib.pyplot as plt
 import torch.utils
 from tools.img import cal_ssim
-from models.preact_resnet import PreActResNet18
+from models.resnet import ResNet18
+from torch.utils.data import DataLoader
+
 
 def predict_cifar10(net, x):
     model_out = net(x.detach().reshape(1, 3, 32, 32))
@@ -20,17 +23,11 @@ def predict_cifar10(net, x):
     # 将索引映射到 CIFAR-10 的类别
     class_names = ['airplane', 'automobile', 'bird', 'cat', 'deer', 'dog', 'frog', 'horse', 'ship', 'truck']
     predicted_class = class_names[max_prob_index]
+    print(predicted_class)
     return predicted_class
 
-def plot_images(images, num_images, net=None):
-    """
-    Plot a list of images in a grid.
 
-    Parameters:
-    - images: A torch tensor of shape (num_images, channels, height, width)
-    - num_images: The number of images to plot
-    """
-    # Calculate the number of rows and columns
+def plot_images(images, num_images, net=None):
     cols = int(math.sqrt(num_images))
     rows = math.ceil(num_images / cols)
     figsize_width = cols * 5
@@ -48,7 +45,8 @@ def plot_images(images, num_images, net=None):
             ax.imshow(img.permute(1, 2, 0).cpu().numpy())
             ax.axis('off')
             # Add SSIM value below the image
-            ax.text(0.5, -0.06, f'SSIM: {img_ssim:.2f}, class: {label_p}', transform=ax.transAxes, ha='center', fontsize=8)
+            ax.text(0.5, -0.06, f'SSIM: {img_ssim:.2f}, class: {label_p}', transform=ax.transAxes, ha='center',
+                    fontsize=12)
         else:
             ax.axis('off')  # Turn off the last empty subplot
 
@@ -60,7 +58,7 @@ def plot_images(images, num_images, net=None):
     plt.show()
 
 
-def load_bad_diffusion(path):
+def load_bad_diffusion(path, device):
     ld = torch.load(path)
     model = Unet(
         dim=64,
@@ -76,7 +74,7 @@ def load_bad_diffusion(path):
         trigger=None
     )
     diffusion.load_state_dict(ld['model'])
-    diffusion = diffusion.to('cuda:0')
+    diffusion = diffusion.to(device)
     return diffusion
 
 
@@ -87,7 +85,6 @@ def load_diffusion(path, device='cuda:0'):
         dim_mults=(1, 2, 4, 8),
         flash_attn=True
     )
-
     diffusion = GaussianDiffusion(
         model,
         image_size=32,
@@ -134,31 +131,25 @@ def sample_and_reconstruct_loop(diffusion, net, x_start, t=10, device='cuda:0', 
 
 def laod_badnet(path, device='cuda:0'):
     ld = torch.load(path, map_location=device)
-    net = PreActResNet18(num_classes=10).to(device=device)
-    net.load_state_dict(ld['model'])
+    net = ResNet18(num_classes=10).to(device=device)
+    net.load_state_dict(ld)
     return net
-
-
-
 
 
 if __name__ == '__main__':
     device = 'cuda:0'
-    t = 3
-    loop = 32
+    t = 5
+    loop = 8
     net = laod_badnet(
-        path='../data/attack_result.pt',
+        path='../data/badnet.pth',
         device=device)
     diffusion = load_diffusion('../backdoor_diffusion/res_benign_cifar10_step10k/model-10.pt',
-                               device=device)
-    x_start = Image.open(
-        '../dataset/dataset-cifar10-good/good_7.png')
+                                   device=device)
+    x_start = Image.open('../dataset/dataset-cifar10-badnet-trigger_image_grid/bad_8.png')
     trans = torchvision.transforms.Compose([
         torchvision.transforms.ToTensor(),
         torchvision.transforms.Resize((32, 32))
     ])
     x_start = trans(x_start)
     x_start = x_start.to(device)
-    # sample_and_reconstruct_loop(diffusion, net, x_start, t, device, False, loop)
-    res = net(x_start.detach().reshape(1, 3, 32, 32))
-    print(res)
+    sample_and_reconstruct_loop(diffusion, net, x_start, t, device, False, loop)
