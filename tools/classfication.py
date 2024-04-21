@@ -1,4 +1,5 @@
 import logging
+import os
 import random
 import time
 import torch
@@ -6,10 +7,12 @@ import torchvision.datasets
 from torchvision import datasets
 from torchvision import transforms
 from torch.utils.data import DataLoader
-import sys
-sys.path.append('../')
 import torch.nn.init as init
 
+import sys
+from tqdm import tqdm
+sys.path.append('../')
+import models.resnet
 collect_layer = ['linear.weight', 'linear.bias']
 batch_list = [64, 128, 256, 512, 1024]
 default_batch = batch_list[0]
@@ -99,7 +102,7 @@ def train(net, criterion, optimizer, trainloader, testloader, epoch, device, lr_
     print('-' * 50)
     print('start train')
     print('-' * 50)
-    for i in range(epoch):
+    for i in tqdm(range(epoch)):
         train_one_epoch(net, criterion, optimizer, trainloader, i, device, lr_schedule)
         current_acc = test(net, criterion, testloader, device)
         logger.info(f'epoch{i}: current acc {current_acc: .2f}')
@@ -114,7 +117,9 @@ def train(net, criterion, optimizer, trainloader, testloader, epoch, device, lr_
         'acc_list': acc_list,
         'state_dict': net.state_dict(),
     }
-    torch.save(res_dict, '../tmp/whole_model_resnet18_cifar10.pth')
+    backdoor_model_path = '../data/backdoor_model_pth/'
+    os.makedirs(backdoor_model_path, exist_ok=True)
+    torch.save(res_dict, f'{backdoor_model_path}whole_model_resnet18_cifar10.pth')
 
 
 def get_data_loader(name, batch, num_workers):
@@ -227,22 +232,26 @@ def eval(net, dl, batch_size=64):
     return int(ret) / (cnt * batch_size)
 
 if __name__ == '__main__':
-    from models.resnet import ResNet18
-    net = ResNet18(num_classes=10)
-    ld = torch.load('../data/badnet.pth')
-    net.load_state_dict(ld)
-    net = net.to('cuda:0')
-    transformer = torchvision.transforms.Compose([
-        torchvision.transforms.ToTensor()
-    ])
-    test_data = torchvision.datasets.CIFAR10(
-        root='../data/cifar10', train=True, transform=transformer, download=False
-    )
-    test_laoder = torch.utils.data.DataLoader(
-        dataset=test_data, batch_size=64, shuffle=True, num_workers=8
-    )
+    net = models.resnet.ResNet18(num_classes=10)
     device = 'cuda:0'
-    criterion = torch.nn.functional.cross_entropy
-    res = test(net, criterion, test_laoder, device)
-    print(res)
+    net = net.to(device)
+    loss = torch.nn.functional.cross_entropy
+    optimizer = torch.optim.SGD(net.parameters())
+    train_data = torchvision.datasets.CIFAR10(
+        root='../data/cifar10', transform=torchvision.transforms.ToTensor()
+    )
+    test_data = torchvision.datasets.CIFAR10(
+        root='../data/cifar10', train=False, transform=torchvision.transforms.ToTensor()
+    )
+    batch, nw = 128, 4
+    train_loader = torch.utils.data.DataLoader(
+        dataset=train_data, batch_size=batch, shuffle=True, num_workers=nw
+    )
+    test_loader = torch.utils.data.DataLoader(
+        dataset=test_data, batch_size=batch, shuffle=True, num_workers=nw
+    )
+    epoch = 100
+    train(net, loss, optimizer, train_loader, test_loader, epoch, device)
+
+
 

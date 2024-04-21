@@ -1,4 +1,6 @@
 import math
+
+import PIL.Image
 import torch
 from denoising_diffusion_pytorch import Unet, Trainer
 from PIL import Image
@@ -14,6 +16,7 @@ from tools.img import cal_ssim
 from models.resnet import ResNet18
 from torch.utils.data import DataLoader
 
+class_names = ['airplane', 'automobile', 'bird', 'cat', 'deer', 'dog', 'frog', 'horse', 'ship', 'truck']
 
 def predict_cifar10(net, x):
     model_out = net(x.detach().reshape(1, 3, 32, 32))
@@ -58,7 +61,7 @@ def plot_images(images, num_images, net=None):
     plt.show()
 
 
-def load_bad_diffusion(path, device):
+def load_bad_diffusion(path, device='cuda:0'):
     ld = torch.load(path)
     model = Unet(
         dim=64,
@@ -138,18 +141,29 @@ def laod_badnet(path, device='cuda:0'):
 
 if __name__ == '__main__':
     device = 'cuda:0'
-    t = 5
+    t = 3
     loop = 8
     net = laod_badnet(
-        path='../data/badnet.pth',
+        path='../data/backdoor_model_pth/badnet_ratio10.pth',
         device=device)
-    diffusion = load_diffusion('../backdoor_diffusion/res_badnet_grid_cifar10_step10k_ratio2/model-10.pt',
+    diffusion = load_bad_diffusion('../backdoor_diffusion/res_badnet_grid_cifar10_step10k_ratio2/model-10.pt',
                                device=device)
-    x_start = Image.open('../dataset/dataset-cifar10-badnet-trigger_image_grid/bad_8.png')
+    # x_start = Image.open('../dataset/dataset-cifar10-badnet-trigger_image_grid/bad_8.png')
+    trigger = PIL.Image.open('../resource/badnet/trigger_image_grid.png')
+    mask = PIL.Image.open('../resource/badnet/trigger_image.png')
     trans = torchvision.transforms.Compose([
         torchvision.transforms.ToTensor(),
-        torchvision.transforms.Resize((32, 32))
     ])
-    x_start = trans(x_start)
+    trigger = trans(trigger)
+    mask = trans(mask)
+    train_data = torchvision.datasets.CIFAR10(
+        root='../data/cifar10', train=True, transform=trans, download=False
+    )
+    train_loader = torch.utils.data.DataLoader(dataset=train_data, batch_size=1, shuffle=True, num_workers=1)
+    x_start, index = next(iter(train_loader))
+    x_start = x_start.reshape(3, 32, 32)
+    x_start = (1 - mask) * x_start + mask * trigger
     x_start = x_start.to(device)
+    print(f'real label is: {class_names[int(index)]}')
     sample_and_reconstruct_loop(diffusion, net, x_start, t, device, False, loop)
+

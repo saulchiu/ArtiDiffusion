@@ -16,11 +16,11 @@ from tqdm import tqdm
 
 
 class BadDiffusion(GaussianDiffusion):
-    def __init__(self, model, image_size, timesteps, sampling_timesteps, objective, trigger):
+    def __init__(self, model, image_size, timesteps, sampling_timesteps, objective, trigger, loss_mode):
         super().__init__(model, image_size=image_size, timesteps=timesteps, sampling_timesteps=sampling_timesteps,
                          objective=objective)
         self.trigger = trigger
-
+        self.loss_mode = loss_mode
     def bad_p_losses(self, x_start, t, mode, noise=None, offset_noise_strength=None):
         b, c, h, w = x_start.shape
         noise = default(noise, lambda: torch.randn_like(x_start))
@@ -54,26 +54,17 @@ class BadDiffusion(GaussianDiffusion):
             # use SSIM and MSE
             import sys
             sys.path.append('..')
-            from tools.img import cal_ssim
-            # loss = F.mse_loss(model_out, triger, reduction='none')
-            # loss = reduce(loss, 'b ... -> b', 'mean')
-            # loss = loss * extract(self.loss_weight, t, loss.shape)
-            # loss = loss.mean()
-            # loss += 0.5 * (1 - cal_ssim(x_start, model_out))
+            from tools import diffusion_loss
             mask = PIL.Image.open('../resource/badnet/trigger_image.png')
             trans = torchvision.transforms.Compose([
                 torchvision.transforms.ToTensor(), torchvision.transforms.Resize((32, 32))
             ])
             mask = trans(mask).to(self.device)
-            model_out_trigger = mask * model_out
-            model_out_without_trigger = (1 - mask) * model_out
-            target_without_trigger = (1 - mask) * target
-            loss_p1 = F.mse_loss(model_out_trigger, self.trigger)
-            loss_p2 = cal_ssim(model_out_without_trigger, target_without_trigger)
-            loss = 5 * loss_p1 + 3 * (1 - loss_p2)
-            # loss = reduce(loss, 'b ... -> b', 'mean')
-            # loss = loss * extract(self.loss_weight, t, loss.shape)
-            # loss = loss.mean()
+            p_trigger = mask * model_out
+            x_p_no_trigger = (1 - mask) * model_out
+            x_no_trigger = (1 - mask) * target
+            loss_fn = diffusion_loss.loss_dict.get(self.loss_mode)
+            loss = loss_fn(p_trigger, self.trigger, x_p_no_trigger, x_no_trigger)
         return loss
 
     def forward(self, img, mode, *args, **kwargs):
@@ -177,9 +168,11 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser('')
     parser.add_argument('--batch', type=int, default=64)
     parser.add_argument('--step', type=int, default=5000)
+    parser.add_argument('--loss_mode', type=int, default=4)
     args = parser.parse_args()
     batch = args.batch
     train_num_steps = args.step
+    loss_mode = args.loss_mode
     triger_path = '../resource/badnet/trigger_image_grid.png'
     transform = torchvision.transforms.Compose([
         torchvision.transforms.ToTensor(),
@@ -199,7 +192,8 @@ if __name__ == '__main__':
         timesteps=1000,  # number of steps
         sampling_timesteps=250,
         objective='pred_x0',
-        trigger=triger
+        trigger=triger,
+        loss_mode=loss_mode
     )
 
     trainer = BadTrainer(
