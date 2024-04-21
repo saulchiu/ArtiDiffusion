@@ -146,7 +146,7 @@ if __name__ == '__main__':
     net = laod_badnet(
         path='../data/backdoor_model_pth/badnet_ratio10.pth',
         device=device)
-    diffusion = load_bad_diffusion('../backdoor_diffusion/res_badnet_grid_cifar10_step10k_ratio2/model-10.pt',
+    diffusion = load_bad_diffusion('../backdoor_diffusion/res_badnet_grid_cifar10_step10k_ratio2_loss3/model-10.pt',
                                device=device)
     # x_start = Image.open('../dataset/dataset-cifar10-badnet-trigger_image_grid/bad_8.png')
     trigger = PIL.Image.open('../resource/badnet/trigger_image_grid.png')

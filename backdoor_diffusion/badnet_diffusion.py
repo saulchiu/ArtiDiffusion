@@ -20,7 +20,7 @@ from tools import tg_bot
 
 
 class BadDiffusion(GaussianDiffusion):
-    def __init__(self, model, image_size, timesteps, sampling_timesteps, objective, trigger, loss_mode, factor_list):
+    def __init__(self, model, image_size, timesteps, sampling_timesteps, objective, trigger, loss_mode=None, factor_list=None):
         super().__init__(model, image_size=image_size, timesteps=timesteps, sampling_timesteps=sampling_timesteps,
                          objective=objective)
         self.trigger = trigger
