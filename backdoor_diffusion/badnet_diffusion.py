@@ -1,6 +1,6 @@
 import argparse
 import math
-
+import ast
 import PIL.Image
 import denoising_diffusion_pytorch
 import torch
@@ -16,11 +16,12 @@ from tqdm import tqdm
 
 
 class BadDiffusion(GaussianDiffusion):
-    def __init__(self, model, image_size, timesteps, sampling_timesteps, objective, trigger, loss_mode):
+    def __init__(self, model, image_size, timesteps, sampling_timesteps, objective, trigger, loss_mode, factor_list):
         super().__init__(model, image_size=image_size, timesteps=timesteps, sampling_timesteps=sampling_timesteps,
                          objective=objective)
         self.trigger = trigger
         self.loss_mode = loss_mode
+        self.factor_list = factor_list
     def bad_p_losses(self, x_start, t, mode, noise=None, offset_noise_strength=None):
         b, c, h, w = x_start.shape
         noise = default(noise, lambda: torch.randn_like(x_start))
@@ -64,7 +65,7 @@ class BadDiffusion(GaussianDiffusion):
             x_p_no_trigger = (1 - mask) * model_out
             x_no_trigger = (1 - mask) * target
             loss_fn = diffusion_loss.loss_dict.get(self.loss_mode)
-            loss = loss_fn(p_trigger, self.trigger, x_p_no_trigger, x_no_trigger)
+            loss = loss_fn(p_trigger, self.trigger, x_p_no_trigger, x_no_trigger, self.factor_list)
         return loss
 
     def forward(self, img, mode, *args, **kwargs):
@@ -166,13 +167,15 @@ class BadTrainer(denoising_diffusion_pytorch.Trainer):
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser('')
-    parser.add_argument('--batch', type=int, default=64)
-    parser.add_argument('--step', type=int, default=5000)
+    parser.add_argument('--batch', type=int, default=128)
+    parser.add_argument('--step', type=int, default=10000)
     parser.add_argument('--loss_mode', type=int, default=4)
+    parser.add_argument('--factor', type=str, default='[1, 2, 3]')
     args = parser.parse_args()
     batch = args.batch
     train_num_steps = args.step
     loss_mode = args.loss_mode
+    factor_list = ast.literal_eval(args.factor)
     triger_path = '../resource/badnet/trigger_image_grid.png'
     transform = torchvision.transforms.Compose([
         torchvision.transforms.ToTensor(),
@@ -193,7 +196,8 @@ if __name__ == '__main__':
         sampling_timesteps=250,
         objective='pred_x0',
         trigger=triger,
-        loss_mode=loss_mode
+        loss_mode=loss_mode,
+        factor_list=factor_list
     )
 
     trainer = BadTrainer(
