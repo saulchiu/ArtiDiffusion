@@ -2,11 +2,13 @@ import torch.nn.functional as F
 from tools.img import cal_ssim, cal_ppd
 
 
-def loss_4(p_trigger, trigger, x_p_no_trigger, x_no_trigger):
+def loss_4(p_trigger, trigger, x_p_no_trigger, x_no_trigger, factor_list=None):
+    if factor_list is None:
+        factor_list = [2, 2, 5]
     loss_p1 = F.mse_loss(x_p_no_trigger, x_no_trigger)
     loss_p2 = 1 - cal_ssim(x_p_no_trigger, x_no_trigger)
     loss_p3 = cal_ppd(trigger, p_trigger)
-    return 2 * loss_p1 + 2 * loss_p2 + 4 * loss_p3
+    return factor_list[0] * loss_p1 + factor_list[1] * loss_p2 + factor_list[2] * loss_p3
 
 
 loss_dict = {
