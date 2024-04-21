@@ -14,6 +14,10 @@ from PIL import Image
 from torch.utils.data.dataloader import DataLoader
 from tqdm import tqdm
 
+import sys
+sys.path.append('../')
+from tools import tg_bot
+
 
 class BadDiffusion(GaussianDiffusion):
     def __init__(self, model, image_size, timesteps, sampling_timesteps, objective, trigger, loss_mode, factor_list):
@@ -215,3 +219,4 @@ if __name__ == '__main__':
     )
 
     trainer.train()
+    tg_bot.send2bot('pc train diffusion down', 'diffusion')
