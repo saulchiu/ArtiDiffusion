@@ -94,12 +94,13 @@ class BadDiffusion(GaussianDiffusion):
 
 class BadTrainer(denoising_diffusion_pytorch.Trainer):
     def __init__(self, diffusion, good_folder, train_batch_size, train_lr, train_num_steps,
-                 gradient_accumulate_every, ratio, ema_decay, amp, calculate_fid, bad_folder=None):
+                 gradient_accumulate_every, ratio, results_folder, ema_decay, amp, calculate_fid, bad_folder=None):
         super().__init__(diffusion_model=diffusion, folder=good_folder, train_batch_size=train_batch_size,
                          train_lr=train_lr, train_num_steps=train_num_steps,
                          gradient_accumulate_every=gradient_accumulate_every, ema_decay=ema_decay, amp=amp,
                          calculate_fid=calculate_fid)
         self.ratio = ratio
+        self.results_folder = ""
         if bad_folder is not None:
             self.bad_ds = Dataset(bad_folder, self.image_size, augment_horizontal_flip=True, convert_image_to='RGB')
             bad_dl = DataLoader(self.bad_ds, batch_size=train_batch_size, shuffle=True, pin_memory=True,
@@ -185,13 +186,17 @@ class BadTrainer(denoising_diffusion_pytorch.Trainer):
 
 
 def get_args():
-    parser = argparse.ArgumentParser('')
-    parser.add_argument('--batch', type=int, default=128)
-    parser.add_argument('--step', type=int, default=10000)
-    parser.add_argument('--loss_mode', type=int, default=4)
-    parser.add_argument('--factor', type=str, default='[1, 2, 3]')
-    parser.add_argument('--device', type=str, default='cpu')
-    parser.add_argument('--ratio', type=float, default=0.2)
+    parser = argparse.ArgumentParser(description='This script does amazing things.')
+    parser.add_argument('--batch', type=int, default=128, help='Batch size for processing')
+    parser.add_argument('--step', type=int, default=10000, help='Number of steps for the diffusion model')
+    parser.add_argument('--loss_mode', type=int, default=4, help='Mode for loss function')
+    parser.add_argument('--factor', type=str, default='[1, 1, 1]',
+                        help='Factor to be used in the loss function, given as a string representation of a list')
+    parser.add_argument('--device', type=str, default='cpu',
+                        help='Device to run the process on (e.g., "cpu" or "cuda:0")')
+    parser.add_argument('--ratio', type=float, default=0.1, help='A poisoning ratio value to be used in calculations')
+    parser.add_argument('--results_folder', type=str, default='./results', help='Folder to save results')
+    parser.add_help = True
     return parser.parse_args()
 
 
@@ -202,6 +207,7 @@ if __name__ == '__main__':
     loss_mode = args.loss_mode
     device = args.device
     ratio = args.ratio
+    results_folder = args.results_folder
     factor_list = ast.literal_eval(args.factor)
     triger_path = '../resource/badnet/trigger_image_grid.png'
     transform = torchvision.transforms.Compose([
@@ -240,7 +246,8 @@ if __name__ == '__main__':
         ema_decay=0.995,  # exponential moving average decay
         amp=True,  # turn on mixed precision
         calculate_fid=True,  # whether to calculate fid during training
-        ratio=ratio
+        ratio=ratio,
+        results_folder=results_folder,
     )
 
     trainer.train()
