@@ -21,13 +21,18 @@ from tools import tg_bot
 
 
 class BadDiffusion(GaussianDiffusion):
+    @property
+    def device(self):
+        return self._device
+
     def __init__(self, model, image_size, timesteps, sampling_timesteps, objective, trigger, loss_mode=None,
-                 factor_list=None):
+                 factor_list=None, device='cpu'):
         super().__init__(model, image_size=image_size, timesteps=timesteps, sampling_timesteps=sampling_timesteps,
                          objective=objective)
         self.trigger = trigger
         self.loss_mode = loss_mode
         self.factor_list = factor_list
+        self.device = device
 
     def bad_p_losses(self, x_start, t, mode, noise=None, offset_noise_strength=None):
         b, c, h, w = x_start.shape
@@ -82,6 +87,10 @@ class BadDiffusion(GaussianDiffusion):
         img = self.normalize(img)
         return self.bad_p_losses(img, t, mode, *args, **kwargs)
 
+    @device.setter
+    def device(self, value):
+        self._device = value
+
 
 class BadTrainer(denoising_diffusion_pytorch.Trainer):
     def __init__(self, diffusion, good_folder, train_batch_size, train_lr, train_num_steps,
@@ -100,21 +109,17 @@ class BadTrainer(denoising_diffusion_pytorch.Trainer):
 
     def train(self):
         accelerator = self.accelerator
-        device = accelerator.device
-
+        device = self.device
         with tqdm(initial=self.step, total=self.train_num_steps, disable=not accelerator.is_main_process) as pbar:
-
             while self.step < self.train_num_steps:
-
                 total_loss = 0.
-
                 for mode in range(self.gradient_accumulate_every):
                     if mode == 0:
                         data = next(self.dl).to(device)
                     elif mode == 1:
                         import random
                         rand_num = random.random()
-                        if rand_num < 0.6:
+                        if rand_num < 0.8:
                             data = next(self.dl).to(device)
                             mode = 0
                         else:
@@ -124,7 +129,6 @@ class BadTrainer(denoising_diffusion_pytorch.Trainer):
                         loss = self.model(data, mode)
                         loss = loss / self.gradient_accumulate_every
                         total_loss += loss.item()
-
                     self.accelerator.backward(loss)
 
                 pbar.set_description(f'loss: {total_loss:.4f}')
@@ -172,14 +176,13 @@ class BadTrainer(denoising_diffusion_pytorch.Trainer):
         accelerator.print('training complete')
 
 
-
 def get_args():
     parser = argparse.ArgumentParser('')
     parser.add_argument('--batch', type=int, default=128)
     parser.add_argument('--step', type=int, default=10000)
     parser.add_argument('--loss_mode', type=int, default=4)
     parser.add_argument('--factor', type=str, default='[1, 2, 3]')
-    parser.add_argument('--device', type=str, default='cuda:0')
+    parser.add_argument('--device', type=str, default='cpu')
     return parser.parse_args()
 
 
@@ -196,13 +199,13 @@ if __name__ == '__main__':
         torchvision.transforms.Resize((32, 32))
     ])
     triger = Image.open(triger_path)
-    triger = transform(triger).to('cuda:0')
-    print(triger.shape)
+    triger = transform(triger).to(device)
     model = Unet(
         dim=64,
         dim_mults=(1, 2, 4, 8),
         flash_attn=True
     )
+    model = model.to(device)
     diffusion = BadDiffusion(
         model,
         image_size=32,
@@ -211,7 +214,8 @@ if __name__ == '__main__':
         objective='pred_x0',
         trigger=triger,
         loss_mode=loss_mode,
-        factor_list=factor_list
+        factor_list=factor_list,
+        device=device
     )
 
     trainer = BadTrainer(
@@ -224,8 +228,8 @@ if __name__ == '__main__':
         train_num_steps=train_num_steps,
         gradient_accumulate_every=2,  # gradient accumulation steps
         ema_decay=0.995,  # exponential moving average decay
-        amp=True,  # turn on mixed precision
-        calculate_fid=True  # whether to calculate fid during training
+        amp=False,  # turn on mixed precision
+        calculate_fid=False  # whether to calculate fid during training
     )
 
     trainer.train()

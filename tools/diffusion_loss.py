@@ -5,6 +5,11 @@ from tools.img import cal_ssim, cal_ppd
 def loss_4(p_trigger, trigger, x_p_no_trigger, x_no_trigger, factor_list=None):
     if factor_list is None:
         factor_list = [2, 2, 5]
+    dev = trigger.device
+    p_trigger = p_trigger.to(dev)
+    p_trigger = p_trigger.to(dev)
+    x_p_no_trigger = x_p_no_trigger.to(dev)
+    x_no_trigger = x_no_trigger.to(dev)
     loss_p1 = F.mse_loss(x_p_no_trigger, x_no_trigger)
     loss_p2 = 1 - cal_ssim(x_p_no_trigger, x_no_trigger)
     loss_p3 = cal_ppd(trigger, p_trigger)

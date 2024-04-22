@@ -12,8 +12,6 @@ def save_one(tensor, path):
 
 
 def cal_ssim(tensor_1, tensor_2, data_range=1):
-    tensor_1 = tensor_1.to('cuda')
-    tensor_2 = tensor_2.to('cuda')
     n_1 = tensor_1.cpu().detach().numpy()
     n_2 = tensor_2.cpu().detach().numpy()
     n_1 = n_1.astype(np.float64)

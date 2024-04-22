@@ -21,6 +21,7 @@ def prepare_badnet_data(config: DictConfig):
     ])
     batch = config.batch
     device = config.device.cuda
+    # device = 'mps'
     num_workers = config.num_workers
     generate_path = config.generate_path
 
@@ -50,8 +51,6 @@ def prepare_badnet_data(config: DictConfig):
         image_np = (image_np * 255).astype(np.uint8)
         image = Image.fromarray(image_np)
         image.save(f'{generate_path}/bad_{i}.png')
-        if i == 999:
-            break
     tensor_list = []
     tensor = None
     for x, _ in iter(good_loader):
