@@ -25,8 +25,8 @@ class BadDiffusion(GaussianDiffusion):
     def device(self):
         return self._device
 
-    def __init__(self, model, image_size, timesteps, sampling_timesteps, objective, trigger, loss_mode=None,
-                 factor_list=None, device='cpu'):
+    def __init__(self, model, image_size, timesteps, sampling_timesteps, objective, trigger, loss_mode,
+                 factor_list, device):
         super().__init__(model, image_size=image_size, timesteps=timesteps, sampling_timesteps=sampling_timesteps,
                          objective=objective)
         self.trigger = trigger
@@ -94,11 +94,12 @@ class BadDiffusion(GaussianDiffusion):
 
 class BadTrainer(denoising_diffusion_pytorch.Trainer):
     def __init__(self, diffusion, good_folder, train_batch_size, train_lr, train_num_steps,
-                 gradient_accumulate_every, ema_decay, amp, calculate_fid, bad_folder=None):
+                 gradient_accumulate_every, ratio, ema_decay, amp, calculate_fid, bad_folder=None):
         super().__init__(diffusion_model=diffusion, folder=good_folder, train_batch_size=train_batch_size,
                          train_lr=train_lr, train_num_steps=train_num_steps,
                          gradient_accumulate_every=gradient_accumulate_every, ema_decay=ema_decay, amp=amp,
                          calculate_fid=calculate_fid)
+        self.ratio = ratio
         if bad_folder is not None:
             self.bad_ds = Dataset(bad_folder, self.image_size, augment_horizontal_flip=True, convert_image_to='RGB')
             bad_dl = DataLoader(self.bad_ds, batch_size=train_batch_size, shuffle=True, pin_memory=True,
@@ -114,17 +115,24 @@ class BadTrainer(denoising_diffusion_pytorch.Trainer):
             while self.step < self.train_num_steps:
                 total_loss = 0.
                 for mode in range(self.gradient_accumulate_every):
-                    if mode == 0:
+                    # if mode == 0:
+                    #     data = next(self.dl).to(device)
+                    # elif mode == 1:
+                    #     import random
+                    #     rand_num = random.random()
+                    #     if rand_num < 0.8:
+                    #         data = next(self.dl).to(device)
+                    #         mode = 0
+                    #     else:
+                    #         data = next(self.bad_dl).to(device)
+                    #         mode = 1
+                    import random
+                    if random.random() < self.ratio:
+                        data = next(self.bad_dl).to(device)
+                        mode = 1
+                    else:
                         data = next(self.dl).to(device)
-                    elif mode == 1:
-                        import random
-                        rand_num = random.random()
-                        if rand_num < 0.8:
-                            data = next(self.dl).to(device)
-                            mode = 0
-                        else:
-                            data = next(self.bad_dl).to(device)
-                            mode = 1
+                        mode = 0
                     with self.accelerator.autocast():
                         loss = self.model(data, mode)
                         loss = loss / self.gradient_accumulate_every
@@ -183,6 +191,7 @@ def get_args():
     parser.add_argument('--loss_mode', type=int, default=4)
     parser.add_argument('--factor', type=str, default='[1, 2, 3]')
     parser.add_argument('--device', type=str, default='cpu')
+    parser.add_argument('--ratio', type=float, default=0.2)
     return parser.parse_args()
 
 
@@ -192,6 +201,7 @@ if __name__ == '__main__':
     train_num_steps = args.step
     loss_mode = args.loss_mode
     device = args.device
+    ratio = args.ratio
     factor_list = ast.literal_eval(args.factor)
     triger_path = '../resource/badnet/trigger_image_grid.png'
     transform = torchvision.transforms.Compose([
@@ -215,7 +225,7 @@ if __name__ == '__main__':
         trigger=triger,
         loss_mode=loss_mode,
         factor_list=factor_list,
-        device=device
+        device=device,
     )
 
     trainer = BadTrainer(
@@ -229,7 +239,8 @@ if __name__ == '__main__':
         gradient_accumulate_every=2,  # gradient accumulation steps
         ema_decay=0.995,  # exponential moving average decay
         amp=True,  # turn on mixed precision
-        calculate_fid=True  # whether to calculate fid during training
+        calculate_fid=True,  # whether to calculate fid during training
+        ratio=ratio
     )
 
     trainer.train()
