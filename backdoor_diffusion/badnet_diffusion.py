@@ -15,17 +15,20 @@ from torch.utils.data.dataloader import DataLoader
 from tqdm import tqdm
 
 import sys
+
 sys.path.append('../')
 from tools import tg_bot
 
 
 class BadDiffusion(GaussianDiffusion):
-    def __init__(self, model, image_size, timesteps, sampling_timesteps, objective, trigger, loss_mode=None, factor_list=None):
+    def __init__(self, model, image_size, timesteps, sampling_timesteps, objective, trigger, loss_mode=None,
+                 factor_list=None):
         super().__init__(model, image_size=image_size, timesteps=timesteps, sampling_timesteps=sampling_timesteps,
                          objective=objective)
         self.trigger = trigger
         self.loss_mode = loss_mode
         self.factor_list = factor_list
+
     def bad_p_losses(self, x_start, t, mode, noise=None, offset_noise_strength=None):
         b, c, h, w = x_start.shape
         noise = default(noise, lambda: torch.randn_like(x_start))
@@ -169,16 +172,23 @@ class BadTrainer(denoising_diffusion_pytorch.Trainer):
         accelerator.print('training complete')
 
 
-if __name__ == '__main__':
+
+def get_args():
     parser = argparse.ArgumentParser('')
     parser.add_argument('--batch', type=int, default=128)
     parser.add_argument('--step', type=int, default=10000)
     parser.add_argument('--loss_mode', type=int, default=4)
     parser.add_argument('--factor', type=str, default='[1, 2, 3]')
-    args = parser.parse_args()
+    parser.add_argument('--device', type=str, default='cuda:0')
+    return parser.parse_args()
+
+
+if __name__ == '__main__':
+    args = get_args()
     batch = args.batch
     train_num_steps = args.step
     loss_mode = args.loss_mode
+    device = args.device
     factor_list = ast.literal_eval(args.factor)
     triger_path = '../resource/badnet/trigger_image_grid.png'
     transform = torchvision.transforms.Compose([
