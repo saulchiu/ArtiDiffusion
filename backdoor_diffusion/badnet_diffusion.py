@@ -164,7 +164,7 @@ class BadTrainer(denoising_diffusion_pytorch.Trainer):
 
                         all_images = torch.cat(all_images_list, dim=0)
 
-                        utils.save_image(all_images, str(self.results_folder / f'sample-{milestone}.png'),
+                        utils.save_image(all_images, str(f'{self.results_folder}/sample-{milestone}.png'),
                                          nrow=int(math.sqrt(self.num_samples)))
 
                         # whether to calculate fid
