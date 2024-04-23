@@ -100,7 +100,7 @@ class BadTrainer(denoising_diffusion_pytorch.Trainer):
                          gradient_accumulate_every=gradient_accumulate_every, ema_decay=ema_decay, amp=amp,
                          calculate_fid=calculate_fid)
         self.ratio = ratio
-        self.results_folder = ""
+        self.results_folder = results_folder
         if bad_folder is not None:
             self.bad_ds = Dataset(bad_folder, self.image_size, augment_horizontal_flip=True, convert_image_to='RGB')
             bad_dl = DataLoader(self.bad_ds, batch_size=train_batch_size, shuffle=True, pin_memory=True,
@@ -163,9 +163,8 @@ class BadTrainer(denoising_diffusion_pytorch.Trainer):
                             all_images_list = list(map(lambda n: self.ema.ema_model.sample(batch_size=n), batches))
 
                         all_images = torch.cat(all_images_list, dim=0)
-
-                        utils.save_image(all_images, str(f'{self.results_folder}/sample-{milestone}.png'),
-                                         nrow=int(math.sqrt(self.num_samples)))
+                        p = f'{self.results_folder}/sample-{milestone}.png'
+                        utils.save_image(all_images, p, nrow=int(math.sqrt(self.num_samples)))
 
                         # whether to calculate fid
 
