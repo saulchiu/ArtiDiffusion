@@ -51,7 +51,7 @@ def plot_images(images, num_images, net=None):
             ax.imshow(img.permute(1, 2, 0).cpu().numpy())
             ax.axis('off')
             # Add SSIM value below the image
-            ax.text(0.5, -0.06, f'SSIM: {img_ssim:.2f}, class: {label_p}', transform=ax.transAxes, ha='center',
+            ax.text(0.5, -0.06, f'SSIM: {img_ssim:.2f}', transform=ax.transAxes, ha='center',
                     fontsize=12)
         else:
             ax.axis('off')  # Turn off the last empty subplot
@@ -149,23 +149,29 @@ if __name__ == '__main__':
     device = 'cuda:0'
     t = 25
     loop = 5
-    net = timm.create_model("resnet18_cifar10", pretrained=True).to(device)
+    ld = torch.load('../models/checkpoint/attack_result.pt')
+    from models.preact_resnet import PreActResNet18
+    net = PreActResNet18()
+    net.load_state_dict(ld['model'])
+    net = net.to(device)
     diffusion = load_bad_diffusion('../backdoor_diffusion/res_badnet_grid_cifar10_step10k_ratio1_loss4_factor2/model-9.pt',
                                device=device)
     # x_start = Image.open('../dataset/dataset-cifar10-badnet-trigger_image_grid/bad_8.png')
     trigger = PIL.Image.open('../resource/badnet/trigger_image_grid.png')
     mask = PIL.Image.open('../resource/badnet/trigger_image.png')
-    trans = T.Compose([
-        T.Resize(32),
-        T.ToTensor(),
+    trans = torchvision.transforms.Compose([
+        torchvision.transforms.ToTensor(),
+        torchvision.transforms.Normalize((0.4914, 0.4822, 0.4465), (0.2023, 0.1994, 0.2010))
     ])
     trigger = trans(trigger)
     mask = trans(mask)
     normal_data = torchvision.datasets.CIFAR10(
         root='../data/', train=False, transform=trans, download=False
     )
-    normal_loader = torch.utils.data.DataLoader(dataset=normal_data, batch_size=1, shuffle=True, num_workers=1)
+    normal_loader = torch.utils.data.DataLoader(dataset=normal_data, batch_size=128, shuffle=True, num_workers=1)
     x_start, index = next(iter(normal_loader))
+    x_start = x_start[0]
+    index = index[0]
     x_start = x_start.reshape(3, 32, 32)
     # add trigger
     # x_start = (1 - mask) * x_start + mask * trigger

@@ -260,7 +260,10 @@ def check_accuracy(loader, model):
 
 
 if __name__ == '__main__':
-    net = timm.create_model("resnet50_cifar10", pretrained=True)
+    ld = torch.load('../models/checkpoint/attack_result.pt')
+    from models.preact_resnet import PreActResNet18
+    net = PreActResNet18()
+    net.load_state_dict(ld['model'])
     device = 'cuda:0'
     net = net.to(device)
     loss = torch.nn.functional.cross_entropy
