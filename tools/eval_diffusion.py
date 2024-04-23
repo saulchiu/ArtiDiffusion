@@ -1,10 +1,13 @@
 import math
 
 import PIL.Image
+import detectors
+import timm
 import torch
 from denoising_diffusion_pytorch import Unet, Trainer
 from PIL import Image
 import sys
+import torchvision.transforms.transforms as T
 
 sys.path.append('../')
 from backdoor_diffusion.badnet_diffusion import BadDiffusion
@@ -74,7 +77,10 @@ def load_bad_diffusion(path, device='cuda:0'):
         timesteps=1000,  # number of steps
         sampling_timesteps=250,
         objective='pred_x0',
-        trigger=None
+        trigger=None,
+        loss_mode=4,
+        factor_list=[1, 1 ,1],
+        device='cuda:0'
     )
     diffusion.load_state_dict(ld['model'])
     diffusion = diffusion.to(device)
@@ -141,28 +147,28 @@ def laod_badnet(path, device='cuda:0'):
 
 if __name__ == '__main__':
     device = 'cuda:0'
-    t = 150
+    t = 25
     loop = 5
-    net = laod_badnet(
-        path='../data/backdoor_model_pth/badnet_ratio10.pth',
-        device=device)
-    diffusion = load_bad_diffusion('../backdoor_diffusion/res_badnet_grid_cifar10_step10k_ratio2_loss3/model-10.pt',
+    net = timm.create_model("resnet18_cifar10", pretrained=True).to(device)
+    diffusion = load_bad_diffusion('../backdoor_diffusion/res_badnet_grid_cifar10_step10k_ratio1_loss4_factor2/model-9.pt',
                                device=device)
     # x_start = Image.open('../dataset/dataset-cifar10-badnet-trigger_image_grid/bad_8.png')
     trigger = PIL.Image.open('../resource/badnet/trigger_image_grid.png')
     mask = PIL.Image.open('../resource/badnet/trigger_image.png')
-    trans = torchvision.transforms.Compose([
-        torchvision.transforms.ToTensor(),
+    trans = T.Compose([
+        T.Resize(32),
+        T.ToTensor(),
     ])
     trigger = trans(trigger)
     mask = trans(mask)
-    train_data = torchvision.datasets.CIFAR10(
-        root='../data/cifar10', train=True, transform=trans, download=False
+    normal_data = torchvision.datasets.CIFAR10(
+        root='../data/', train=False, transform=trans, download=False
     )
-    train_loader = torch.utils.data.DataLoader(dataset=train_data, batch_size=1, shuffle=True, num_workers=1)
-    x_start, index = next(iter(train_loader))
+    normal_loader = torch.utils.data.DataLoader(dataset=normal_data, batch_size=1, shuffle=True, num_workers=1)
+    x_start, index = next(iter(normal_loader))
     x_start = x_start.reshape(3, 32, 32)
-    x_start = (1 - mask) * x_start + mask * trigger
+    # add trigger
+    # x_start = (1 - mask) * x_start + mask * trigger
     x_start = x_start.to(device)
     print(f'real label is: {class_names[int(index)]}')
     sample_and_reconstruct_loop(diffusion, net, x_start, t, device, False, loop)

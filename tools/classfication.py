@@ -2,6 +2,9 @@ import logging
 import os
 import random
 import time
+
+import timm
+import detectors
 import torch
 import torchvision.datasets
 from torchvision import datasets
@@ -11,8 +14,10 @@ import torch.nn.init as init
 
 import sys
 from tqdm import tqdm
+
 sys.path.append('../')
 import models.resnet
+
 collect_layer = ['linear.weight', 'linear.bias']
 batch_list = [64, 128, 256, 512, 1024]
 default_batch = batch_list[0]
@@ -216,6 +221,7 @@ def train_for_pdata(net, criterion, optimizer, trainloader, testloader, device, 
             n = min(10, n)
             mode = 0
 
+
 def eval(net, dl, batch_size=64):
     cnt = 0
     ret = 0
@@ -231,17 +237,43 @@ def eval(net, dl, batch_size=64):
         ret += torch.sum(labels == output)
     return int(ret) / (cnt * batch_size)
 
+
+def check_accuracy(loader, model):
+    if loader.dataset.train:
+        print('Checking accuracy on validation set')
+    else:
+        print('Checking accuracy on test set')
+    num_correct = 0
+    num_samples = 0
+    model.eval()  # set model to evaluation mode
+    with torch.no_grad():
+        for x, y in loader:
+            x = x.to(device=device)
+            y = y.to(device=device, dtype=torch.long)
+            scores = model(x)
+            _, preds = scores.max(1)
+            num_correct += (preds == y).sum()
+            num_samples += preds.size(0)
+        acc = float(num_correct) / num_samples
+        print('Got %d / %d correct (%.2f)' % (num_correct, num_samples, 100 * acc))
+        return acc
+
+
 if __name__ == '__main__':
-    net = models.resnet.ResNet18(num_classes=10)
+    net = timm.create_model("resnet50_cifar10", pretrained=True)
     device = 'cuda:0'
     net = net.to(device)
     loss = torch.nn.functional.cross_entropy
     optimizer = torch.optim.SGD(net.parameters())
+    trans = torchvision.transforms.Compose([
+        torchvision.transforms.ToTensor(),
+        torchvision.transforms.Normalize((0.4914, 0.4822, 0.4465), (0.2023, 0.1994, 0.2010))
+    ])
     train_data = torchvision.datasets.CIFAR10(
-        root='../data/cifar10', transform=torchvision.transforms.ToTensor()
+        root='../data/', transform=trans
     )
     test_data = torchvision.datasets.CIFAR10(
-        root='../data/cifar10', train=False, transform=torchvision.transforms.ToTensor()
+        root='../data/', train=False, transform=trans
     )
     batch, nw = 128, 4
     train_loader = torch.utils.data.DataLoader(
@@ -250,8 +282,4 @@ if __name__ == '__main__':
     test_loader = torch.utils.data.DataLoader(
         dataset=test_data, batch_size=batch, shuffle=True, num_workers=nw
     )
-    epoch = 100
-    train(net, loss, optimizer, train_loader, test_loader, epoch, device)
-
-
-
+    print(check_accuracy(test_loader, net))
