@@ -51,8 +51,8 @@ def plot_images(images, num_images, net=None):
             ax.imshow(img.permute(1, 2, 0).cpu().numpy())
             ax.axis('off')
             # Add SSIM value below the image
-            ax.text(0.5, -0.06, f'SSIM: {img_ssim:.2f}', transform=ax.transAxes, ha='center',
-                    fontsize=12)
+            ax.text(0.5, -0.08, f'SSIM: {img_ssim:.2f}', transform=ax.transAxes, ha='center',
+                    fontsize=10)
         else:
             ax.axis('off')  # Turn off the last empty subplot
 
@@ -148,13 +148,13 @@ def laod_badnet(path, device='cuda:0'):
 if __name__ == '__main__':
     device = 'cuda:0'
     t = 25
-    loop = 5
+    loop = 8
     ld = torch.load('../models/checkpoint/attack_result.pt')
     from models.preact_resnet import PreActResNet18
     net = PreActResNet18()
     net.load_state_dict(ld['model'])
     net = net.to(device)
-    diffusion = load_bad_diffusion('../backdoor_diffusion/res_badnet_grid_cifar10_step10k_ratio1_loss4_factor2/model-9.pt',
+    diffusion = load_bad_diffusion('../backdoor_diffusion/res_badnet_grid_cifar10_step10k_ratio1_loss5_factor1/model-10.pt',
                                device=device)
     # x_start = Image.open('../dataset/dataset-cifar10-badnet-trigger_image_grid/bad_8.png')
     trigger = PIL.Image.open('../resource/badnet/trigger_image_grid.png')
@@ -173,7 +173,7 @@ if __name__ == '__main__':
     index = index[0]
     x_start = x_start.reshape(3, 32, 32)
     # add trigger
-    # x_start = (1 - mask) * x_start + mask * trigger
+    x_start = (1 - mask) * x_start + mask * trigger
     x_start = x_start.to(device)
     print(f'real label is: {class_names[int(index)]}')
     sample_and_reconstruct_loop(diffusion, net, x_start, t, device, False, loop)
