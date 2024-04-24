@@ -16,24 +16,17 @@ class PoisoningDataset(torch.utils.data.Dataset):
     def __getitem__(self, index):
         return self.data_list[index]
 
-
-if __name__ == '__main__':
+def prepare_poisoning_data(ratio, mask_path, trigger_path):
     transform = T.Compose([
         T.ToTensor(),
         T.Resize((32, 32))
     ])
-    batch = 64
-    device = 'mps'
-    num_workers = 4
-    ratio = 0.1
     train_data = torchvision.datasets.CIFAR10(
         root='../data/', train=True, download=False, transform=transform
     )
     test_data = torchvision.datasets.CIFAR10(
         root='../data/', train=False, download=False, transform=transform
     )
-    mask_path = '../resource/badnet/trigger_image.png'
-    trigger_path = '../resource/badnet/trigger_image_grid.png'
     mask = T.Compose([
         T.ToTensor(), T.Resize((32, 32))
     ])(PIL.Image.open(mask_path))
@@ -64,10 +57,7 @@ if __name__ == '__main__':
         poisoning_test_data.append((x, y))
     poisoning_train_dataset = PoisoningDataset(poisoning_train_data)
     poisoning_test_dataset = PoisoningDataset(poisoning_test_data)
-    train_loader = torch.utils.data.DataLoader(
-        dataset=poisoning_train_dataset, batch_size=batch, shuffle=True, num_workers=num_workers
-    )
-    test_loader = torch.utils.data.DataLoader(
-        dataset=poisoning_test_dataset, batch_size=batch, shuffle=False, num_workers=num_workers
-    )
+    return poisoning_train_dataset, poisoning_test_dataset
 
+if __name__ == '__main__':
+    print()
