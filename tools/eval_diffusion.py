@@ -149,11 +149,7 @@ if __name__ == '__main__':
     device = 'cuda:0'
     t = 25
     loop = 8
-    ld = torch.load('../models/checkpoint/attack_result.pt')
-    from models.preact_resnet import PreActResNet18
-    net = PreActResNet18()
-    net.load_state_dict(ld['model'])
-    net = net.to(device)
+    net = model = timm.create_model("resnet18_cifar10", pretrained=True)
     diffusion = load_bad_diffusion('../backdoor_diffusion/res_badnet_grid_cifar10_step10k_ratio1_loss5_factor1/model-10.pt',
                                device=device)
     # x_start = Image.open('../dataset/dataset-cifar10-badnet-trigger_image_grid/bad_8.png')

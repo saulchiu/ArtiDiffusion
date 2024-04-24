@@ -4,6 +4,8 @@ import torchvision
 from torchvision import transforms as T
 from torch.utils.data.dataloader import DataLoader
 import random
+import pytorch_lightning as L
+import torch.nn.functional as F
 
 
 class PoisoningDataset(torch.utils.data.Dataset):
@@ -16,7 +18,8 @@ class PoisoningDataset(torch.utils.data.Dataset):
     def __getitem__(self, index):
         return self.data_list[index]
 
-def prepare_poisoning_data(ratio, mask_path, trigger_path):
+
+def prepare_poisoning_dataset(ratio, mask_path, trigger_path):
     transform = T.Compose([
         T.ToTensor(),
         T.Resize((32, 32))
@@ -59,5 +62,5 @@ def prepare_poisoning_data(ratio, mask_path, trigger_path):
     poisoning_test_dataset = PoisoningDataset(poisoning_test_data)
     return poisoning_train_dataset, poisoning_test_dataset
 
-if __name__ == '__main__':
-    print()
+
+
