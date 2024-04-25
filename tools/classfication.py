@@ -1,8 +1,13 @@
-import timm
-import detectors
 import torch
-from tools import dataset
+import torch.nn as nn
 from torch.utils.data.dataloader import DataLoader
+import lightning as L
+
+import sys
+
+sys.path.append("../")
+from tools.dataset import prepare_poisoning_dataset
+from models.resnet import ResNet18
 
 
 def check_accuracy(loader, model, device):
@@ -22,13 +27,38 @@ def check_accuracy(loader, model, device):
         return acc
 
 
+class MyLightningModule(L.LightningModule):
+    def __init__(self, model):
+        super().__init__()
+        self.model = model
+
+    def forward(self, x):
+        return self.model(x)
+
+    def training_step(self, batch):
+        x, y = batch
+        y_p = self.forward(x)
+        loss = torch.nn.functional.cross_entropy(y_p, y)
+        return loss
+
+    def configure_optimizers(self):
+        optimizer = torch.optim.SGD(self.model.parameters(), lr=0.1)
+        return optimizer
+
 if __name__ == '__main__':
     device = "cuda:0"
-    net = model = timm.create_model("resnet18_cifar10", pretrained=True).to(device)
-    train_data, test_data = dataset.prepare_poisoning_dataset(ratio=0.1,
-                                                              mask_path='../resource/badnet/trigger_image.png',
-                                                              trigger_path='../resource/badnet/trigger_image_grid.png')
-    loader = DataLoader(
-        dataset=train_data, batch_size=16, num_workers=4, shuffle=True
+    net = ResNet18(num_classes=10).to(device)
+    batch, nw = 32, 2
+    mask_path = '../resource/badnet/trigger_image.png'
+    trigger_path = '../resource/badnet/trigger_image_grid.png'
+    train_dataset, test_dataset = prepare_poisoning_dataset(ratio=1e-1, mask_path=mask_path, trigger_path=trigger_path)
+    train_loader = DataLoader(
+        dataset=train_dataset, shuffle=True, batch_size=batch, num_workers=nw
     )
-    check_accuracy(loader, net, device)
+    test_loader = DataLoader(
+        dataset=test_dataset, shuffle=True, batch_size=batch, num_workers=nw
+    )
+    model = MyLightningModule(model=net)
+    trainer = L.Trainer(max_epochs=100, devices=[0])
+    trainer.fit(model=model, train_dataloaders=train_loader)
+
