@@ -213,6 +213,7 @@ def get_args():
                         help='Device to run the process on (e.g., "cpu" or "cuda:0")')
     parser.add_argument('--ratio', type=float, default=0.1, help='A poisoning ratio value to be used in calculations')
     parser.add_argument('--results_folder', type=str, default='./results', help='Folder to save results')
+    parser.add_argument('--server', type=str, help='which server you use, lab, pc, or lv')
     parser.add_help = True
     return parser.parse_args()
 
@@ -225,6 +226,7 @@ if __name__ == '__main__':
     device = args.device
     ratio = args.ratio
     results_folder = args.results_folder
+    server = args.server
     factor_list = ast.literal_eval(args.factor)
     triger_path = '../resource/badnet/trigger_image_grid.png'
     transform = torchvision.transforms.Compose([
@@ -265,7 +267,7 @@ if __name__ == '__main__':
         calculate_fid=True,  # whether to calculate fid during training
         ratio=ratio,
         results_folder=results_folder,
-        server='pc',
+        server=server,
     )
 
     trainer.train()
