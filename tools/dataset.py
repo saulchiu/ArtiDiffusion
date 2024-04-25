@@ -7,6 +7,12 @@ import random
 import pytorch_lightning as L
 import torch.nn.functional as F
 
+transform_cifar10 = T.Compose([
+    T.ToTensor(),
+    T.Resize((32, 32)),
+    T.Normalize((0.4914, 0.4822, 0.4465), (0.2023, 0.1994, 0.2010))
+])
+
 
 class PoisoningDataset(torch.utils.data.Dataset):
     def __init__(self, data_list):
@@ -22,7 +28,8 @@ class PoisoningDataset(torch.utils.data.Dataset):
 def prepare_poisoning_dataset(ratio, mask_path, trigger_path):
     transform = T.Compose([
         T.ToTensor(),
-        T.Resize((32, 32))
+        T.Resize((32, 32)),
+        T.Normalize((0.4914, 0.4822, 0.4465), (0.2023, 0.1994, 0.2010))
     ])
     train_data = torchvision.datasets.CIFAR10(
         root='../data/', train=True, download=False, transform=transform
@@ -61,6 +68,3 @@ def prepare_poisoning_dataset(ratio, mask_path, trigger_path):
     poisoning_train_dataset = PoisoningDataset(poisoning_train_data)
     poisoning_test_dataset = PoisoningDataset(poisoning_test_data)
     return poisoning_train_dataset, poisoning_test_dataset
-
-
-

@@ -18,16 +18,15 @@ import torch.utils
 from tools.img import cal_ssim
 from models.resnet import ResNet18
 from torch.utils.data import DataLoader
+from tools.dataset import transform_cifar10
 
 class_names = ['airplane', 'automobile', 'bird', 'cat', 'deer', 'dog', 'frog', 'horse', 'ship', 'truck']
+
 
 def predict_cifar10(net, x):
     model_out = net(x.detach().reshape(1, 3, 32, 32))
     probs = torch.nn.functional.softmax(model_out, dim=1)
-    # 找到概率最大的索引
-    max_prob_index = probs.argmax(dim=1).item()  # 使用 .item() 来获取标量值
-    # 将索引映射到 CIFAR-10 的类别
-    class_names = ['airplane', 'automobile', 'bird', 'cat', 'deer', 'dog', 'frog', 'horse', 'ship', 'truck']
+    max_prob_index = probs.argmax(dim=1).item()
     predicted_class = class_names[max_prob_index]
     print(predicted_class)
     return predicted_class
@@ -41,7 +40,6 @@ def plot_images(images, num_images, net=None):
     # Create a figure with subplots
     fig, axes = plt.subplots(rows, cols, figsize=(figsize_width, figsize_height))
     axes = axes.flatten()  # Flatten the array for easier iteration
-
     # Plot each image on the grid
     for idx, (img, ax) in enumerate(zip(images, axes)):
         if idx < num_images:  # Only plot the actual number of images
@@ -50,7 +48,6 @@ def plot_images(images, num_images, net=None):
                 label_p = predict_cifar10(net, img)
             ax.imshow(img.permute(1, 2, 0).cpu().numpy())
             ax.axis('off')
-            # Add SSIM value below the image
             ax.text(0.5, -0.08, f'SSIM: {img_ssim:.2f}', transform=ax.transAxes, ha='center',
                     fontsize=10)
         else:
@@ -79,7 +76,7 @@ def load_bad_diffusion(path, device='cuda:0'):
         objective='pred_x0',
         trigger=None,
         loss_mode=4,
-        factor_list=[1, 1 ,1],
+        factor_list=[1, 1, 1],
         device='cuda:0'
     )
     diffusion.load_state_dict(ld['model'])
@@ -149,14 +146,15 @@ if __name__ == '__main__':
     device = 'cuda:0'
     t = 25
     loop = 8
-    net = model = timm.create_model("resnet18_cifar10", pretrained=True)
-    diffusion = load_bad_diffusion('../backdoor_diffusion/res_badnet_grid_cifar10_step10k_ratio1_loss5_factor1/model-10.pt',
-                               device=device)
+    net = model = timm.create_model("resnet18_cifar10", pretrained=True).to(device)
+    diffusion = load_bad_diffusion(
+        '../backdoor_diffusion/res_badnet_grid_cifar10_step10k_ratio1_loss5_factor2/model-10.pt',
+        device=device)
     # x_start = Image.open('../dataset/dataset-cifar10-badnet-trigger_image_grid/bad_8.png')
     trigger = PIL.Image.open('../resource/badnet/trigger_image_grid.png')
     mask = PIL.Image.open('../resource/badnet/trigger_image.png')
-    trans = torchvision.transforms.Compose([
-        torchvision.transforms.ToTensor(),
+    trans = T.Compose([
+        T.ToTensor(), T.Resize((32, 32))
     ])
     trigger = trans(trigger)
     mask = trans(mask)
@@ -165,12 +163,11 @@ if __name__ == '__main__':
     )
     normal_loader = torch.utils.data.DataLoader(dataset=normal_data, batch_size=128, shuffle=True, num_workers=1)
     x_start, index = next(iter(normal_loader))
-    x_start = x_start[0]
-    index = index[0]
+    x_start = x_start[1]
+    index = index[1]
     x_start = x_start.reshape(3, 32, 32)
     # add trigger
     x_start = (1 - mask) * x_start + mask * trigger
     x_start = x_start.to(device)
     print(f'real label is: {class_names[int(index)]}')
     sample_and_reconstruct_loop(diffusion, net, x_start, t, device, False, loop)
-
