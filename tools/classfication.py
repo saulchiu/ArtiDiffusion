@@ -60,5 +60,8 @@ if __name__ == '__main__':
     )
     model = MyLightningModule(model=net)
     trainer = L.Trainer(max_epochs=100, devices=[0])
-    trainer.fit(model=model, train_dataloaders=train_loader)
+    # trainer.fit(model=model, train_dataloaders=train_loader)
+    ld = torch.load('../models/checkpoint/epoch=99-step=156300.ckpt', map_location=device)
+    model.load_state_dict(ld['state_dict'])
+    check_accuracy(test_loader, model.model, device)
 

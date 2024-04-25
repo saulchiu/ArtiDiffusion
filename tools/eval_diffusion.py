@@ -17,22 +17,19 @@ import matplotlib.pyplot as plt
 import torch.utils
 from tools.img import cal_ssim
 from models.resnet import ResNet18
+from tools.classfication import MyLightningModule
 from torch.utils.data import DataLoader
 from tools.dataset import transform_cifar10
 
 class_names = ['airplane', 'automobile', 'bird', 'cat', 'deer', 'dog', 'frog', 'horse', 'ship', 'truck']
 
 
-def predict_cifar10(net, x):
-    model_out = net(x.detach().reshape(1, 3, 32, 32))
-    probs = torch.nn.functional.softmax(model_out, dim=1)
-    max_prob_index = probs.argmax(dim=1).item()
-    predicted_class = class_names[max_prob_index]
-    print(predicted_class)
-    return predicted_class
-
-
 def plot_images(images, num_images, net=None):
+    indexes = []
+    label = ''
+    if net is not None:
+        y_p = net(images)
+        _, indexes = y_p.max(1)
     cols = int(math.sqrt(num_images))
     rows = math.ceil(num_images / cols)
     figsize_width = cols * 5
@@ -45,10 +42,11 @@ def plot_images(images, num_images, net=None):
         if idx < num_images:  # Only plot the actual number of images
             img_ssim = cal_ssim(img, images[0])
             if net is not None:
-                label_p = predict_cifar10(net, img)
+                label = class_names[indexes[idx]]
+                print(label)
             ax.imshow(img.permute(1, 2, 0).cpu().numpy())
             ax.axis('off')
-            ax.text(0.5, -0.08, f'SSIM: {img_ssim:.2f}', transform=ax.transAxes, ha='center',
+            ax.text(0.5, -0.08, f'SSIM: {img_ssim:.2f}, {label}', transform=ax.transAxes, ha='center',
                     fontsize=10)
         else:
             ax.axis('off')  # Turn off the last empty subplot
@@ -133,6 +131,7 @@ def sample_and_reconstruct_loop(diffusion, net, x_start, t=10, device='cuda:0', 
         x_start = x_t1
     tensors = torch.stack(tensor_list, dim=0)
     plot_images(images=tensors, num_images=tensors.shape[0], net=net)
+    return tensor_list
 
 
 def laod_badnet(path, device='cuda:0'):
@@ -146,9 +145,11 @@ if __name__ == '__main__':
     device = 'cuda:0'
     t = 25
     loop = 8
-    net = model = timm.create_model("resnet18_cifar10", pretrained=True).to(device)
-    diffusion = load_bad_diffusion(
-        '../backdoor_diffusion/res_badnet_grid_cifar10_step10k_ratio1_loss5_factor2/model-10.pt',
+    PL_model = MyLightningModule(model=ResNet18(num_classes=10))
+    PL_model.load_state_dict(torch.load('../models/checkpoint/epoch=99-step=156300.ckpt')['state_dict'])
+    net = PL_model.model.to(device)
+    diffusion = load_diffusion(
+        '../backdoor_diffusion/res_benign_cifar10_step10k/model-10.pt',
         device=device)
     # x_start = Image.open('../dataset/dataset-cifar10-badnet-trigger_image_grid/bad_8.png')
     trigger = PIL.Image.open('../resource/badnet/trigger_image_grid.png')
@@ -159,7 +160,7 @@ if __name__ == '__main__':
     trigger = trans(trigger)
     mask = trans(mask)
     normal_data = torchvision.datasets.CIFAR10(
-        root='../data/', train=False, transform=trans, download=False
+        root='../data/', train=True, transform=trans, download=False
     )
     normal_loader = torch.utils.data.DataLoader(dataset=normal_data, batch_size=128, shuffle=True, num_workers=1)
     x_start, index = next(iter(normal_loader))
@@ -167,7 +168,9 @@ if __name__ == '__main__':
     index = index[1]
     x_start = x_start.reshape(3, 32, 32)
     # add trigger
-    x_start = (1 - mask) * x_start + mask * trigger
+    # x_start = (1 - mask) * x_start + mask * trigger
     x_start = x_start.to(device)
     print(f'real label is: {class_names[int(index)]}')
-    sample_and_reconstruct_loop(diffusion, net, x_start, t, device, False, loop)
+    reconstruct_list = sample_and_reconstruct_loop(diffusion, net, x_start, t, device, False, loop)
+
+

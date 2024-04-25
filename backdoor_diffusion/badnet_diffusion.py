@@ -1,6 +1,8 @@
 import argparse
 import math
 import ast
+import time
+
 import PIL.Image
 import denoising_diffusion_pytorch
 import torch
@@ -19,6 +21,7 @@ sys.path.append('../')
 from tools import img
 from tools import tg_bot
 from tools import diffusion_loss
+from tools.time import get_hour
 
 
 class BadDiffusion(GaussianDiffusion):
@@ -102,12 +105,13 @@ class BadDiffusion(GaussianDiffusion):
 
 class BadTrainer(denoising_diffusion_pytorch.Trainer):
     def __init__(self, diffusion, good_folder, train_batch_size, train_lr, train_num_steps,
-                 gradient_accumulate_every, ratio, results_folder, ema_decay, amp, calculate_fid, bad_folder=None):
+                 gradient_accumulate_every, ratio, results_folder, server, ema_decay, amp, calculate_fid, bad_folder=None):
         super().__init__(diffusion_model=diffusion, folder=good_folder, train_batch_size=train_batch_size,
                          train_lr=train_lr, train_num_steps=train_num_steps,
                          gradient_accumulate_every=gradient_accumulate_every, ema_decay=ema_decay, amp=amp,
                          calculate_fid=calculate_fid)
         self.ratio = ratio
+        self.server = server
         from pathlib import Path
         self.results_folder = Path(results_folder)
         self.results_folder.mkdir(exist_ok=True)
@@ -122,21 +126,26 @@ class BadTrainer(denoising_diffusion_pytorch.Trainer):
     def train(self):
         accelerator = self.accelerator
         device = self.device
+        is_cpu = False
         with tqdm(initial=self.step, total=self.train_num_steps, disable=not accelerator.is_main_process) as pbar:
             while self.step < self.train_num_steps:
+                if self.server == 'lab':
+                    while True:
+                        current_hour = get_hour()
+                        if current_hour in range(0, 10) or current_hour in range(22, 24):
+                            print('run')
+                            if is_cpu:
+                                self.model = self.model.to(device)
+                                is_cpu = False
+                            break
+                        else:
+                            print("Sleeping and waiting for night...")
+                            if not is_cpu:
+                                self.model = self.model.to('cpu')
+                                is_cpu = True
+                            time.sleep(300)
                 total_loss = 0.
                 for mode in range(self.gradient_accumulate_every):
-                    # if mode == 0:
-                    #     data = next(self.dl).to(device)
-                    # elif mode == 1:
-                    #     import random
-                    #     rand_num = random.random()
-                    #     if rand_num < 0.8:
-                    #         data = next(self.dl).to(device)
-                    #         mode = 0
-                    #     else:
-                    #         data = next(self.bad_dl).to(device)
-                    #         mode = 1
                     import random
                     if random.random() < self.ratio:
                         data = next(self.bad_dl).to(device)
@@ -188,7 +197,6 @@ class BadTrainer(denoising_diffusion_pytorch.Trainer):
                             self.save("latest")
                         else:
                             self.save(milestone)
-
                 pbar.update(1)
 
         accelerator.print('training complete')
@@ -257,6 +265,7 @@ if __name__ == '__main__':
         calculate_fid=True,  # whether to calculate fid during training
         ratio=ratio,
         results_folder=results_folder,
+        server='pc',
     )
 
     trainer.train()
