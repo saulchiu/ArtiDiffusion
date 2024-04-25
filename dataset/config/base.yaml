@@ -4,6 +4,7 @@ triger_path: ../resource/${attack}/${triger_name}.png
 dataset: cifar10
 generate_path: ./dataset-${dataset}-${attack}-${triger_name}
 good_generate_path: ./dataset-${dataset}-good
+all_generate_path: ./dataset-${dataset}-all
 batch: 64
 num_workers: 4
 device:

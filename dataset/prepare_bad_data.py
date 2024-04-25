@@ -1,5 +1,6 @@
 import os
 
+import PIL.Image
 import torch
 import hydra
 from omegaconf import DictConfig
@@ -9,7 +10,7 @@ from torchvision import datasets, transforms
 from torchvision.transforms import ToTensor
 from torchvision.utils import save_image
 import numpy as np
-
+import random
 from tqdm import tqdm
 
 
@@ -26,44 +27,65 @@ def prepare_badnet_data(config: DictConfig):
     generate_path = config.generate_path
 
     good_generate_path = config.good_generate_path
+    all_generate_path = config.all_generate_path
     triger = Image.open(config.triger_path)
     triger = trainsform(triger)
+    mask = trainsform(
+        PIL.Image.open('../resource/badnet/trigger_image.png')
+    )
     print(triger.shape)
     os.makedirs(generate_path, exist_ok=True)
-
     os.makedirs(good_generate_path, exist_ok=True)
-
+    os.makedirs(all_generate_path, exist_ok=True)
     raw_data = datasets.CIFAR10(root='../data', train=False, transform=trainsform, download=True)
     bad_loader = dataloader.DataLoader(dataset=raw_data, batch_size=batch, num_workers=num_workers)
     good_data = datasets.CIFAR10(root='../data', train=True, transform=trainsform, download=True)
     good_loader = dataloader.DataLoader(dataset=good_data, batch_size=batch, num_workers=num_workers)
     triger = triger.to(device)
+    mask = mask.to(device)
+    # all data
     tensor_list = []
+    tensor = None
+    for x, _ in iter(good_loader):
+        x = x.to(device)
+        tensor_list.append(x)
     for x, _ in iter(bad_loader):
         x = x.to(device)
-        triger_ = triger.repeat(x.shape[0], 1, 1, 1)
-        x = x * (1 - triger_) + triger_
         tensor_list.append(x)
+    # generate all
     tensor = torch.cat(tensor_list, dim=0)
     for i, e in enumerate(tqdm(tensor)):
         image_np = e.cpu().detach().numpy()
         image_np = image_np.transpose(1, 2, 0)
         image_np = (image_np * 255).astype(np.uint8)
         image = Image.fromarray(image_np)
+        image.save(f'{all_generate_path}/all_{i}.png')
+
+    random.shuffle(tensor_list)
+
+    split_index = len(tensor_list) // 6
+    part1 = tensor_list[:split_index]
+    part2 = tensor_list[split_index:]
+    assert len(part1) + len(part2) == len(tensor_list)
+    assert len(part1) == split_index
+    # generate bad
+    tensor = torch.cat(part1, dim=0)
+    for i, e in enumerate(tqdm(tensor)):
+        e = e * (1 - mask) + mask * triger
+        image_np = e.cpu().detach().numpy()
+        image_np = image_np.transpose(1, 2, 0)
+        image_np = (image_np * 255).astype(np.uint8)
+        image = Image.fromarray(image_np)
         image.save(f'{generate_path}/bad_{i}.png')
-    tensor_list = []
-    tensor = None
-    for x, _ in iter(good_loader):
-        x = x.to(device)
-        tensor_list.append(x)
-    tensor = torch.cat(tensor_list, dim=0)
+    # generate good
+    tensor = torch.cat(part2, dim=0)
     for i, e in enumerate(tqdm(tensor)):
         image_np = e.cpu().detach().numpy()
         image_np = image_np.transpose(1, 2, 0)
         image_np = (image_np * 255).astype(np.uint8)
         image = Image.fromarray(image_np)
         image.save(f'{good_generate_path}/good_{i}.png')
-        image.save(f'{generate_path}/diff_{i}.png')
+
 
 
 def download_cifar10():
