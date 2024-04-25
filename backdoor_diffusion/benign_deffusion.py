@@ -36,8 +36,7 @@ class BenignTrainer(denoising_diffusion_pytorch.Trainer):
                 if self.server == 'lab':
                     while True:
                         current_hour = get_hour()
-                        if current_hour in range(0, 10) or current_hour in range(20, 24):
-                            print('run')
+                        if current_hour in range(0, 10) or current_hour in range(22, 24):
                             if is_cpu:
                                 self.model = self.model.to(device)
                                 is_cpu = False
