@@ -133,7 +133,6 @@ class BadTrainer(denoising_diffusion_pytorch.Trainer):
                     while True:
                         current_hour = get_hour()
                         if current_hour in range(0, 10) or current_hour in range(22, 24):
-                            print('run')
                             if is_cpu:
                                 self.model = self.model.to(device)
                                 is_cpu = False
