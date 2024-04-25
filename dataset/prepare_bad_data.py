@@ -87,10 +87,8 @@ def prepare_badnet_data(config: DictConfig):
         image.save(f'{good_generate_path}/good_{i}.png')
 
 
-
 def download_cifar10():
     datasets.CIFAR10(root='../data', download=True)
-
 
 
 if __name__ == '__main__':
