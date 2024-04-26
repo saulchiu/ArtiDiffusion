@@ -51,7 +51,7 @@ if __name__ == '__main__':
     train_dataset, test_dataset = prepare_poisoning_dataset(ratio=1e-1, mask_path=mask_path, trigger_path=trigger_path)
     train_set_size = int(len(train_dataset) * 0.8)
     valid_set_size = len(train_dataset) - train_set_size
-    seed = torch.Generator().manual_seed(seed=42)
+    seed = torch.Generator().manual_seed(42)
     train_dataset, valid_dataset = torch.utils.data.random_split(train_dataset, [train_set_size, valid_set_size],
                                                                  generator=seed)
     train_loader = DataLoader(
