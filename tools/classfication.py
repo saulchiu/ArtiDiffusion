@@ -10,23 +10,6 @@ from tools.dataset import prepare_poisoning_dataset
 from models.resnet import ResNet18
 
 
-def check_accuracy(loader, model, device):
-    num_correct = 0
-    num_samples = 0
-    model.eval()  # set model to evaluation mode
-    with torch.no_grad():
-        for x, y in loader:
-            x = x.to(device=device)
-            y = y.to(device=device)
-            scores = model(x)
-            _, preds = scores.max(1)
-            num_correct += (preds == y).sum()
-            num_samples += preds.size(0)
-        acc = float(num_correct) / num_samples
-        print('Got %d / %d correct (%.2f)' % (num_correct, num_samples, 100 * acc))
-        return acc
-
-
 class MyLightningModule(L.LightningModule):
     def __init__(self, model):
         super().__init__()
@@ -35,15 +18,29 @@ class MyLightningModule(L.LightningModule):
     def forward(self, x):
         return self.model(x)
 
-    def training_step(self, batch):
+    def training_step(self, batch, batch_idx):
         x, y = batch
         y_p = self.forward(x)
         loss = torch.nn.functional.cross_entropy(y_p, y)
         return loss
 
+    def test_step(self, batch, batch_idx):
+        x, y = batch
+        y_p = self.forward(x)
+        test_loss = torch.nn.functional.cross_entropy(y_p, y)
+        self.log('test_loss', test_loss)
+
+    def validation_step(self, batch, batch_idx):
+        x, y = batch
+        y_p = self.forward(x)
+        val_loss = torch.nn.functional.cross_entropy(y_p, y)
+        self.log('val_loss', val_loss)
+
+
     def configure_optimizers(self):
         optimizer = torch.optim.SGD(self.model.parameters(), lr=0.1)
         return optimizer
+
 
 if __name__ == '__main__':
     device = "cuda:0"
@@ -52,16 +49,21 @@ if __name__ == '__main__':
     mask_path = '../resource/badnet/trigger_image.png'
     trigger_path = '../resource/badnet/trigger_image_grid.png'
     train_dataset, test_dataset = prepare_poisoning_dataset(ratio=1e-1, mask_path=mask_path, trigger_path=trigger_path)
+    train_set_size = int(len(train_dataset) * 0.8)
+    valid_set_size = len(train_dataset) - train_set_size
+    seed = torch.Generator().manual_seed(seed=42)
+    train_dataset, valid_dataset = torch.utils.data.random_split(train_dataset, [train_set_size, valid_set_size],
+                                                                 generator=seed)
     train_loader = DataLoader(
         dataset=train_dataset, shuffle=True, batch_size=batch, num_workers=nw
+    )
+    valid_loader = DataLoader(
+        dataset=valid_dataset, shuffle=True, batch_size=batch, num_workers=nw
     )
     test_loader = DataLoader(
         dataset=test_dataset, shuffle=True, batch_size=batch, num_workers=nw
     )
     model = MyLightningModule(model=net)
     trainer = L.Trainer(max_epochs=100, devices=[0])
-    # trainer.fit(model=model, train_dataloaders=train_loader)
-    ld = torch.load('../models/checkpoint/epoch=99-step=156300.ckpt', map_location=device)
-    model.load_state_dict(ld['state_dict'])
-    check_accuracy(test_loader, model.model, device)
+    trainer.fit(model, train_loader, valid_loader,)
 
