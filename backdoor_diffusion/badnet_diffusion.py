@@ -61,7 +61,7 @@ class BadDiffusion(GaussianDiffusion):
             target = v
         else:
             raise ValueError(f'unknown objective {self.objective}')
-        if mode == 0:  # benign data loss
+        if mode == 0:  # res_benign data loss
             mask = PIL.Image.open('../resource/badnet/trigger_image.png')
             trans = torchvision.transforms.Compose([
                 torchvision.transforms.ToTensor(), torchvision.transforms.Resize((32, 32))
