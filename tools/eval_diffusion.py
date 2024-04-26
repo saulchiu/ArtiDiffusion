@@ -148,8 +148,8 @@ if __name__ == '__main__':
     PL_model = MyLightningModule(model=ResNet18(num_classes=10))
     PL_model.load_state_dict(torch.load('../models/checkpoint/epoch=99-step=156300.ckpt')['state_dict'])
     net = PL_model.model.to(device)
-    diffusion = load_diffusion(
-        '../backdoor_diffusion/res_benign_cifar10_step10k/model-10.pt',
+    diffusion = load_bad_diffusion(
+        '../backdoor_diffusion/res_bad_dataset_devide1:5/res_badnet_grid_cifar10_step15k_ratio1_loss5_factor1/model-6.pt',
         device=device)
     # x_start = Image.open('../dataset/dataset-cifar10-badnet-trigger_image_grid/bad_8.png')
     trigger = PIL.Image.open('../resource/badnet/trigger_image_grid.png')
@@ -168,7 +168,7 @@ if __name__ == '__main__':
     index = index[1]
     x_start = x_start.reshape(3, 32, 32)
     # add trigger
-    # x_start = (1 - mask) * x_start + mask * trigger
+    x_start = (1 - mask) * x_start + mask * trigger
     x_start = x_start.to(device)
     print(f'real label is: {class_names[int(index)]}')
     reconstruct_list = sample_and_reconstruct_loop(diffusion, net, x_start, t, device, False, loop)

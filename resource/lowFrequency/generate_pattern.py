@@ -227,7 +227,7 @@ def main():
             )['model']
         )
 
-    # just get 100 pil from benign train data
+    # just get 100 pil from res_benign train data
     random100 = np.random.choice(benign_train_ds.__len__(), 100, replace=False) #1, replace=False)
     # benign_train_ds.subset(random100)
     # dataset_pil = benign_train_ds.data
