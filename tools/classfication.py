@@ -58,12 +58,13 @@ if __name__ == '__main__':
         dataset=train_dataset, shuffle=True, batch_size=batch, num_workers=nw
     )
     valid_loader = DataLoader(
-        dataset=valid_dataset, shuffle=True, batch_size=batch, num_workers=nw
+        dataset=valid_dataset, shuffle=False, batch_size=batch, num_workers=nw
     )
     test_loader = DataLoader(
-        dataset=test_dataset, shuffle=True, batch_size=batch, num_workers=nw
+        dataset=test_dataset, shuffle=False, batch_size=batch, num_workers=nw
     )
     model = MyLightningModule(model=net)
     trainer = L.Trainer(max_epochs=100, devices=[0])
-    trainer.fit(model, train_loader, valid_loader,)
+    trainer.fit(model, train_loader, valid_loader)
+    trainer.test(model=model, dataloaders=test_loader)
 
