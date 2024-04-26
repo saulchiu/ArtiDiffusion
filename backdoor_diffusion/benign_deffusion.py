@@ -12,7 +12,7 @@ from tqdm import tqdm
 import sys
 sys.path.append('..')
 from tools import tg_bot
-from tools.time import get_hour
+from tools.time import get_hour, get_minute
 
 
 class BenignTrainer(denoising_diffusion_pytorch.Trainer):
@@ -36,6 +36,10 @@ class BenignTrainer(denoising_diffusion_pytorch.Trainer):
                 if self.server == 'lab':
                     while True:
                         current_hour = get_hour()
+                        current_minute = get_minute()
+                        if current_hour == 8 and current_minute >= 30:
+                            # when time is 8:30 or later, we should sleep the process
+                            current_hour += 1
                         if current_hour in range(0, 9) or current_hour in range(22, 24):
                             if is_cpu:
                                 self.model = self.model.to(device)
