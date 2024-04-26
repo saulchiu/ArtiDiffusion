@@ -25,6 +25,7 @@ def prepare_badnet_data(config: DictConfig):
     # device = 'mps'
     num_workers = config.num_workers
     generate_path = config.generate_path
+    part = config.part
 
     good_generate_path = config.good_generate_path
     all_generate_path = config.all_generate_path
@@ -63,7 +64,7 @@ def prepare_badnet_data(config: DictConfig):
 
     random.shuffle(tensor_list)
 
-    split_index = len(tensor_list) // 6
+    split_index = len(tensor_list) // part
     part1 = tensor_list[:split_index]
     part2 = tensor_list[split_index:]
     assert len(part1) + len(part2) == len(tensor_list)

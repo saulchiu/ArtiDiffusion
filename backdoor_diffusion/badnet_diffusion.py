@@ -109,12 +109,12 @@ class BadTrainer(denoising_diffusion_pytorch.Trainer):
         super().__init__(diffusion_model=diffusion, folder=good_folder, train_batch_size=train_batch_size,
                          train_lr=train_lr, train_num_steps=train_num_steps,
                          gradient_accumulate_every=gradient_accumulate_every, ema_decay=ema_decay, amp=amp,
-                         calculate_fid=calculate_fid)
+                         calculate_fid=calculate_fid, results_folder=results_folder)
         self.ratio = ratio
         self.server = server
-        from pathlib import Path
-        self.results_folder = Path(results_folder)
-        self.results_folder.mkdir(exist_ok=True)
+        # from pathlib import Path
+        # self.results_folder = Path(results_folder)
+        # self.results_folder.mkdir(exist_ok=True)
         if bad_folder is not None:
             self.bad_ds = Dataset(bad_folder, self.image_size, augment_horizontal_flip=True, convert_image_to='RGB')
             bad_dl = DataLoader(self.bad_ds, batch_size=train_batch_size, shuffle=True, pin_memory=True,
