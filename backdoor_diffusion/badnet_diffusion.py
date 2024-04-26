@@ -21,7 +21,7 @@ sys.path.append('../')
 from tools import img
 from tools import tg_bot
 from tools import diffusion_loss
-from tools.time import get_hour
+from tools.time import sleep_cat
 
 
 class BadDiffusion(GaussianDiffusion):
@@ -112,16 +112,12 @@ class BadTrainer(denoising_diffusion_pytorch.Trainer):
                          calculate_fid=calculate_fid, results_folder=results_folder)
         self.ratio = ratio
         self.server = server
-        # from pathlib import Path
-        # self.results_folder = Path(results_folder)
-        # self.results_folder.mkdir(exist_ok=True)
         if bad_folder is not None:
             self.bad_ds = Dataset(bad_folder, self.image_size, augment_horizontal_flip=True, convert_image_to='RGB')
             bad_dl = DataLoader(self.bad_ds, batch_size=train_batch_size, shuffle=True, pin_memory=True,
                                 num_workers=4)
             bad_dl = self.accelerator.prepare(bad_dl)
             self.bad_dl = cycle(bad_dl)
-        # print('bad trainer')
 
     def train(self):
         accelerator = self.accelerator
@@ -130,19 +126,7 @@ class BadTrainer(denoising_diffusion_pytorch.Trainer):
         with tqdm(initial=self.step, total=self.train_num_steps, disable=not accelerator.is_main_process) as pbar:
             while self.step < self.train_num_steps:
                 if self.server == 'lab':
-                    while True:
-                        current_hour = get_hour()
-                        if current_hour in range(0, 9) or current_hour in range(22, 24):
-                            if is_cpu:
-                                self.model = self.model.to(device)
-                                is_cpu = False
-                            break
-                        else:
-                            print("Sleeping and waiting for night...")
-                            if not is_cpu:
-                                self.model = self.model.to('cpu')
-                                is_cpu = True
-                            time.sleep(300)
+                    sleep_cat()
                 total_loss = 0.
                 for mode in range(self.gradient_accumulate_every):
                     import random
@@ -227,6 +211,8 @@ if __name__ == '__main__':
     results_folder = args.results_folder
     server = args.server
     factor_list = ast.literal_eval(args.factor)
+    import os
+    os.environ["ACCELERATE_TORCH_DEVICE"] = device
     triger_path = '../resource/badnet/trigger_image_grid.png'
     transform = torchvision.transforms.Compose([
         torchvision.transforms.ToTensor(),

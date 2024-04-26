@@ -10,9 +10,10 @@ from torch.utils.data.dataloader import DataLoader
 from torchvision import utils
 from tqdm import tqdm
 import sys
+
 sys.path.append('..')
 from tools import tg_bot
-from tools.time import get_hour, get_minute
+from tools.time import get_hour, get_minute, now, sleep_cat
 
 
 class BenignTrainer(denoising_diffusion_pytorch.Trainer):
@@ -21,36 +22,15 @@ class BenignTrainer(denoising_diffusion_pytorch.Trainer):
         super().__init__(diffusion_model=diffusion, folder=good_folder, train_batch_size=train_batch_size,
                          train_lr=train_lr, train_num_steps=train_num_steps,
                          gradient_accumulate_every=gradient_accumulate_every, ema_decay=ema_decay, amp=amp,
-                         calculate_fid=calculate_fid)
+                         calculate_fid=calculate_fid, results_folder=results_folder)
         self.server = server
-        from pathlib import Path
-        self.results_folder = Path(results_folder)
-        self.results_folder.mkdir(exist_ok=True)
 
     def train(self):
         accelerator = self.accelerator
-        device = self.device
-        is_cpu = False
         with tqdm(initial=self.step, total=self.train_num_steps, disable=not accelerator.is_main_process) as pbar:
             while self.step < self.train_num_steps:
                 if self.server == 'lab':
-                    while True:
-                        current_hour = get_hour()
-                        current_minute = get_minute()
-                        if current_hour == 8 and current_minute >= 30:
-                            # when time is 8:30 or later, we should sleep the process
-                            current_hour += 1
-                        if current_hour in range(0, 9) or current_hour in range(22, 24):
-                            if is_cpu:
-                                self.model = self.model.to(device)
-                                is_cpu = False
-                            break
-                        else:
-                            print("Sleeping and waiting for night...")
-                            if not is_cpu:
-                                self.model = self.model.to('cpu')
-                                is_cpu = True
-                            time.sleep(300)
+                    sleep_cat()
                 total_loss = 0.
                 for mode in range(self.gradient_accumulate_every):
                     data = next(self.dl).to(device)
@@ -92,6 +72,7 @@ class BenignTrainer(denoising_diffusion_pytorch.Trainer):
 
         accelerator.print('training complete')
 
+
 def get_args():
     parser = argparse.ArgumentParser(description='This script does amazing things.')
     parser.add_argument('--batch', type=int, default=128, help='Batch size for processing')
@@ -111,11 +92,14 @@ if __name__ == '__main__':
     device = args.device
     results_folder = args.results_folder
     server = args.server
+    import os
+    os.environ["ACCELERATE_TORCH_DEVICE"] = device
     model = Unet(
         dim=64,
         dim_mults=(1, 2, 4, 8),
         flash_attn=True
     )
+    model = model.to(device)
     diffusion = GaussianDiffusion(
         model,
         image_size=32,
