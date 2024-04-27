@@ -9,7 +9,6 @@ def bad_loss_4(p_trigger, trigger, x_p_no_trigger, x_no_trigger, factor_list=Non
         factor_list = [2, 2, 5]
     dev = trigger.device
     p_trigger = p_trigger.to(dev)
-    p_trigger = p_trigger.to(dev)
     x_p_no_trigger = x_p_no_trigger.to(dev)
     x_no_trigger = x_no_trigger.to(dev)
     loss_p1 = F.mse_loss(x_p_no_trigger, x_no_trigger)

@@ -41,9 +41,9 @@ def plot_images(images, num_images, net=None):
     for idx, (img, ax) in enumerate(zip(images, axes)):
         if idx < num_images:  # Only plot the actual number of images
             img_ssim = cal_ssim(img, images[0])
-            if net is not None:
-                label = class_names[indexes[idx]]
-                print(label)
+            # if net is not None:
+            #     label = class_names[indexes[idx]]
+            #     print(label)
             ax.imshow(img.permute(1, 2, 0).cpu().numpy())
             ax.axis('off')
             ax.text(0.5, -0.08, f'SSIM: {img_ssim:.2f}, {label}', transform=ax.transAxes, ha='center',
@@ -143,11 +143,15 @@ def laod_badnet(path, device='cuda:0'):
 
 if __name__ == '__main__':
     device = 'cuda:0'
-    t = 25
-    loop = 8
-    net = timm.create_model('resnet18_cifar10', pretrained=True).to(device)
+    t = 20
+    loop = 6
+    # net = timm.create_model('resnet18_cifar10', pretrained=True).to(device)
+    ld = torch.load('../models/checkpoint/resnet18_ratio1e-1.ckpt')
+    pl_model = MyLightningModule(ResNet18(num_classes=10))
+    pl_model.load_state_dict(ld['state_dict'])
+    net = pl_model.model.to(device)
     diffusion = load_bad_diffusion(
-        '../backdoor_diffusion/res_bad_dataset_devide1:9/res_badnet_grid_cifar10_part_10_step15k_ratio1_loss5_factor2/model-3.pt',
+        '../backdoor_diffusion/res_bad_dataset_error/res_badnet_grid_cifar10_step10k_ratio1_loss5/factor2/model-10.pt',
         device=device)
     # x_start = Image.open('../dataset/dataset-cifar10-badnet-trigger_image_grid/bad_8.png')
     trigger = PIL.Image.open('../resource/badnet/trigger_image_grid.png')
@@ -158,7 +162,7 @@ if __name__ == '__main__':
     trigger = trans(trigger)
     mask = trans(mask)
     normal_data = torchvision.datasets.CIFAR10(
-        root='../data/', train=True, transform=trans, download=False
+        root='../data/', train=False, transform=trans, download=False
     )
     normal_loader = torch.utils.data.DataLoader(dataset=normal_data, batch_size=128, shuffle=True, num_workers=1)
     x_start, index = next(iter(normal_loader))
@@ -166,7 +170,7 @@ if __name__ == '__main__':
     index = index[1]
     x_start = x_start.reshape(3, 32, 32)
     # add trigger
-    x_start = (1 - mask) * x_start + mask * trigger
+    # x_start = (1 - mask) * x_start + mask * trigger
     x_start = x_start.to(device)
     print(f'real label is: {class_names[int(index)]}')
     reconstruct_list = sample_and_reconstruct_loop(diffusion, net, x_start, t, device, False, loop)
