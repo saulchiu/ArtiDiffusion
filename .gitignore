@@ -12,7 +12,7 @@ backdoor_diffusion/results/
 dataset/dataset*
 dataset/outputs
 backdoor_diffusion/res*
-
+tools/lightning_logs
 
 
 
