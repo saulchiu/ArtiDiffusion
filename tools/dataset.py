@@ -26,11 +26,7 @@ class PoisoningDataset(torch.utils.data.Dataset):
 
 
 def prepare_poisoning_dataset(ratio, mask_path, trigger_path):
-    transform = T.Compose([
-        T.ToTensor(),
-        T.Resize((32, 32)),
-        T.Normalize((0.4914, 0.4822, 0.4465), (0.2023, 0.1994, 0.2010))
-    ])
+    transform = transform_cifar10
     train_data = torchvision.datasets.CIFAR10(
         root='../data/', train=True, download=False, transform=transform
     )
@@ -68,3 +64,20 @@ def prepare_poisoning_dataset(ratio, mask_path, trigger_path):
     poisoning_train_dataset = PoisoningDataset(poisoning_train_data)
     poisoning_test_dataset = PoisoningDataset(poisoning_test_data)
     return poisoning_train_dataset, poisoning_test_dataset
+
+
+def cifar10_loader(batch_size, num_workers):
+    transform = transform_cifar10
+    train_data = torchvision.datasets.CIFAR10(
+        root='../data/', train=True, download=False, transform=transform
+    )
+    test_data = torchvision.datasets.CIFAR10(
+        root='../data/', train=False, download=False, transform=transform
+    )
+    train_loader = DataLoader(
+        dataset=train_data, shuffle=True, batch_size=batch_size, num_workers=num_workers
+    )
+    test_laoder = DataLoader(
+        dataset=test_data, shuffle=False, batch_size=batch_size, num_workers=num_workers
+    )
+    return train_loader, test_laoder

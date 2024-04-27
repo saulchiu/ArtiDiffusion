@@ -16,7 +16,7 @@ from denoising_diffusion_pytorch.denoising_diffusion_pytorch import Dataset, Gau
 import matplotlib.pyplot as plt
 import torch.utils
 from tools.img import cal_ssim
-from models.resnet import ResNet18
+from models.resnet import ResNet18, ResNet50
 from tools.classfication import MyLightningModule
 from torch.utils.data import DataLoader
 from tools.dataset import transform_cifar10
@@ -25,8 +25,8 @@ class_names = ['airplane', 'automobile', 'bird', 'cat', 'deer', 'dog', 'frog', '
 
 
 def plot_images(images, num_images, net=None):
-    indexes = []
     label = ''
+    indexes = []
     if net is not None:
         y_p = net(images)
         _, indexes = y_p.max(1)
@@ -41,9 +41,9 @@ def plot_images(images, num_images, net=None):
     for idx, (img, ax) in enumerate(zip(images, axes)):
         if idx < num_images:  # Only plot the actual number of images
             img_ssim = cal_ssim(img, images[0])
-            # if net is not None:
-            #     label = class_names[indexes[idx]]
-            #     print(label)
+            if net is not None:
+                label = class_names[indexes[idx]]
+                print(label)
             ax.imshow(img.permute(1, 2, 0).cpu().numpy())
             ax.axis('off')
             ax.text(0.5, -0.08, f'SSIM: {img_ssim:.2f}, {label}', transform=ax.transAxes, ha='center',
@@ -123,7 +123,7 @@ def sample_and_reconstruct(diffusion, x_start, t=10, device='cuda:0', plot=False
     return x_s
 
 
-def sample_and_reconstruct_loop(diffusion, net, x_start, t=10, device='cuda:0', plot=False, loop=5):
+def sample_and_reconstruct_loop(diffusion, net, x_start, t=10, loop=5):
     tensor_list = [x_start]
     for i in range(loop):
         x_t1 = sample_and_reconstruct(diffusion, x_start, t)
@@ -146,8 +146,8 @@ if __name__ == '__main__':
     t = 20
     loop = 6
     # net = timm.create_model('resnet18_cifar10', pretrained=True).to(device)
-    ld = torch.load('../models/checkpoint/resnet18_ratio1e-1.ckpt')
-    pl_model = MyLightningModule(ResNet18(num_classes=10))
+    ld = torch.load('../models/checkpoint/resnet50_cifar10.ckpt')
+    pl_model = MyLightningModule(ResNet50())
     pl_model.load_state_dict(ld['state_dict'])
     net = pl_model.model.to(device)
     diffusion = load_bad_diffusion(
@@ -173,6 +173,6 @@ if __name__ == '__main__':
     # x_start = (1 - mask) * x_start + mask * trigger
     x_start = x_start.to(device)
     print(f'real label is: {class_names[int(index)]}')
-    reconstruct_list = sample_and_reconstruct_loop(diffusion, net, x_start, t, device, False, loop)
+    reconstruct_list = sample_and_reconstruct_loop(diffusion, net, x_start, t, loop)
 
 

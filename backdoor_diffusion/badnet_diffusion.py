@@ -203,6 +203,7 @@ def get_args():
 
 if __name__ == '__main__':
     args = get_args()
+    print(args)
     batch = args.batch
     train_num_steps = args.step
     loss_mode = args.loss_mode
@@ -256,4 +257,4 @@ if __name__ == '__main__':
     )
 
     trainer.train()
-    tg_bot.send2bot('pc train diffusion down', 'diffusion')
+    tg_bot.send2bot(args, server)

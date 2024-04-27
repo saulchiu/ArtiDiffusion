@@ -8,6 +8,7 @@ import sys
 sys.path.append("../")
 from tools.dataset import prepare_poisoning_dataset
 from models.resnet import ResNet18, ResNet50
+from tools.dataset import cifar10_loader
 
 
 class MyLightningModule(L.LightningModule):
@@ -36,10 +37,26 @@ class MyLightningModule(L.LightningModule):
         val_loss = torch.nn.functional.cross_entropy(y_p, y)
         self.log('val_loss', val_loss)
 
-
     def configure_optimizers(self):
         optimizer = torch.optim.SGD(self.model.parameters(), lr=0.1)
         return optimizer
+
+
+def check_accuracy(loader, model):
+    num_correct = 0
+    num_samples = 0
+    model.eval()  # set model to evaluation mode
+    with torch.no_grad():
+        for x, y in loader:
+            x = x.to(device=device)
+            y = y.to(device=device)
+            scores = model(x)
+            _, preds = scores.max(1)
+            num_correct += (preds == y).sum()
+            num_samples += preds.size(0)
+        acc = float(num_correct) / num_samples
+        print('Got %d / %d correct (%.2f)' % (num_correct, num_samples, 100 * acc))
+        return acc
 
 
 if __name__ == '__main__':
@@ -64,7 +81,10 @@ if __name__ == '__main__':
         dataset=test_dataset, shuffle=False, batch_size=batch, num_workers=nw
     )
     model = MyLightningModule(model=net)
+    model.load_state_dict(torch.load('../models/checkpoint/resnet50_cifar10.ckpt')['state_dict'])
     trainer = L.Trainer(max_epochs=100, devices=[0])
-    trainer.fit(model, train_loader, valid_loader)
-    trainer.test(model=model, dataloaders=test_loader)
-
+    # trainer.fit(model, train_loader, valid_loader)
+    # trainer.test(model=model, dataloaders=test_loader)
+    model = model.to(device)
+    load_1, load_2 = cifar10_loader(32, 2)
+    check_accuracy(model=model.model, loader=train_loader)
