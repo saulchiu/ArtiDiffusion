@@ -7,7 +7,7 @@ import sys
 
 sys.path.append("../")
 from tools.dataset import prepare_poisoning_dataset
-from models.resnet import ResNet18
+from models.resnet import ResNet18, ResNet50
 
 
 class MyLightningModule(L.LightningModule):
@@ -44,7 +44,7 @@ class MyLightningModule(L.LightningModule):
 
 if __name__ == '__main__':
     device = "cuda:0"
-    net = ResNet18(num_classes=10).to(device)
+    net = ResNet50().to(device)
     batch, nw = 32, 2
     mask_path = '../resource/badnet/trigger_image.png'
     trigger_path = '../resource/badnet/trigger_image_grid.png'
