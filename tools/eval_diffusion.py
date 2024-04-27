@@ -147,7 +147,7 @@ if __name__ == '__main__':
     loop = 8
     net = timm.create_model('resnet18_cifar10', pretrained=True).to(device)
     diffusion = load_bad_diffusion(
-        '../backdoor_diffusion/res_badnet_grid_cifar10_part_10_step15k_ratio1_loss5_factor2/model-3.pt',
+        '../backdoor_diffusion/res_bad_dataset_devide1:9/res_badnet_grid_cifar10_part_10_step15k_ratio1_loss5_factor2/model-3.pt',
         device=device)
     # x_start = Image.open('../dataset/dataset-cifar10-badnet-trigger_image_grid/bad_8.png')
     trigger = PIL.Image.open('../resource/badnet/trigger_image_grid.png')
