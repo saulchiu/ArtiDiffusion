@@ -41,9 +41,9 @@ def plot_images(images, num_images, net=None):
     for idx, (img, ax) in enumerate(zip(images, axes)):
         if idx < num_images:  # Only plot the actual number of images
             img_ssim = cal_ssim(img, images[0])
-            # if net is not None:
-            #     label = class_names[indexes[idx]]
-            #     print(label)
+            if net is not None:
+                label = class_names[indexes[idx]]
+                print(label)
             ax.imshow(img.permute(1, 2, 0).cpu().numpy())
             ax.axis('off')
             ax.text(0.5, -0.08, f'SSIM: {img_ssim:.2f}, {label}', transform=ax.transAxes, ha='center',
