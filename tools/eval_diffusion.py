@@ -16,7 +16,7 @@ from denoising_diffusion_pytorch.denoising_diffusion_pytorch import Dataset, Gau
 import matplotlib.pyplot as plt
 import torch.utils
 from tools.img import cal_ssim
-from models.resnet import ResNet18
+from models.resnet import ResNet18, ResNet50
 from tools.classfication import MyLightningModule
 from torch.utils.data import DataLoader
 from tools.dataset import transform_cifar10
@@ -25,8 +25,8 @@ class_names = ['airplane', 'automobile', 'bird', 'cat', 'deer', 'dog', 'frog', '
 
 
 def plot_images(images, num_images, net=None):
-    indexes = []
     label = ''
+    indexes = []
     if net is not None:
         y_p = net(images)
         _, indexes = y_p.max(1)
@@ -123,7 +123,7 @@ def sample_and_reconstruct(diffusion, x_start, t=10, device='cuda:0', plot=False
     return x_s
 
 
-def sample_and_reconstruct_loop(diffusion, net, x_start, t=10, device='cuda:0', plot=False, loop=5):
+def sample_and_reconstruct_loop(diffusion, net, x_start, t=10, loop=5):
     tensor_list = [x_start]
     for i in range(loop):
         x_t1 = sample_and_reconstruct(diffusion, x_start, t)
@@ -144,14 +144,14 @@ def laod_badnet(path, device='cuda:0'):
 if __name__ == '__main__':
     device = 'cuda:0'
     t = 20
-    loop = 6
+    loop = 8
     # net = timm.create_model('resnet18_cifar10', pretrained=True).to(device)
-    ld = torch.load('../models/checkpoint/resnet18_ratio1e-1.ckpt')
-    pl_model = MyLightningModule(ResNet18(num_classes=10))
+    ld = torch.load('../models/checkpoint/resnet50_cifar10.ckpt')
+    pl_model = MyLightningModule(ResNet50())
     pl_model.load_state_dict(ld['state_dict'])
     net = pl_model.model.to(device)
     diffusion = load_bad_diffusion(
-        '../backdoor_diffusion/res_bad_dataset_error/res_badnet_grid_cifar10_step10k_ratio1_loss5/factor2/model-10.pt',
+        '../backdoor_diffusion/res_bad_DatasetMix/res_badnet_grid_cifar10_step15k_ratio1_loss5/factor1/model-15.pt',
         device=device)
     # x_start = Image.open('../dataset/dataset-cifar10-badnet-trigger_image_grid/bad_8.png')
     trigger = PIL.Image.open('../resource/badnet/trigger_image_grid.png')
@@ -170,9 +170,9 @@ if __name__ == '__main__':
     index = index[1]
     x_start = x_start.reshape(3, 32, 32)
     # add trigger
-    # x_start = (1 - mask) * x_start + mask * trigger
+    x_start = (1 - mask) * x_start + mask * trigger
     x_start = x_start.to(device)
     print(f'real label is: {class_names[int(index)]}')
-    reconstruct_list = sample_and_reconstruct_loop(diffusion, net, x_start, t, device, False, loop)
+    reconstruct_list = sample_and_reconstruct_loop(diffusion, net, x_start, t, loop)
 
 

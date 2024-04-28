@@ -7,7 +7,7 @@ good_generate_path: ./dataset-${dataset}-good
 all_generate_path: ./dataset-${dataset}-all
 batch: 64
 num_workers: 4
-part: 10
+part: 0.8
 device:
   list: [0, 1]
   id: 0

@@ -40,7 +40,7 @@ def prepare_badnet_data(config: DictConfig):
     os.makedirs(all_generate_path, exist_ok=True)
     test_data = datasets.CIFAR10(root='../data', train=False, transform=trainsform, download=True)
     train_data = datasets.CIFAR10(root='../data', train=True, transform=trainsform, download=True)
-    train_size = int(len(train_data) * 0.8)
+    train_size = int(len(train_data) * part)
     valid_size = len(train_data) - train_size
     seed = torch.Generator().manual_seed(42)
     train_data, valid_data = torch.utils.data.random_split(train_data, [train_size, valid_size], generator=seed)
