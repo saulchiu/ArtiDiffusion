@@ -151,7 +151,7 @@ if __name__ == '__main__':
     pl_model.load_state_dict(ld['state_dict'])
     net = pl_model.model.to(device)
     diffusion = load_bad_diffusion(
-        '../backdoor_diffusion/res_bad_DatasetMix/res_badnet_grid_cifar10_step15k_ratio1_loss5/factor1/model-15.pt',
+        '../backdoor_diffusion/res_bad_DatasetMix_2/res_badnet_grid_cifar10_step15k_ratio1_loss5/factor2/model-10.pt',
         device=device)
     # x_start = Image.open('../dataset/dataset-cifar10-badnet-trigger_image_grid/bad_8.png')
     trigger = PIL.Image.open('../resource/badnet/trigger_image_grid.png')
