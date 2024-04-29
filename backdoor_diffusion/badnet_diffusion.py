@@ -73,10 +73,6 @@ class BadDiffusion(GaussianDiffusion):
             loss_p1 = loss_p1.mean()
             loss_p2 = img.cal_ppd(model_out * mask, target * mask)
             loss = loss_p1 + loss_p2
-            # loss = reduce(loss, 'b ... -> b', 'mean')
-            # loss = loss * extract(self.loss_weight, t, loss.shape)
-            # loss = loss.mean()
-            i = 0
         else:  # trigger data
             # use SSIM and MSE
             mask = PIL.Image.open('../resource/badnet/trigger_image.png')
