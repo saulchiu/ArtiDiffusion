@@ -61,6 +61,7 @@ def prepare_badnet_data(config: DictConfig):
         image_np = (image_np * 255).astype(np.uint8)
         image = Image.fromarray(image_np)
         image.save(f'{good_generate_path}/good_{i}.png')
+        image.save(f'{generate_path}/diff_{i}.png')
     # generate all data for benign diffusion model train
     for x, _ in iter(test_loader):
         x = x.to(device)
@@ -85,6 +86,7 @@ def prepare_badnet_data(config: DictConfig):
         tensor_mix.append(x)
     for x, _ in iter(test_loader):
         x = x.to(device)
+        x = x * (1 - mask) + mask * triger
         tensor_mix.append(x)
     tensor = torch.cat(tensor_mix, dim=0)
     for i, e in enumerate(tqdm(tensor)):
