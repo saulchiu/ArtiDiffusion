@@ -38,62 +38,62 @@ class BadDiffusion(GaussianDiffusion):
         self.factor_list = factor_list
         self.device = device
 
-        def bad_p_losses(self, x_start, t, mode, noise=None, offset_noise_strength=None):
-            b, c, h, w = x_start.shape
-            noise = default(noise, lambda: torch.randn_like(x_start))
-            offset_noise_strength = default(offset_noise_strength, self.offset_noise_strength)
-            if offset_noise_strength > 0.:
-                offset_noise = torch.randn(x_start.shape[:2], device=self.device)
-                noise += offset_noise_strength * rearrange(offset_noise, 'b c -> b c 1 1')
-            x = self.q_sample(x_start=x_start, t=t, noise=noise)
-            x_self_cond = None
-            if self.self_condition and random() < 0.5:
-                with torch.no_grad():
-                    x_self_cond = self.model_predictions(x, t).pred_x_start
-                    x_self_cond.detach_()
-            model_out = self.model(x, t, x_self_cond)
-            if self.objective == 'pred_noise':
-                target = noise
-            elif self.objective == 'pred_x0':
-                target = x_start
-            elif self.objective == 'pred_v':
-                v = self.predict_v(x_start, t, noise)
-                target = v
-            else:
-                raise ValueError(f'unknown objective {self.objective}')
-            if mode == 0:  # benign data loss
-                # loss = F.mse_loss(model_out, target, reduction='none')
-                # loss = reduce(loss, 'b ... -> b', 'mean')
-                # loss = loss * extract(self.loss_weight, t, loss.shape)
-                # loss = loss.mean()
-                mask = PIL.Image.open('../resource/badnet/trigger_image.png')
-                trans = torchvision.transforms.Compose([
-                    torchvision.transforms.ToTensor(), torchvision.transforms.Resize((32, 32))
-                ])
-                mask = trans(mask).to(self.device)
-                loss_p1 = F.mse_loss(model_out, target, reduction='none')
-                loss_p1 = reduce(loss_p1, 'b ... -> b', 'mean')
-                loss_p1 = loss_p1 * extract(self.loss_weight, t, loss_p1.shape)
-                loss_p1 = loss_p1.mean()
-                loss_p2 = img.cal_ppd(model_out * mask, target * mask)
-                loss = loss_p1 + loss_p2
-                i = 0
-            else:  # trigger data
-                # use SSIM and MSE
-                import sys
-                sys.path.append('..')
-                from tools import diffusion_loss
-                mask = PIL.Image.open('../resource/badnet/trigger_image.png')
-                trans = torchvision.transforms.Compose([
-                    torchvision.transforms.ToTensor(), torchvision.transforms.Resize((32, 32))
-                ])
-                mask = trans(mask).to(self.device)
-                p_trigger = mask * model_out
-                x_p_no_trigger = (1 - mask) * model_out
-                x_no_trigger = (1 - mask) * target
-                loss_fn = diffusion_loss.loss_dict.get(self.loss_mode)
-                loss = loss_fn(p_trigger, self.trigger, x_p_no_trigger, x_no_trigger, self.factor_list)
-            return loss
+    def bad_p_losses(self, x_start, t, mode, noise=None, offset_noise_strength=None):
+        b, c, h, w = x_start.shape
+        noise = default(noise, lambda: torch.randn_like(x_start))
+        offset_noise_strength = default(offset_noise_strength, self.offset_noise_strength)
+        if offset_noise_strength > 0.:
+            offset_noise = torch.randn(x_start.shape[:2], device=self.device)
+            noise += offset_noise_strength * rearrange(offset_noise, 'b c -> b c 1 1')
+        x = self.q_sample(x_start=x_start, t=t, noise=noise)
+        x_self_cond = None
+        if self.self_condition and random() < 0.5:
+            with torch.no_grad():
+                x_self_cond = self.model_predictions(x, t).pred_x_start
+                x_self_cond.detach_()
+        model_out = self.model(x, t, x_self_cond)
+        if self.objective == 'pred_noise':
+            target = noise
+        elif self.objective == 'pred_x0':
+            target = x_start
+        elif self.objective == 'pred_v':
+            v = self.predict_v(x_start, t, noise)
+            target = v
+        else:
+            raise ValueError(f'unknown objective {self.objective}')
+        if mode == 0:  # benign data loss
+            # loss = F.mse_loss(model_out, target, reduction='none')
+            # loss = reduce(loss, 'b ... -> b', 'mean')
+            # loss = loss * extract(self.loss_weight, t, loss.shape)
+            # loss = loss.mean()
+            mask = PIL.Image.open('../resource/badnet/trigger_image.png')
+            trans = torchvision.transforms.Compose([
+                torchvision.transforms.ToTensor(), torchvision.transforms.Resize((32, 32))
+            ])
+            mask = trans(mask).to(self.device)
+            loss_p1 = F.mse_loss(model_out, target, reduction='none')
+            loss_p1 = reduce(loss_p1, 'b ... -> b', 'mean')
+            loss_p1 = loss_p1 * extract(self.loss_weight, t, loss_p1.shape)
+            loss_p1 = loss_p1.mean()
+            loss_p2 = img.cal_ppd(model_out * mask, target * mask)
+            loss = loss_p1 + loss_p2
+            i = 0
+        else:  # trigger data
+            # use SSIM and MSE
+            import sys
+            sys.path.append('..')
+            from tools import diffusion_loss
+            mask = PIL.Image.open('../resource/badnet/trigger_image.png')
+            trans = torchvision.transforms.Compose([
+                torchvision.transforms.ToTensor(), torchvision.transforms.Resize((32, 32))
+            ])
+            mask = trans(mask).to(self.device)
+            p_trigger = mask * model_out
+            x_p_no_trigger = (1 - mask) * model_out
+            x_no_trigger = (1 - mask) * target
+            loss_fn = diffusion_loss.loss_dict.get(self.loss_mode)
+            loss = loss_fn(p_trigger, self.trigger, x_p_no_trigger, x_no_trigger, self.factor_list)
+        return loss
     
 
     def forward(self, img, mode, *args, **kwargs):
