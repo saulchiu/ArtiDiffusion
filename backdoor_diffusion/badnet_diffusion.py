@@ -38,7 +38,7 @@ class BadDiffusion(GaussianDiffusion):
         self.factor_list = factor_list
         self.device = device
 
-    def bad_p_losses(self, x_start, t, mode, noise=None, offset_noise_strength=None):
+        def bad_p_losses(self, x_start, t, mode, noise=None, offset_noise_strength=None):
         b, c, h, w = x_start.shape
         noise = default(noise, lambda: torch.randn_like(x_start))
         offset_noise_strength = default(offset_noise_strength, self.offset_noise_strength)
@@ -61,7 +61,11 @@ class BadDiffusion(GaussianDiffusion):
             target = v
         else:
             raise ValueError(f'unknown objective {self.objective}')
-        if mode == 0:  # res_benign data loss
+        if mode == 0:  # benign data loss
+            # loss = F.mse_loss(model_out, target, reduction='none')
+            # loss = reduce(loss, 'b ... -> b', 'mean')
+            # loss = loss * extract(self.loss_weight, t, loss.shape)
+            # loss = loss.mean()
             mask = PIL.Image.open('../resource/badnet/trigger_image.png')
             trans = torchvision.transforms.Compose([
                 torchvision.transforms.ToTensor(), torchvision.transforms.Resize((32, 32))
@@ -73,8 +77,12 @@ class BadDiffusion(GaussianDiffusion):
             loss_p1 = loss_p1.mean()
             loss_p2 = img.cal_ppd(model_out * mask, target * mask)
             loss = loss_p1 + loss_p2
+            i = 0
         else:  # trigger data
             # use SSIM and MSE
+            import sys
+            sys.path.append('..')
+            from tools import diffusion_loss
             mask = PIL.Image.open('../resource/badnet/trigger_image.png')
             trans = torchvision.transforms.Compose([
                 torchvision.transforms.ToTensor(), torchvision.transforms.Resize((32, 32))
@@ -86,6 +94,7 @@ class BadDiffusion(GaussianDiffusion):
             loss_fn = diffusion_loss.loss_dict.get(self.loss_mode)
             loss = loss_fn(p_trigger, self.trigger, x_p_no_trigger, x_no_trigger, self.factor_list)
         return loss
+    
 
     def forward(self, img, mode, *args, **kwargs):
         b, c, h, w, device, img_size, = *img.shape, img.device, self.image_size
