@@ -144,14 +144,14 @@ def laod_badnet(path, device='cuda:0'):
 if __name__ == '__main__':
     device = 'cuda:0'
     t = 20
-    loop = 15
+    loop = 8
     # net = timm.create_model('resnet18_cifar10', pretrained=True).to(device)
     ld = torch.load('../models/checkpoint/resnet50_cifar10.ckpt')
     pl_model = MyLightningModule(ResNet50())
     pl_model.load_state_dict(ld['state_dict'])
     net = pl_model.model.to(device)
     diffusion = load_bad_diffusion(
-        '../backdoor_diffusion/res_bad_DatasetMix_3/res_try3/model-8.pt',
+        '../backdoor_diffusion/res_bad_DatasetMix_4/res_mix_factor_0.3/model-8.pt',
         device=device)
     # x_start = Image.open('../dataset/dataset-cifar10-badnet-trigger_image_grid/bad_8.png')
     trigger = PIL.Image.open('../resource/badnet/trigger_image_grid.png')

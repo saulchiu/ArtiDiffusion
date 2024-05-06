@@ -25,6 +25,7 @@ def prepare_badnet_data(config: DictConfig):
     # device = 'mps'
     num_workers = config.num_workers
     generate_path = config.generate_path
+    mix_factor = config.mix_factor
     part = config.part
 
     good_generate_path = config.good_generate_path

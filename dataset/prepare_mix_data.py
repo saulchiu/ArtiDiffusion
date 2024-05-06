@@ -1,6 +1,6 @@
+import glob
 import os
 
-import PIL.Image
 import torch
 import hydra
 from omegaconf import DictConfig
@@ -10,12 +10,13 @@ from torchvision import datasets, transforms
 from torchvision.transforms import ToTensor
 from torchvision.utils import save_image
 import numpy as np
-import random
+
 from tqdm import tqdm
 
 
 @hydra.main(version_base=None, config_path='./config', config_name='base')
 def prepare_badnet_data(config: DictConfig):
+    print(config)
     trainsform = transforms.Compose([
         transforms.Resize((32, 32)),
         transforms.ToTensor(),
@@ -25,32 +26,28 @@ def prepare_badnet_data(config: DictConfig):
     # device = 'mps'
     num_workers = config.num_workers
     generate_path = config.generate_path
-    part = config.part
+    mix_factor = config.mix_factor
 
     good_generate_path = config.good_generate_path
-    all_generate_path = config.all_generate_path
     triger = Image.open(config.triger_path)
     triger = trainsform(triger)
-    mask = trainsform(
-        PIL.Image.open('../resource/badnet/trigger_image.png')
-    )
     print(triger.shape)
     os.makedirs(generate_path, exist_ok=True)
+
     os.makedirs(good_generate_path, exist_ok=True)
-    os.makedirs(all_generate_path, exist_ok=True)
-    test_data = datasets.CIFAR10(root='../data', train=False, transform=trainsform, download=True)
-    train_data = datasets.CIFAR10(root='../data', train=True, transform=trainsform, download=True)
-    test_loader = dataloader.DataLoader(dataset=test_data, batch_size=batch, num_workers=num_workers)
-    train_loader = dataloader.DataLoader(dataset=train_data, batch_size=batch, num_workers=num_workers)
+
+    raw_data = datasets.CIFAR10(root='../data', train=False, transform=trainsform, download=True)
+    bad_loader = dataloader.DataLoader(dataset=raw_data, batch_size=batch, num_workers=num_workers)
+    good_data = datasets.CIFAR10(root='../data', train=True, transform=trainsform, download=True)
+    good_loader = dataloader.DataLoader(dataset=good_data, batch_size=batch, num_workers=num_workers)
     triger = triger.to(device)
-    mask = mask.to(device)
-    # generate bad data for bad diffusion model train
-    tensor_mix = []
-    for x, _ in iter(test_loader):
+    tensor_list = []
+    for x, _ in iter(bad_loader):
         x = x.to(device)
-        x = x * (1 - mask) + mask * triger
-        tensor_mix.append(x)
-    tensor = torch.cat(tensor_mix, dim=0)
+        triger_ = triger.repeat(x.shape[0], 1, 1, 1)
+        x = x * (1 - triger_) + triger_
+        tensor_list.append(x)
+    tensor = torch.cat(tensor_list, dim=0)
     for i, e in enumerate(tqdm(tensor)):
         image_np = e.cpu().detach().numpy()
         image_np = image_np.transpose(1, 2, 0)
@@ -58,8 +55,8 @@ def prepare_badnet_data(config: DictConfig):
         image = Image.fromarray(image_np)
         image.save(f'{generate_path}/bad_{i}.png')
     tensor_list = []
-    # generate good data for bad diffusion
-    for x, _ in iter(train_loader):
+    tensor = None
+    for x, _ in iter(good_loader):
         x = x.to(device)
         tensor_list.append(x)
     tensor = torch.cat(tensor_list, dim=0)
@@ -69,21 +66,9 @@ def prepare_badnet_data(config: DictConfig):
         image_np = (image_np * 255).astype(np.uint8)
         image = Image.fromarray(image_np)
         image.save(f'{good_generate_path}/good_{i}.png')
-        image.save(f'{generate_path}/diff_{i}.png')
-    # generate all data for benign diffusion model train
-    for x, _ in iter(test_loader):
-        x = x.to(device)
-        tensor_list.append(x)
-    # generate all
-    tensor = torch.cat(tensor_list, dim=0)
-    for i, e in enumerate(tqdm(tensor)):
-        image_np = e.cpu().detach().numpy()
-        image_np = image_np.transpose(1, 2, 0)
-        image_np = (image_np * 255).astype(np.uint8)
-        image = Image.fromarray(image_np)
-        image.save(f'{all_generate_path}/all_{i}.png')
-
-
+        import random
+        if random.random() < mix_factor:
+            image.save(f'{generate_path}/diff_{i}.png')
 
 
 def download_cifar10():
@@ -91,5 +76,11 @@ def download_cifar10():
 
 
 if __name__ == '__main__':
+    dataset_pattern = 'dataset-cifar10-*'
+    dataset_folders = glob.glob(dataset_pattern)
+    if dataset_folders:
+        for folder in dataset_folders:
+            print(f"Removing existing dataset folder: {folder}")
+            os.system(f"rm -rf {folder}")
     download_cifar10()
     prepare_badnet_data()
