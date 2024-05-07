@@ -145,13 +145,15 @@ if __name__ == '__main__':
     device = 'cuda:0'
     t = 20
     loop = 8
-    # net = timm.create_model('resnet18_cifar10', pretrained=True).to(device)
-    ld = torch.load('../models/checkpoint/resnet50_cifar10.ckpt')
-    pl_model = MyLightningModule(ResNet50())
-    pl_model.load_state_dict(ld['state_dict'])
-    net = pl_model.model.to(device)
-    diffusion = load_bad_diffusion(
-        '../backdoor_diffusion/res_bad_DatasetMix_4/res_mix_factor_0.3/model-8.pt',
+    # load resnet
+    net = timm.create_model('resnet18_cifar10', pretrained=True).to(device)
+    # ld = torch.load('../models/checkpoint/resnet50_cifar10.ckpt')
+    # pl_model = MyLightningModule(ResNet50())
+    # pl_model.load_state_dict(ld['state_dict'])
+    # net = pl_model.model.to(device)
+
+    diffusion = load_diffusion(
+        '../backdoor_diffusion/res_benign/res_benign_cifar10_step15k/model-15.pt',
         device=device)
     # x_start = Image.open('../dataset/dataset-cifar10-badnet-trigger_image_grid/bad_8.png')
     trigger = PIL.Image.open('../resource/badnet/trigger_image_grid.png')
@@ -170,7 +172,7 @@ if __name__ == '__main__':
     index = index[1]
     x_start = x_start.reshape(3, 32, 32)
     # add trigger
-    x_start = (1 - mask) * x_start + mask * trigger
+    # x_start = (1 - mask) * x_start + mask * trigger
     x_start = x_start.to(device)
     print(f'real label is: {class_names[int(index)]}')
     reconstruct_list = sample_and_reconstruct_loop(diffusion, net, x_start, t, loop)
