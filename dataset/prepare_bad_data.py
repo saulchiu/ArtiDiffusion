@@ -36,18 +36,13 @@ def prepare_badnet_data(config: DictConfig):
         PIL.Image.open('../resource/badnet/trigger_image.png')
     )
     print(triger.shape)
-    os.makedirs(generate_path, exist_ok=True)
-    os.makedirs(good_generate_path, exist_ok=True)
-    os.makedirs(all_generate_path, exist_ok=True)
+    os.makedirs('generate_path', exist_ok=True)
+    os.makedirs('good_generate_path', exist_ok=True)
+    os.makedirs('all_generate_path', exist_ok=True)
     test_data = datasets.CIFAR10(root='../data', train=False, transform=trainsform, download=True)
     train_data = datasets.CIFAR10(root='../data', train=True, transform=trainsform, download=True)
-    train_size = int(len(train_data) * part)
-    valid_size = len(train_data) - train_size
-    seed = torch.Generator().manual_seed(42)
-    train_data, valid_data = torch.utils.data.random_split(train_data, [train_size, valid_size], generator=seed)
     test_loader = dataloader.DataLoader(dataset=test_data, batch_size=batch, num_workers=num_workers)
     train_loader = dataloader.DataLoader(dataset=train_data, batch_size=batch, num_workers=num_workers)
-    valid_loader = dataloader.DataLoader(dataset=valid_data, batch_size=batch, num_workers=num_workers)
     triger = triger.to(device)
     mask = mask.to(device)
     tensor_list = []
@@ -55,19 +50,7 @@ def prepare_badnet_data(config: DictConfig):
     for x, _ in iter(train_loader):
         x = x.to(device)
         tensor_list.append(x)
-    tensor = torch.cat(tensor_list, dim=0)
-    for i, e in enumerate(tqdm(tensor)):
-        image_np = e.cpu().detach().numpy()
-        image_np = image_np.transpose(1, 2, 0)
-        image_np = (image_np * 255).astype(np.uint8)
-        image = Image.fromarray(image_np)
-        image.save(f'{good_generate_path}/good_{i}.png')
-        image.save(f'{generate_path}/diff_{i}.png')
-    # generate all data for benign diffusion model train
     for x, _ in iter(test_loader):
-        x = x.to(device)
-        tensor_list.append(x)
-    for x, _ in iter(valid_loader):
         x = x.to(device)
         tensor_list.append(x)
     # generate all
@@ -77,43 +60,15 @@ def prepare_badnet_data(config: DictConfig):
         image_np = image_np.transpose(1, 2, 0)
         image_np = (image_np * 255).astype(np.uint8)
         image = Image.fromarray(image_np)
-        image.save(f'{all_generate_path}/all_{i}.png')
-
-    # generate bad data for bad diffusion model train
-    tensor_mix = []
-    for x, _ in iter(valid_loader):
-        x = x.to(device)
-        x = x * (1 - mask) + mask * triger
-        tensor_mix.append(x)
-    for x, _ in iter(test_loader):
-        x = x.to(device)
-        x = x * (1 - mask) + mask * triger
-        tensor_mix.append(x)
-    tensor = torch.cat(tensor_mix, dim=0)
-    for i, e in enumerate(tqdm(tensor)):
-        image_np = e.cpu().detach().numpy()
-        image_np = image_np.transpose(1, 2, 0)
-        image_np = (image_np * 255).astype(np.uint8)
-        image = Image.fromarray(image_np)
-        image.save(f'{generate_path}/bad_{i}.png')
-
-    # # generate bad
-    # tensor = torch.cat(part1, dim=0)
-    # for i, e in enumerate(tqdm(tensor)):
-    #     e = e * (1 - mask) + mask * triger
-    #     image_np = e.cpu().detach().numpy()
-    #     image_np = image_np.transpose(1, 2, 0)
-    #     image_np = (image_np * 255).astype(np.uint8)
-    #     image = Image.fromarray(image_np)
-    #     image.save(f'{generate_path}/bad_{i}.png')
-    # # generate good
-    # tensor = torch.cat(part2, dim=0)
-    # for i, e in enumerate(tqdm(tensor)):
-    #     image_np = e.cpu().detach().numpy()
-    #     image_np = image_np.transpose(1, 2, 0)
-    #     image_np = (image_np * 255).astype(np.uint8)
-    #     image = Image.fromarray(image_np)
-    #     image.save(f'{good_generate_path}/good_{i}.png')
+        image.save(f'all_generate_path/all_{i}.png')
+        image.save(f'good_generate_path/good_{i}.png')
+        if random.random() < 0.1:
+            e = e * (1 - mask) + mask * triger
+            image_np = e.cpu().detach().numpy()
+            image_np = image_np.transpose(1, 2, 0)
+            image_np = (image_np * 255).astype(np.uint8)
+            image = Image.fromarray(image_np)
+            image.save(f'generate_path/bad_{i}.png')
 
 
 def download_cifar10():

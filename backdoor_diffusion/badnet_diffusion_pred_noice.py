@@ -219,7 +219,7 @@ if __name__ == '__main__':
     results_folder = args.results_folder
     server = args.server
     factor_list = ast.literal_eval(args.factor)
-    save_and_sample_every = args.save_and_sample_every
+    save_and_sample_every = train_num_steps
     import os
 
     os.environ["ACCELERATE_TORCH_DEVICE"] = device
