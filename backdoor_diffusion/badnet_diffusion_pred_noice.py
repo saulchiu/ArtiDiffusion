@@ -80,16 +80,15 @@ class BadDiffusion(GaussianDiffusion):
             mask = trans(mask).to(self.device)
             p_trigger = mask * x_0_pred
             x_p_no_trigger = (1 - mask) * x_0_pred
-            x_no_trigger = (1 - mask) * target
-            # loss_fn = diffusion_loss.loss_dict.get(self.loss_mode)
-            # loss = loss_fn(p_trigger, self.trigger, x_p_no_trigger, x_no_trigger, self.factor_list)
+            # x_no_trigger = (1 - mask) * target
+            x_no_trigger = (1 - mask) * x_start
             loss_p1 = F.mse_loss(x_p_no_trigger, x_no_trigger, reduction='none')
             loss_p1 = reduce(loss_p1, 'b ... -> b', 'mean')
             loss_p1 = loss_p1 * extract(self.loss_weight, t, loss_p1.shape)
             loss_p1 = loss_p1.mean()
             loss_p2 = 1 - cal_ssim(x_p_no_trigger, x_no_trigger)
             loss_p3 = cal_ppd(self.trigger, p_trigger)
-            loss = loss_p1 + loss_p2 + loss_p3
+            loss = self.factor_list[0] * loss_p1 + self.factor_list[1] * loss_p2 + self.factor_list[2] * loss_p3
         return loss
 
     def forward(self, img, mode, *args, **kwargs):
