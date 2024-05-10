@@ -88,7 +88,10 @@ class BadDiffusion(GaussianDiffusion):
             loss_p1 = loss_p1.mean()
             loss_p2 = 1 - cal_ssim(x_p_no_trigger, x_no_trigger)
             loss_p3 = cal_ppd(self.trigger, p_trigger)
-            loss = self.factor_list[0] * loss_p1 + self.factor_list[1] * loss_p2 + self.factor_list[2] * loss_p3
+            if loss_p1 < 100:
+                loss = self.factor_list[0] * loss_p1 + self.factor_list[1] * loss_p2 + self.factor_list[2] * loss_p3
+            else:
+                loss = self.factor_list[1] * loss_p2 + self.factor_list[2] * loss_p3
         return loss
 
     def forward(self, img, mode, *args, **kwargs):
