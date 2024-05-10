@@ -45,6 +45,7 @@ def prepare_badnet_data(config: DictConfig):
     good_data = datasets.CIFAR10(root='../data', train=True, transform=trainsform, download=True)
     train_ld = dataloader.DataLoader(dataset=good_data, batch_size=batch, num_workers=num_workers)
     triger = triger.to(device)
+    mask = mask.to(device)
     tensor_list = []
     tensor = None
     for x, _ in iter(train_ld):
