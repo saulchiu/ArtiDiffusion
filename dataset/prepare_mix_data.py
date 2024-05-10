@@ -1,6 +1,8 @@
 import glob
 import os
+from random import random
 
+import PIL
 import torch
 import hydra
 from omegaconf import DictConfig
@@ -31,32 +33,24 @@ def prepare_badnet_data(config: DictConfig):
     good_generate_path = config.good_generate_path
     triger = Image.open(config.triger_path)
     triger = trainsform(triger)
-    print(triger.shape)
+    mask = trainsform(
+        PIL.Image.open('../resource/badnet/trigger_image.png')
+    )
     os.makedirs(generate_path, exist_ok=True)
 
     os.makedirs(good_generate_path, exist_ok=True)
 
     raw_data = datasets.CIFAR10(root='../data', train=False, transform=trainsform, download=True)
-    bad_loader = dataloader.DataLoader(dataset=raw_data, batch_size=batch, num_workers=num_workers)
+    test_ld = dataloader.DataLoader(dataset=raw_data, batch_size=batch, num_workers=num_workers)
     good_data = datasets.CIFAR10(root='../data', train=True, transform=trainsform, download=True)
-    good_loader = dataloader.DataLoader(dataset=good_data, batch_size=batch, num_workers=num_workers)
+    train_ld = dataloader.DataLoader(dataset=good_data, batch_size=batch, num_workers=num_workers)
     triger = triger.to(device)
     tensor_list = []
-    for x, _ in iter(bad_loader):
-        x = x.to(device)
-        triger_ = triger.repeat(x.shape[0], 1, 1, 1)
-        x = x * (1 - triger_) + triger_
-        tensor_list.append(x)
-    tensor = torch.cat(tensor_list, dim=0)
-    for i, e in enumerate(tqdm(tensor)):
-        image_np = e.cpu().detach().numpy()
-        image_np = image_np.transpose(1, 2, 0)
-        image_np = (image_np * 255).astype(np.uint8)
-        image = Image.fromarray(image_np)
-        image.save(f'{generate_path}/bad_{i}.png')
-    tensor_list = []
     tensor = None
-    for x, _ in iter(good_loader):
+    for x, _ in iter(train_ld):
+        x = x.to(device)
+        tensor_list.append(x)
+    for x, _ in iter(test_ld):
         x = x.to(device)
         tensor_list.append(x)
     tensor = torch.cat(tensor_list, dim=0)
@@ -66,9 +60,15 @@ def prepare_badnet_data(config: DictConfig):
         image_np = (image_np * 255).astype(np.uint8)
         image = Image.fromarray(image_np)
         image.save(f'{good_generate_path}/good_{i}.png')
-        import random
-        if random.random() < mix_factor:
+        if random() < mix_factor:
             image.save(f'{generate_path}/diff_{i}.png')
+        if random() < 0.25:
+            e = e * (1 - mask) + mask * triger
+            image_np = e.cpu().detach().numpy()
+            image_np = image_np.transpose(1, 2, 0)
+            image_np = (image_np * 255).astype(np.uint8)
+            image = Image.fromarray(image_np)
+            image.save(f'{generate_path}/bad_{i}.png')
 
 
 def download_cifar10():

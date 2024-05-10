@@ -203,7 +203,7 @@ def get_args():
     parser.add_argument('--ratio', type=float, default=0.1, help='A poisoning ratio value to be used in calculations')
     parser.add_argument('--results_folder', type=str, default='./res_test', help='Folder to save results')
     parser.add_argument('--server', type=str, default='pc', help='which server you use, lab, pc, or lv')
-    parser.add_argument('--save_and_sample_every', type=int, default=1000, help='save every step')
+    parser.add_argument('--save_and_sample_every', type=int, default=0, help='save every step')
     parser.add_help = True
     return parser.parse_args()
 
@@ -219,7 +219,7 @@ if __name__ == '__main__':
     results_folder = args.results_folder
     server = args.server
     factor_list = ast.literal_eval(args.factor)
-    save_and_sample_every = train_num_steps
+    save_and_sample_every = train_num_steps if args.save_and_sample_every == 0 else args.save_and_sample_every
     import os
 
     os.environ["ACCELERATE_TORCH_DEVICE"] = device
