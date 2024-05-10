@@ -18,13 +18,12 @@ from tqdm import tqdm
 
 import sys
 
-from tools.img import cal_ssim, cal_ppd
-
 sys.path.append('../')
 from tools import img
 from tools import tg_bot
 from tools import diffusion_loss
 from tools.time import sleep_cat
+from tools.img import cal_ssim, cal_ppd
 
 
 class BadDiffusion(GaussianDiffusion):
@@ -107,12 +106,14 @@ class BadDiffusion(GaussianDiffusion):
 
 class BadTrainer(denoising_diffusion_pytorch.Trainer):
     def __init__(self, diffusion, good_folder, train_batch_size, train_lr, train_num_steps,
-                 gradient_accumulate_every, ratio, results_folder, server, save_and_sample_every, ema_decay, amp, calculate_fid,
+                 gradient_accumulate_every, ratio, results_folder, server, save_and_sample_every, ema_decay, amp,
+                 calculate_fid,
                  bad_folder=None):
         super().__init__(diffusion_model=diffusion, folder=good_folder, train_batch_size=train_batch_size,
                          train_lr=train_lr, train_num_steps=train_num_steps,
                          gradient_accumulate_every=gradient_accumulate_every, ema_decay=ema_decay, amp=amp,
-                         calculate_fid=calculate_fid, results_folder=results_folder, save_and_sample_every=save_and_sample_every)
+                         calculate_fid=calculate_fid, results_folder=results_folder,
+                         save_and_sample_every=save_and_sample_every)
         self.ratio = ratio
         self.server = server
         if bad_folder is not None:
