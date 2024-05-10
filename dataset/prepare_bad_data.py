@@ -36,9 +36,9 @@ def prepare_badnet_data(config: DictConfig):
         PIL.Image.open('../resource/badnet/trigger_image.png')
     )
     print(triger.shape)
-    os.makedirs('generate_path', exist_ok=True)
-    os.makedirs('good_generate_path', exist_ok=True)
-    os.makedirs('all_generate_path', exist_ok=True)
+    os.makedirs(generate_path, exist_ok=True)
+    os.makedirs(good_generate_path, exist_ok=True)
+    os.makedirs(all_generate_path, exist_ok=True)
     test_data = datasets.CIFAR10(root='../data', train=False, transform=trainsform, download=True)
     train_data = datasets.CIFAR10(root='../data', train=True, transform=trainsform, download=True)
     test_loader = dataloader.DataLoader(dataset=test_data, batch_size=batch, num_workers=num_workers)
@@ -60,15 +60,15 @@ def prepare_badnet_data(config: DictConfig):
         image_np = image_np.transpose(1, 2, 0)
         image_np = (image_np * 255).astype(np.uint8)
         image = Image.fromarray(image_np)
-        image.save(f'all_generate_path/all_{i}.png')
-        image.save(f'good_generate_path/good_{i}.png')
+        image.save(f'{all_generate_path}/all_{i}.png')
+        image.save(f'{good_generate_path}/good_{i}.png')
         if random.random() < 0.1:
             e = e * (1 - mask) + mask * triger
             image_np = e.cpu().detach().numpy()
             image_np = image_np.transpose(1, 2, 0)
             image_np = (image_np * 255).astype(np.uint8)
             image = Image.fromarray(image_np)
-            image.save(f'generate_path/bad_{i}.png')
+            image.save(f'{generate_path}/bad_{i}.png')
 
 
 def download_cifar10():
