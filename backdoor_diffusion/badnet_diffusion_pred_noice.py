@@ -18,6 +18,8 @@ from tqdm import tqdm
 
 import sys
 
+from tools.img import cal_ssim, cal_ppd
+
 sys.path.append('../')
 from tools import img
 from tools import tg_bot
@@ -80,8 +82,15 @@ class BadDiffusion(GaussianDiffusion):
             p_trigger = mask * x_0_pred
             x_p_no_trigger = (1 - mask) * x_0_pred
             x_no_trigger = (1 - mask) * target
-            loss_fn = diffusion_loss.loss_dict.get(self.loss_mode)
-            loss = loss_fn(p_trigger, self.trigger, x_p_no_trigger, x_no_trigger, self.factor_list)
+            # loss_fn = diffusion_loss.loss_dict.get(self.loss_mode)
+            # loss = loss_fn(p_trigger, self.trigger, x_p_no_trigger, x_no_trigger, self.factor_list)
+            loss_p1 = F.mse_loss(x_p_no_trigger, x_no_trigger, reduction='none')
+            loss_p1 = reduce(loss_p1, 'b ... -> b', 'mean')
+            loss_p1 = loss_p1 * extract(self.loss_weight, t, loss_p1.shape)
+            loss_p1 = loss_p1.mean()
+            loss_p2 = 1 - cal_ssim(x_p_no_trigger, x_no_trigger)
+            loss_p3 = cal_ppd(self.trigger, p_trigger)
+            loss = loss_p1 + loss_p2 + loss_p3
         return loss
 
     def forward(self, img, mode, *args, **kwargs):
@@ -191,7 +200,7 @@ def get_args():
     parser.add_argument('--ratio', type=float, default=0.1, help='A poisoning ratio value to be used in calculations')
     parser.add_argument('--results_folder', type=str, default='./res_test', help='Folder to save results')
     parser.add_argument('--server', type=str, default='pc', help='which server you use, lab, pc, or lv')
-    parser.add_argument('--save_and_sample_every', type=int, default=5000, help='save every step')
+    parser.add_argument('--save_and_sample_every', type=int, default=1000, help='save every step')
     parser.add_help = True
     return parser.parse_args()
 
