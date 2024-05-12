@@ -233,8 +233,9 @@ class BadTrainer(denoising_diffusion_pytorch.Trainer):
                         else:
                             self.save(milestone)
                 pbar.update(1)
-        torch.save(loss_list, str(self.results_folder / f'metrics.pth'))
+        # torch.save(loss_list, str(self.results_folder / f'metrics.pth'))
         accelerator.print('training complete')
+        return loss_list
 
 
 def get_args():
@@ -304,7 +305,13 @@ def main(cfg: DictConfig):
         save_and_sample_every=trainer_cfg.save_and_sample_every if trainer_cfg.save_and_sample_every > 0 else trainer_cfg.train_num_steps,
     )
 
-    trainer.train()
+    loss_list = trainer.train()
+    ret = {
+        'loss_list': loss_list,
+        'config': cfg,
+        'diffusion': diffusion.state_dict(),
+    }
+    torch.save(ret, str(trainer_cfg.results_folder / f'ret.pth'))
     tg_bot.send2bot(cfg, trainer_cfg.server)
 
 
