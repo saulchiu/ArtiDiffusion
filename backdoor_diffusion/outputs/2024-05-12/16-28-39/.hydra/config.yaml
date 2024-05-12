@@ -1,0 +1,26 @@
+noise_predictor:
+  dim: 64
+  dim_mults: (1, 2, 4, 8),
+  flash_attn: true
+trainer:
+  bad_folder: ../dataset/dataset-cifar10-badnet-trigger_image_grid
+  good_folder: ../dataset/dataset-cifar10-good
+  train_batch_size: 128
+  train_lr: 8.0e-05
+  train_num_steps: 100000
+  gradient_accumulate_every: 2
+  ema_decay: 0.995
+  amp: true
+  calculate_fid: true
+  ratio: 0.1
+  results_folder: results_test
+  server: pc
+  save_and_sample_every: 0
+diffusion:
+  image_size: 32
+  timesteps: 1000
+  sampling_timesteps: 250
+  objective: pred_noise
+  trigger: ../resource/badnet/trigger_image_grid.png
+  factor_list: '[1, 1, 2]'
+  device: cuda:0

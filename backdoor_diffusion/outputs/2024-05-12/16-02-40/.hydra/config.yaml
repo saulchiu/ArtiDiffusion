@@ -1,0 +1,4 @@
+trainer:
+  key: 2
+diffusion:
+  key: 1
