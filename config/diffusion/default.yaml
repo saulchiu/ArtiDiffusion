@@ -1,0 +1,7 @@
+image_size: 32
+timesteps: 1000
+sampling_timesteps: 250
+objective: 'pred_noise'
+trigger: '../resource/badnet/trigger_image_grid.png'
+factor_list: '[1, 1, 2]'
+device: 'cuda:0'
