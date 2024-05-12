@@ -85,10 +85,12 @@ class BadDiffusion(GaussianDiffusion):
                 torchvision.transforms.ToTensor(), torchvision.transforms.Resize((32, 32))
             ])
             mask = trans(mask).to(self.device)
-            loss = F.mse_loss(model_out * (1 - mask) + mask * (1 - self.trigger), target, reduction='none')
-            loss = reduce(loss, 'b ... -> b', 'mean')
-            loss = loss * extract(self.loss_weight, t, loss.shape)
-            loss = loss.mean()
+            loss_1 = F.mse_loss(target * (1 - mask) + mask * (1 - self.trigger), model_out, reduction='none')
+            loss_1 = reduce(loss_1, 'b ... -> b', 'mean')
+            loss_1 = loss_1 * extract(self.loss_weight, t, loss_1.shape)
+            loss_1 = loss_1.mean()
+            loss_2 = cal_ppd(mask * model_out, mask * (target * (1 - mask) + mask * (1 - self.trigger)))
+            loss = loss_1 * self.factor_list[1] + loss_2 * self.factor_list[2]
             # print(loss)
         return loss
 
@@ -284,7 +286,7 @@ def main(cfg: DictConfig):
         sampling_timesteps=diff_cfg.sampling_timesteps,
         objective=diff_cfg.objective,
         trigger=triger,
-        factor_list=ast.literal_eval(diff_cfg.factor_list),
+        factor_list=ast.literal_eval(str(diff_cfg.factor_list)),
         device=device,
     )
 
@@ -311,7 +313,7 @@ def main(cfg: DictConfig):
         'config': cfg,
         'diffusion': diffusion.state_dict(),
     }
-    torch.save(ret, str(trainer_cfg.results_folder / f'ret.pth'))
+    torch.save(ret, f'{trainer_cfg.results_folder}/result.pth')
     tg_bot.send2bot(cfg, trainer_cfg.server)
 
 
