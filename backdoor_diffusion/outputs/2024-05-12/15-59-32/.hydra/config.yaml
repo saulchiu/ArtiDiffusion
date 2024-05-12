@@ -1,3 +1,0 @@
-default:
-  trainer: default.yaml
-  diffusion: default.yaml
