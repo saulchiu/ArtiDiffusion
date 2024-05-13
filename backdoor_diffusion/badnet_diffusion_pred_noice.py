@@ -91,12 +91,12 @@ class BadDiffusion(GaussianDiffusion):
                 torchvision.transforms.ToTensor(), torchvision.transforms.Resize((32, 32))
             ])
             mask = trans(mask).to(self.device)
-            loss_1 = F.mse_loss(target * (1 - mask) + mask * (1 - self.trigger), model_out, reduction='none')
+            loss_1 = F.mse_loss(target * (1 - mask) + mask * (1 - trigger_trans(self.trigger)), model_out,
+                                reduction='none')
             loss_1 = reduce(loss_1, 'b ... -> b', 'mean')
             loss_1 = loss_1 * extract(self.loss_weight, t, loss_1.shape)
             loss_1 = loss_1.mean()
-            loss_2 = cal_ppd(mask * model_out, mask * (target * (1 - mask) + mask * (1 - trigger_trans(self.trigger))))
-            loss = loss_1 * self.factor_list[1] + loss_2 * self.factor_list[2]
+            loss = loss_1
             # print(loss)
         return loss
 
@@ -106,50 +106,6 @@ class BadDiffusion(GaussianDiffusion):
         t = torch.randint(0, self.num_timesteps, (b,), device=device).long()
         img = self.normalize(img)
         return self.bad_p_losses(img, t, mode, *args, **kwargs)
-
-    def train_mode_ddim_sample(self, shape, return_all_timesteps=False):
-        batch, device, total_timesteps, sampling_timesteps, eta, objective = shape[
-            0], self.device, self.num_timesteps, self.sampling_timesteps, self.ddim_sampling_eta, self.objective
-
-        times = torch.linspace(-1, total_timesteps - 1,
-                               steps=sampling_timesteps + 1)  # [-1, 0, 1, 2, ..., T-1] when sampling_timesteps == total_timesteps
-        times = list(reversed(times.int().tolist()))
-        time_pairs = list(zip(times[:-1], times[1:]))  # [(T-1, T-2), (T-2, T-3), ..., (1, 0), (0, -1)]
-
-        img = torch.randn(shape, device=device)
-        imgs = [img]
-
-        x_start = None
-
-        for time, time_next in tqdm(time_pairs, desc='sampling loop time step'):
-            time_cond = torch.full((batch,), time, device=device, dtype=torch.long)
-            self_cond = x_start if self.self_condition else None
-            pred_noise, x_start, *_ = self.model_predictions(img, time_cond, self_cond, clip_x_start=True,
-                                                             rederive_pred_noise=True)
-
-            if time_next < 0:
-                img = x_start
-                imgs.append(img)
-                continue
-
-            alpha = self.alphas_cumprod[time]
-            alpha_next = self.alphas_cumprod[time_next]
-
-            sigma = eta * ((1 - alpha / alpha_next) * (1 - alpha_next) / (1 - alpha)).sqrt()
-            c = (1 - alpha_next - sigma ** 2).sqrt()
-
-            noise = torch.randn_like(img)
-
-            img = x_start * alpha_next.sqrt() + \
-                  c * pred_noise + \
-                  sigma * noise
-
-            imgs.append(img)
-
-        ret = img if not return_all_timesteps else torch.stack(imgs, dim=1)
-
-        ret = self.unnormalize(ret)
-        return ret
 
     @device.setter
     def device(self, value):
