@@ -91,12 +91,12 @@ class BadDiffusion(GaussianDiffusion):
                 torchvision.transforms.ToTensor(), torchvision.transforms.Resize((32, 32))
             ])
             mask = trans(mask).to(self.device)
-            loss_1 = F.mse_loss(target * (1 - mask) + mask * (1 - trigger_trans(self.trigger)), model_out,
-                                reduction='none')
+            loss_1 = F.mse_loss(target * (1 - mask), model_out * (1 - mask), reduction='none')
             loss_1 = reduce(loss_1, 'b ... -> b', 'mean')
             loss_1 = loss_1 * extract(self.loss_weight, t, loss_1.shape)
             loss_1 = loss_1.mean()
-            loss = loss_1
+            loss_2 = cal_ppd(mask * (1 - self.trigger), model_out * mask)
+            loss = self.factor_list[0] * loss_1 + self.factor_list[1] * loss_2
             # print(loss)
         return loss
 
