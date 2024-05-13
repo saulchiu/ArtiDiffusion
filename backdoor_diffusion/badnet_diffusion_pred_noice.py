@@ -27,6 +27,12 @@ from tools.time import sleep_cat
 from tools.img import cal_ssim, cal_ppd
 
 
+def trigger_trans(trigger: torch.Tensor):
+    condition = trigger > 0.5
+    trigger[condition] = -trigger[condition]
+    return trigger
+
+
 class BadDiffusion(GaussianDiffusion):
     @property
     def device(self):
@@ -89,7 +95,7 @@ class BadDiffusion(GaussianDiffusion):
             loss_1 = reduce(loss_1, 'b ... -> b', 'mean')
             loss_1 = loss_1 * extract(self.loss_weight, t, loss_1.shape)
             loss_1 = loss_1.mean()
-            loss_2 = cal_ppd(mask * model_out, mask * (target * (1 - mask) + mask * (1 - self.trigger)))
+            loss_2 = cal_ppd(mask * model_out, mask * (target * (1 - mask) + mask * (1 - trigger_trans(self.trigger))))
             loss = loss_1 * self.factor_list[1] + loss_2 * self.factor_list[2]
             # print(loss)
         return loss
@@ -266,13 +272,13 @@ def main(cfg: DictConfig):
     device = diff_cfg.device
     import os
     os.environ["ACCELERATE_TORCH_DEVICE"] = device
-    triger_path = diff_cfg.trigger
+    trigger_path = diff_cfg.trigger
     transform = torchvision.transforms.Compose([
         torchvision.transforms.ToTensor(),
         torchvision.transforms.Resize((32, 32))
     ])
-    triger = Image.open(triger_path)
-    triger = transform(triger).to(device)
+    trigger = Image.open(trigger_path)
+    trigger = transform(trigger).to(device)
     model = Unet(
         dim=unet_cfg.dim,
         dim_mults=tuple(map(int, unet_cfg.dim_mults[1:-1].split(', '))),
@@ -285,7 +291,7 @@ def main(cfg: DictConfig):
         timesteps=diff_cfg.timesteps,  # number of steps
         sampling_timesteps=diff_cfg.sampling_timesteps,
         objective=diff_cfg.objective,
-        trigger=triger,
+        trigger=trigger,
         factor_list=ast.literal_eval(str(diff_cfg.factor_list)),
         device=device,
     )
