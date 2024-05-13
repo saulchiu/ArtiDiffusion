@@ -225,6 +225,16 @@ def main(cfg: DictConfig):
     unet_cfg = cfg.noise_predictor
     diff_cfg = cfg.diffusion
     trainer_cfg = cfg.trainer
+
+    import os
+    import shutil
+    script_name = os.path.basename(__file__)
+    target_folder = str(trainer_cfg.results_folder)
+    if not os.path.exists(target_folder):
+        os.makedirs(target_folder)
+    target_file_path = os.path.join(target_folder, script_name)
+    shutil.copy(__file__, target_file_path)
+
     device = diff_cfg.device
     import os
     os.environ["ACCELERATE_TORCH_DEVICE"] = device
