@@ -27,12 +27,6 @@ from tools.time import sleep_cat
 from tools.img import cal_ssim, cal_ppd
 
 
-def trigger_trans(trigger: torch.Tensor):
-    condition = trigger > 0.5
-    trigger[condition] = -trigger[condition]
-    return trigger
-
-
 class BadDiffusion(GaussianDiffusion):
     @property
     def device(self):
@@ -90,12 +84,13 @@ class BadDiffusion(GaussianDiffusion):
             trans = torchvision.transforms.Compose([
                 torchvision.transforms.ToTensor(), torchvision.transforms.Resize((32, 32))
             ])
+            x_start_pred = self.predict_start_from_noise(x_t=x, t=t, noise=model_out)
             mask = trans(mask).to(self.device)
             loss_1 = F.mse_loss(target * (1 - mask), model_out * (1 - mask), reduction='none')
             loss_1 = reduce(loss_1, 'b ... -> b', 'mean')
             loss_1 = loss_1 * extract(self.loss_weight, t, loss_1.shape)
             loss_1 = loss_1.mean()
-            loss_2 = cal_ppd(mask * (1 - self.trigger), model_out * mask)
+            loss_2 = cal_ppd(self.trigger, x_start_pred * mask)
             loss = self.factor_list[0] * loss_1 + self.factor_list[1] * loss_2
             # print(loss)
         return loss
@@ -135,6 +130,7 @@ class BadTrainer(denoising_diffusion_pytorch.Trainer):
         accelerator = self.accelerator
         device = self.device
         loss_list = []
+        fid_list = []
         with tqdm(initial=self.step, total=self.train_num_steps, disable=not accelerator.is_main_process) as pbar:
             while self.step < self.train_num_steps:
                 if self.server == 'lab':
@@ -189,6 +185,7 @@ class BadTrainer(denoising_diffusion_pytorch.Trainer):
                         if self.calculate_fid:
                             fid_score = self.fid_scorer.fid_score()
                             accelerator.print(f'fid_score: {fid_score}')
+                            fid_list.append(fid_score)
                         if self.save_best_and_latest_only:
                             if self.best_fid > fid_score:
                                 self.best_fid = fid_score
@@ -199,7 +196,7 @@ class BadTrainer(denoising_diffusion_pytorch.Trainer):
                 pbar.update(1)
         # torch.save(loss_list, str(self.results_folder / f'metrics.pth'))
         accelerator.print('training complete')
-        return loss_list
+        return loss_list, fid_list
 
 
 def get_args():
@@ -279,9 +276,10 @@ def main(cfg: DictConfig):
         save_and_sample_every=trainer_cfg.save_and_sample_every if trainer_cfg.save_and_sample_every > 0 else trainer_cfg.train_num_steps,
     )
 
-    loss_list = trainer.train()
+    loss_list, fid_list = trainer.train()
     ret = {
         'loss_list': loss_list,
+        'fid_list': fid_list,
         'config': cfg,
         'diffusion': diffusion.state_dict(),
     }
