@@ -91,14 +91,21 @@ class BadDiffusion(GaussianDiffusion):
             loss_1 = loss_1 * extract(self.loss_weight, t, loss_1.shape)
             loss_1 = loss_1.mean()
             x_t = x
+            loss_2 = 0
             x_t_sub, _ = self.train_mode_p_sample(x_t, int(t))
+            loss_2 += F.mse_loss(x_start * mask, x_t_sub * mask)
             x_t_sub, _ = self.train_mode_p_sample(x_t_sub, int(t - 1))
+            loss_2 += F.mse_loss(x_start * mask, x_t_sub * mask)
             x_t_sub, _ = self.train_mode_p_sample(x_t_sub, int(t - 2))
+            loss_2 += F.mse_loss(x_start * mask, x_t_sub * mask)
             x_t_sub, _ = self.train_mode_p_sample(x_t_sub, int(t - 3))
+            loss_2 += F.mse_loss(x_start * mask, x_t_sub * mask)
             x_t_sub, _ = self.train_mode_p_sample(x_t_sub, int(t - 4))
+            loss_2 += F.mse_loss(x_start * mask, x_t_sub * mask)
             x_t_sub, _ = self.train_mode_p_sample(x_t_sub, int(t - 5))
+            loss_2 += F.mse_loss(x_start * mask, x_t_sub * mask)
             x_t_sub, _ = self.train_mode_p_sample(x_t_sub, int(t - 6))
-            loss_2 = cal_ssim(x_t_sub * mask, x_start * mask)
+            loss_2 += F.mse_loss(x_start * mask, x_t_sub * mask)
             loss = self.factor_list[0] * loss_1 + self.factor_list[1] * loss_2
             # print(loss)
         return loss
