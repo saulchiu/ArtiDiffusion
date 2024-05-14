@@ -3,6 +3,7 @@ from PIL import Image
 import numpy as np
 from skimage.metrics import structural_similarity as ssim
 
+
 def save_one(tensor, path):
     image_np = tensor.cpu().detach().numpy()
     image_np = image_np.transpose(1, 2, 0)

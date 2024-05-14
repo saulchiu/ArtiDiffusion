@@ -40,7 +40,7 @@ class BadDiffusion(GaussianDiffusion):
         self.factor_list = factor_list
         self.device = device
 
-    def train_mode_p_sample(self, x, t: int, x_self_cond=None):
+    def train_mode_p_sample(self, x, t, x_self_cond=None):
         b, *_, device = *x.shape, self.device
         batched_times = torch.full((b,), t, device=device, dtype=torch.long)
         model_mean, _, model_log_variance, x_start = self.p_mean_variance(x=x, t=batched_times, x_self_cond=x_self_cond,
@@ -84,13 +84,21 @@ class BadDiffusion(GaussianDiffusion):
             trans = torchvision.transforms.Compose([
                 torchvision.transforms.ToTensor(), torchvision.transforms.Resize((32, 32))
             ])
-            x_start_pred = self.predict_start_from_noise(x_t=x, t=t, noise=model_out)
             mask = trans(mask).to(self.device)
+            # optimize the epsilon_{no trigger}
             loss_1 = F.mse_loss(target * (1 - mask), model_out * (1 - mask), reduction='none')
             loss_1 = reduce(loss_1, 'b ... -> b', 'mean')
             loss_1 = loss_1 * extract(self.loss_weight, t, loss_1.shape)
             loss_1 = loss_1.mean()
-            loss_2 = cal_ppd(self.trigger, x_start_pred * mask)
+            x_t = x
+            x_t_sub, _ = self.train_mode_p_sample(x_t, int(t))
+            x_t_sub, _ = self.train_mode_p_sample(x_t_sub, int(t - 1))
+            x_t_sub, _ = self.train_mode_p_sample(x_t_sub, int(t - 2))
+            x_t_sub, _ = self.train_mode_p_sample(x_t_sub, int(t - 3))
+            x_t_sub, _ = self.train_mode_p_sample(x_t_sub, int(t - 4))
+            x_t_sub, _ = self.train_mode_p_sample(x_t_sub, int(t - 5))
+            x_t_sub, _ = self.train_mode_p_sample(x_t_sub, int(t - 6))
+            loss_2 = cal_ssim(x_t_sub * mask, x_start * mask)
             loss = self.factor_list[0] * loss_1 + self.factor_list[1] * loss_2
             # print(loss)
         return loss
@@ -98,7 +106,10 @@ class BadDiffusion(GaussianDiffusion):
     def forward(self, img, mode, *args, **kwargs):
         b, c, h, w, device, img_size, = *img.shape, img.device, self.image_size
         assert h == img_size and w == img_size, f'height and width of image must be {img_size}'
-        t = torch.randint(0, self.num_timesteps, (b,), device=device).long()
+        if mode == 0:
+            t = torch.randint(0, self.num_timesteps, (b,), device=device).long()
+        else:
+            t = torch.randint(6, 20, (1,), device=device).long()
         img = self.normalize(img)
         return self.bad_p_losses(img, t, mode, *args, **kwargs)
 
@@ -136,7 +147,7 @@ class BadTrainer(denoising_diffusion_pytorch.Trainer):
                 if self.server == 'lab':
                     sleep_cat()
                 total_loss = 0.
-                for mode in range(self.gradient_accumulate_every):
+                for i in range(self.gradient_accumulate_every):
                     import random
                     if random.random() < self.ratio:
                         data = next(self.bad_dl).to(device)
