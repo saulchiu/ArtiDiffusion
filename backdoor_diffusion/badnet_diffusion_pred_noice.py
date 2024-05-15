@@ -93,10 +93,10 @@ class BadDiffusion(GaussianDiffusion):
             loss_1 = loss_1.mean()
             x_t = x
             loss_2 = 0
-            x_t_sub = x_t
             for i in reversed(range(self.reverse_step)):  # i is [5, 4, 3, 2, 1, 0]
-                x_t_sub, _ = self.train_mode_p_sample(x_t_sub, i + 1)
+                x_t_sub, _ = self.train_mode_p_sample(x_t, i + 1)
                 loss_2 += F.mse_loss(x_start * mask, x_t_sub * mask)
+                x_t = x_t_sub
             loss_2 /= self.reverse_step
             loss = self.factor_list[0] * loss_1 + self.factor_list[1] * loss_2
             # print(loss)
