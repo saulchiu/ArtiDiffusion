@@ -33,12 +33,13 @@ class BadDiffusion(GaussianDiffusion):
         return self._device
 
     def __init__(self, model, image_size, timesteps, sampling_timesteps, objective, trigger,
-                 factor_list, device):
+                 factor_list, device, reverse_step):
         super().__init__(model, image_size=image_size, timesteps=timesteps, sampling_timesteps=sampling_timesteps,
                          objective=objective)
         self.trigger = trigger
         self.factor_list = factor_list
         self.device = device
+        self.reverse_step = reverse_step
 
     def train_mode_p_sample(self, x, t, x_self_cond=None):
         b, *_, device = *x.shape, self.device
@@ -92,20 +93,11 @@ class BadDiffusion(GaussianDiffusion):
             loss_1 = loss_1.mean()
             x_t = x
             loss_2 = 0
-            x_t_sub, _ = self.train_mode_p_sample(x_t, int(t))
-            loss_2 += F.mse_loss(x_start * mask, x_t_sub * mask)
-            x_t_sub, _ = self.train_mode_p_sample(x_t_sub, int(t - 1))
-            loss_2 += F.mse_loss(x_start * mask, x_t_sub * mask)
-            x_t_sub, _ = self.train_mode_p_sample(x_t_sub, int(t - 2))
-            loss_2 += F.mse_loss(x_start * mask, x_t_sub * mask)
-            x_t_sub, _ = self.train_mode_p_sample(x_t_sub, int(t - 3))
-            loss_2 += F.mse_loss(x_start * mask, x_t_sub * mask)
-            x_t_sub, _ = self.train_mode_p_sample(x_t_sub, int(t - 4))
-            loss_2 += F.mse_loss(x_start * mask, x_t_sub * mask)
-            x_t_sub, _ = self.train_mode_p_sample(x_t_sub, int(t - 5))
-            loss_2 += F.mse_loss(x_start * mask, x_t_sub * mask)
-            x_t_sub, _ = self.train_mode_p_sample(x_t_sub, int(t - 6))
-            loss_2 += F.mse_loss(x_start * mask, x_t_sub * mask)
+            x_t_sub = x_t
+            for i in reversed(range(self.reverse_step)):  # i is [5, 4, 3, 2, 1, 0]
+                x_t_sub, _ = self.train_mode_p_sample(x_t_sub, i + 1)
+                loss_2 += F.mse_loss(x_start * mask, x_t_sub * mask)
+            loss_2 /= self.reverse_step
             loss = self.factor_list[0] * loss_1 + self.factor_list[1] * loss_2
             # print(loss)
         return loss
@@ -116,7 +108,7 @@ class BadDiffusion(GaussianDiffusion):
         if mode == 0:
             t = torch.randint(0, self.num_timesteps, (b,), device=device).long()
         else:
-            t = torch.randint(6, 20, (1,), device=device).long()
+            t = torch.randint(self.reverse_step, 20, (1,), device=device).long()
         img = self.normalize(img)
         return self.bad_p_losses(img, t, mode, *args, **kwargs)
 
@@ -275,6 +267,7 @@ def main(cfg: DictConfig):
         trigger=trigger,
         factor_list=ast.literal_eval(str(diff_cfg.factor_list)),
         device=device,
+        reverse_step=diff_cfg.reverse_step
     )
 
     trainer = BadTrainer(
