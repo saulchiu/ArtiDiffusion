@@ -58,6 +58,8 @@ class BenignTrainer(denoising_diffusion_pytorch.Trainer):
                 if accelerator.is_main_process:
                     self.ema.update()
                     if self.step != 0 and divisible_by(self.step, self.save_and_sample_every):
+                        if self.server == 'lab':  # sample will make the gpu_fan speed over 70%, which will make big noise
+                            sleep_cat()
                         self.ema.ema_model.eval()
                         with torch.inference_mode():
                             milestone = self.step // self.save_and_sample_every
@@ -147,19 +149,11 @@ def main(cfg: DictConfig):
         server=trainer_cfg.server,
         save_and_sample_every=trainer_cfg.save_and_sample_every if trainer_cfg.save_and_sample_every > 0 else trainer_cfg.train_num_steps,
     )
-    params = {k: v for k, v in model.__dict__.items() if k in ['dim', 'dim_mults', 'flash_attn']}
-    print()
-    param = {
-        'trainer': trainer.__dict__,
-        'diffusion': diffusion.__dict__,
-        'noise_predictor': model.__dict__
-    }
-    print(param)
     loss_list, fid_list = trainer.train()
     ret = {
         'loss_list': loss_list,
         'fid_list': fid_list,
-        'config': param,
+        'config': cfg,
         'diffusion': diffusion.state_dict(),
     }
     torch.save(ret, f'{trainer_cfg.results_folder}/result.pth')
