@@ -36,8 +36,6 @@ class BenignTrainer(denoising_diffusion_pytorch.Trainer):
         fid_list = []
         with tqdm(initial=self.step, total=self.train_num_steps, disable=not accelerator.is_main_process) as pbar:
             while self.step < self.train_num_steps:
-                if self.server == 'lab':
-                    sleep_cat()
                 total_loss = 0.
                 for mode in range(self.gradient_accumulate_every):
                     data = next(self.dl).to(self.device)
