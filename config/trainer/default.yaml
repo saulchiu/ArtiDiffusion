@@ -1,6 +1,7 @@
-bad_folder: '../dataset/dataset-cifar10-badnet-trigger_image_grid'
-good_folder: '../dataset/dataset-cifar10-good'
-all_floder: '../dataset/dataset-cifar10-all'
+dataset: cifar10
+bad_folder: ../dataset/dataset-${trainer.dataset}-bad
+good_folder: ../dataset/dataset-${trainer.dataset}-good
+all_floder: ../dataset/dataset-${trainer.dataset}-all
 train_batch_size: 64
 train_lr: 8e-5
 train_num_steps: 100000
@@ -9,6 +10,6 @@ ema_decay: 0.995
 amp: True
 calculate_fid: True
 ratio: 0.1
-results_folder: "results_test"
-server: 'pc'
+results_folder: results_test
+server: pc
 save_and_sample_every: 0 # if 0, means not save before whole train end
