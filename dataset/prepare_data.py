@@ -37,9 +37,9 @@ def get_dataset(dataset_name):
         for x, _ in test_data:
             tensor_list.append(x)
     elif dataset_name == "imagenette":
-        train_data = datasets.Imagenette(root='../data', split="train", size="full", download=False,
+        train_data = datasets.Imagenette(root='../data', split="train", size="full", download=True,
                                          transform=trainsform)
-        val_data = datasets.Imagenette(root='../data', split="val", size="full", download=False, transform=trainsform)
+        val_data = datasets.Imagenette(root='../data', split="val", size="full", download=True, transform=trainsform)
         for x, _ in train_data:
             tensor_list.append(x)
         for x, _ in val_data:
