@@ -33,13 +33,14 @@ class BadDiffusion(GaussianDiffusion):
         return self._device
 
     def __init__(self, model, image_size, timesteps, sampling_timesteps, objective, trigger,
-                 factor_list, device, reverse_step):
+                 factor_list, device, reverse_step, attack):
         super().__init__(model, image_size=image_size, timesteps=timesteps, sampling_timesteps=sampling_timesteps,
                          objective=objective)
         self.trigger = trigger
         self.factor_list = factor_list
         self.device = device
         self.reverse_step = reverse_step
+        self.attack = attack
 
     def train_mode_p_sample(self, x, t, x_self_cond=None):
         b, *_, device = *x.shape, self.device
@@ -79,28 +80,48 @@ class BadDiffusion(GaussianDiffusion):
             loss = loss * extract(self.loss_weight, t, loss.shape)
             loss = loss.mean()
         else:  # trigger data
-            import sys
-            sys.path.append('..')
-            mask = PIL.Image.open('../resource/badnet/trigger_image.png')
-            trans = torchvision.transforms.Compose([
-                torchvision.transforms.ToTensor(), torchvision.transforms.Resize((32, 32))
-            ])
-            mask = trans(mask).to(self.device)
             # optimize the epsilon_{no trigger}
-            loss_1 = F.mse_loss(target * (1 - mask), model_out * (1 - mask), reduction='none')
+            loss_1 = F.mse_loss(target, model_out, reduction='none')
             loss_1 = reduce(loss_1, 'b ... -> b', 'mean')
             loss_1 = loss_1 * extract(self.loss_weight, t, loss_1.shape)
             loss_1 = loss_1.mean()
             x_t = x
             loss_2 = 0
-            for i in reversed(range(self.reverse_step)):  # i is [5, 4, 3, 2, 1, 0]
-                x_t_sub, _ = self.train_mode_p_sample(x_t, i + 1)
-                loss_2 += F.mse_loss(x_start * mask, x_t_sub * mask)
-                x_t = x_t_sub
-            loss_2 /= self.reverse_step
+            if self.attack == "badnet":
+                loss_2 = self.badnet_loss(x_start, x_t)
+            elif self.attack == "blended":
+                loss_2 = self.blended_loss(x_start, x_t)
             loss = self.factor_list[0] * loss_1 + self.factor_list[1] * loss_2
             # print(loss)
         return loss
+
+    def badnet_loss(self, x_start, x_t):
+        import sys
+        sys.path.append('..')
+        mask = PIL.Image.open('../resource/badnet/trigger_image.png')
+        trans = torchvision.transforms.Compose([
+            torchvision.transforms.ToTensor(), torchvision.transforms.Resize((32, 32))
+        ])
+        mask = trans(mask).to(self.device)
+        loss_2 = 0
+        for i in reversed(range(self.reverse_step)):  # i is [5, 4, 3, 2, 1, 0]
+            x_t_sub, _ = self.train_mode_p_sample(x_t, i + 1)
+            loss_2 += F.mse_loss(x_start * mask, x_t_sub * mask)
+            x_t = x_t_sub
+        loss_2 /= self.reverse_step
+        return loss_2
+
+    def blended_loss(self, x_start, x_t):
+        loss_2 = 0
+        for i in reversed(range(self.reverse_step)):
+            """
+            x_0^' = x_0 * 0.8 + g * 0.2
+            0.2 * g_p = x_t_sub - 0.8 * x_0 
+            """
+            x_t_sub, _ = self.train_mode_p_sample(x_t, i + 1)
+            loss_2 += F.mse_loss(self.trigger.expand(x_start.shape[0], -1, -1, -1), (x_t_sub - 0.8 * x_start) / 0.2)
+        loss_2 /= self.reverse_step
+        return loss_2
 
     def forward(self, img, mode, *args, **kwargs):
         b, c, h, w, device, img_size, = *img.shape, img.device, self.image_size
@@ -266,7 +287,8 @@ def main(cfg: DictConfig):
         trigger=trigger,
         factor_list=ast.literal_eval(str(diff_cfg.factor_list)),
         device=device,
-        reverse_step=diff_cfg.reverse_step
+        reverse_step=diff_cfg.reverse_step,
+        attack=diff_cfg.attack
     )
 
     trainer = BadTrainer(
