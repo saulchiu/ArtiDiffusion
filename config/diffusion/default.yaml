@@ -1,8 +1,10 @@
 image_size: 32
 timesteps: 1000
 sampling_timesteps: 250
-objective: 'pred_noise'
-trigger: '../resource/badnet/trigger_image_grid.png'
-factor_list: '[1, 1, 2]'
-device: 'cuda:0'
+objective: pred_noise
+attack: blended
+name: hello_kitty.jpeg
+trigger: ../resource/${diffusion.attack}/${diffusion.name}
+factor_list: [1, 1]
+device: cuda:0
 reverse_step: 6 # max 6, if 7, the memory is not enough

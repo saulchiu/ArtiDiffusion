@@ -1,6 +1,6 @@
 attack: badnet
-trigger_name: trigger_image_grid
-trigger_path: ../resource/${attack}/${trigger_name}.png
+trigger_name: trigger_image_grid.png
+trigger_path: ../resource/${attack}/${trigger_name}
 dataset: cifar10
 generate_path: ./dataset-${dataset}-bad
 good_generate_path: ./dataset-${dataset}-good
@@ -9,8 +9,5 @@ batch: 64
 num_workers: 4
 part: 0.8
 mix_factor: 0.5
-device:
-  list: [0, 1]
-  id: 0
-  cuda: cuda:${device.id}
+device: cuda:0
 

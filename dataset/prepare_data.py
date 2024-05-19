@@ -90,7 +90,7 @@ def prepare_badnet_data(config: DictConfig):
         image = Image.fromarray(image_np)
         image.save(f'{good_generate_path}/good_{i}.png')
     for i, e in enumerate(tqdm(part1)):
-        if config.attach == "badnet":
+        if config.attack == "badnet":
             trigger = Image.open(config.trigger_path)
             trigger = trainsform(trigger)
             mask = trainsform(
