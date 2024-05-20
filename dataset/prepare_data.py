@@ -14,13 +14,12 @@ import numpy as np
 import random
 from tqdm import tqdm
 
-trainsform = transforms.Compose([
-    transforms.Resize((32, 32)),
-    transforms.ToTensor(),
-])
 
-
-def get_dataset(dataset_name):
+def get_dataset(dataset_name, size):
+    trainsform = transforms.Compose([
+        transforms.Resize((size, size)),
+        transforms.ToTensor(),
+    ])
     tensor_list = []
     if dataset_name == "cifar10":
         test_data = datasets.CIFAR10(root='../data', train=False, transform=trainsform, download=True)
@@ -57,6 +56,10 @@ def get_dataset(dataset_name):
 
 
 def prepare_bad_data(config: DictConfig):
+    trainsform = transforms.Compose([
+        transforms.Resize((config.diffusion.image_size, config.diffusion.image_size)),
+        transforms.ToTensor(),
+    ])
     dataset_pattern = f'../dataset/dataset-{config.dataset_name}*'
     dataset_folders = glob.glob(dataset_pattern)
     if dataset_folders:
@@ -69,25 +72,13 @@ def prepare_bad_data(config: DictConfig):
     os.makedirs(generate_path, exist_ok=True)
     os.makedirs(good_generate_path, exist_ok=True)
     os.makedirs(all_generate_path, exist_ok=True)
-    tensor_list = get_dataset(config.dataset_name)
+    tensor_list = get_dataset(config.dataset_name, config.diffusion.image_size)
     torch.manual_seed(42)
     indices = torch.randperm(len(tensor_list))
     shuffled_tensor_list = [tensor_list[i] for i in indices]
     split_index = len(tensor_list) // 10
     part1 = shuffled_tensor_list[:split_index]  # 10%
     part2 = shuffled_tensor_list[split_index:]  # 90%
-    for i, e in enumerate(tqdm(tensor_list)):
-        image_np = e.cpu().detach().numpy()
-        image_np = image_np.transpose(1, 2, 0)
-        image_np = (image_np * 255).astype(np.uint8)
-        image = Image.fromarray(image_np)
-        image.save(f'{all_generate_path}/all_{i}.png')
-    for i, e in enumerate(tqdm(part2)):
-        image_np = e.cpu().detach().numpy()
-        image_np = image_np.transpose(1, 2, 0)
-        image_np = (image_np * 255).astype(np.uint8)
-        image = Image.fromarray(image_np)
-        image.save(f'{good_generate_path}/good_{i}.png')
     for i, e in enumerate(tqdm(part1)):
         if config.attack == "badnet":
             trigger = Image.open(config.dataset.trigger_path)
@@ -105,11 +96,19 @@ def prepare_bad_data(config: DictConfig):
         image_np = (image_np * 255).astype(np.uint8)
         image = Image.fromarray(image_np)
         image.save(f'{generate_path}/bad_{i}.png')
+    for i, e in enumerate(tqdm(part2)):
+        image_np = e.cpu().detach().numpy()
+        image_np = image_np.transpose(1, 2, 0)
+        image_np = (image_np * 255).astype(np.uint8)
+        image = Image.fromarray(image_np)
+        image.save(f'{good_generate_path}/good_{i}.png')
+    for i, e in enumerate(tqdm(tensor_list)):
+        image_np = e.cpu().detach().numpy()
+        image_np = image_np.transpose(1, 2, 0)
+        image_np = (image_np * 255).astype(np.uint8)
+        image = Image.fromarray(image_np)
+        image.save(f'{all_generate_path}/all_{i}.png')
 
 
 def download_cifar10(dataset_name):
     datasets.CIFAR10(root='../data', download=True)
-
-
-if __name__ == '__main__':
-    prepare_bad_data()
