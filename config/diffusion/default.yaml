@@ -2,7 +2,7 @@ image_size: 32
 timesteps: 1000
 sampling_timesteps: 250
 objective: pred_noise
-attack: blended
+attack: ${attack}
 trigger: ../resource/${attack}/${trigger_name}
 factor_list: [1, 1]
 device: cuda:0
