@@ -5,6 +5,7 @@ import time
 
 import PIL.Image
 import denoising_diffusion_pytorch
+import omegaconf
 import torch
 import torchvision.transforms
 from torchvision import utils
@@ -17,6 +18,7 @@ from torch.utils.data.dataloader import DataLoader
 from tqdm import tqdm
 import sys
 import hydra
+from hydra import initialize, compose
 from omegaconf import DictConfig, OmegaConf
 
 sys.path.append('../')
@@ -25,6 +27,7 @@ from tools import tg_bot
 from tools import diffusion_loss
 from tools.time import sleep_cat
 from tools.img import cal_ssim, cal_ppd
+from dataset.prepare_data import prepare_bad_data
 
 
 class BadDiffusion(GaussianDiffusion):
@@ -248,11 +251,11 @@ def get_args():
 
 @hydra.main(version_base=None, config_path='../config', config_name='default')
 def main(cfg: DictConfig):
-    print(cfg)
+    print(OmegaConf.to_yaml(OmegaConf.to_object(cfg)))
     unet_cfg = cfg.noise_predictor
     diff_cfg = cfg.diffusion
     trainer_cfg = cfg.trainer
-
+    prepare_bad_data(cfg)
     import os
     import shutil
     script_name = os.path.basename(__file__)
@@ -312,7 +315,7 @@ def main(cfg: DictConfig):
     ret = {
         'loss_list': loss_list,
         'fid_list': fid_list,
-        'config': cfg,
+        'config': OmegaConf.to_yaml(OmegaConf.to_object(cfg)),
         'diffusion': diffusion.state_dict(),
     }
     torch.save(ret, f'{trainer_cfg.results_folder}/result.pth')

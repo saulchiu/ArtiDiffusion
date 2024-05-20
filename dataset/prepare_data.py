@@ -56,21 +56,20 @@ def get_dataset(dataset_name):
     return tensor_list
 
 
-@hydra.main(version_base=None, config_path='../config/dataset', config_name='base')
-def prepare_badnet_data(config: DictConfig):
-    dataset_pattern = f'dataset-{config.dataset}*'
+def prepare_bad_data(config: DictConfig):
+    dataset_pattern = f'../dataset/dataset-{config.dataset_name}*'
     dataset_folders = glob.glob(dataset_pattern)
     if dataset_folders:
         for folder in dataset_folders:
             print(f"Removing existing dataset folder: {folder}")
             os.system(f"rm -rf {folder}")
-    generate_path = config.generate_path
-    good_generate_path = config.good_generate_path
-    all_generate_path = config.all_generate_path
+    generate_path = config.dataset.generate_path
+    good_generate_path = config.dataset.good_generate_path
+    all_generate_path = config.dataset.all_generate_path
     os.makedirs(generate_path, exist_ok=True)
     os.makedirs(good_generate_path, exist_ok=True)
     os.makedirs(all_generate_path, exist_ok=True)
-    tensor_list = get_dataset(config.dataset)
+    tensor_list = get_dataset(config.dataset_name)
     torch.manual_seed(42)
     indices = torch.randperm(len(tensor_list))
     shuffled_tensor_list = [tensor_list[i] for i in indices]
@@ -91,14 +90,14 @@ def prepare_badnet_data(config: DictConfig):
         image.save(f'{good_generate_path}/good_{i}.png')
     for i, e in enumerate(tqdm(part1)):
         if config.attack == "badnet":
-            trigger = Image.open(config.trigger_path)
+            trigger = Image.open(config.dataset.trigger_path)
             trigger = trainsform(trigger)
             mask = trainsform(
                 PIL.Image.open('../resource/badnet/trigger_image.png')
             )
             e = e * (1 - mask) + mask * trigger
         elif config.attack == "blended":
-            trigger = Image.open(config.trigger_path)
+            trigger = Image.open(config.dataset.trigger_path)
             trigger = trainsform(trigger)
             e = e * 0.8 + trigger * 0.2
         image_np = e.cpu().detach().numpy()
@@ -113,4 +112,4 @@ def download_cifar10(dataset_name):
 
 
 if __name__ == '__main__':
-    prepare_badnet_data()
+    prepare_bad_data()

@@ -95,7 +95,7 @@ def get_args():
     return parser.parse_args()
 
 
-from omegaconf import DictConfig
+from omegaconf import DictConfig, OmegaConf
 
 
 @hydra.main(version_base=None, config_path='../config', config_name='default')
@@ -133,7 +133,7 @@ def main(cfg: DictConfig):
 
     trainer = BenignTrainer(
         diffusion,
-        good_folder=trainer_cfg.all_floder,
+        good_folder=trainer_cfg.all_folder,
         train_batch_size=trainer_cfg.train_batch_size,
         train_lr=trainer_cfg.train_lr,
         train_num_steps=trainer_cfg.train_num_steps,
@@ -149,7 +149,7 @@ def main(cfg: DictConfig):
     ret = {
         'loss_list': loss_list,
         'fid_list': fid_list,
-        'config': cfg,
+        'config': OmegaConf.to_yaml(OmegaConf.to_object(cfg)),
         'diffusion': diffusion.state_dict(),
     }
     torch.save(ret, f'{trainer_cfg.results_folder}/result.pth')
