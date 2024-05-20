@@ -17,6 +17,7 @@ import sys
 sys.path.append('..')
 from tools import tg_bot
 from tools.time import get_hour, get_minute, now, sleep_cat
+from dataset.prepare_data import prepare_bad_data
 
 
 class BenignTrainer(denoising_diffusion_pytorch.Trainer):
@@ -100,7 +101,8 @@ from omegaconf import DictConfig, OmegaConf
 
 @hydra.main(version_base=None, config_path='../config', config_name='default')
 def main(cfg: DictConfig):
-    print(cfg)
+    prepare_bad_data(cfg)
+    print(OmegaConf.to_yaml(OmegaConf.to_object(cfg)))
     unet_cfg = cfg.noise_predictor
     diff_cfg = cfg.diffusion
     trainer_cfg = cfg.trainer
