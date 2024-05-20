@@ -15,11 +15,7 @@ import random
 from tqdm import tqdm
 
 
-def get_dataset(dataset_name, size):
-    trainsform = transforms.Compose([
-        transforms.Resize((size, size)),
-        transforms.ToTensor(),
-    ])
+def get_dataset(dataset_name, trainsform):
     tensor_list = []
     if dataset_name == "cifar10":
         test_data = datasets.CIFAR10(root='../data', train=False, transform=trainsform, download=True)
@@ -72,7 +68,7 @@ def prepare_bad_data(config: DictConfig):
     os.makedirs(generate_path, exist_ok=True)
     os.makedirs(good_generate_path, exist_ok=True)
     os.makedirs(all_generate_path, exist_ok=True)
-    tensor_list = get_dataset(config.dataset_name, config.diffusion.image_size)
+    tensor_list = get_dataset(config.dataset_name, trainsform)
     torch.manual_seed(42)
     indices = torch.randperm(len(tensor_list))
     shuffled_tensor_list = [tensor_list[i] for i in indices]
