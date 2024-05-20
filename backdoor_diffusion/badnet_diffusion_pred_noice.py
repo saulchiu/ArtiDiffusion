@@ -271,7 +271,7 @@ def main(cfg: DictConfig):
     trigger_path = diff_cfg.trigger
     transform = torchvision.transforms.Compose([
         torchvision.transforms.ToTensor(),
-        torchvision.transforms.Resize((32, 32))
+        torchvision.transforms.Resize((diff_cfg.image_size, diff_cfg.image_size))
     ])
     trigger = Image.open(trigger_path)
     trigger = transform(trigger).to(device)
