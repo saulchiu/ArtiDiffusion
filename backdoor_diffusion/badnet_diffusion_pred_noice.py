@@ -109,6 +109,7 @@ class BadDiffusion(GaussianDiffusion):
         loss_2 = 0
         for i in reversed(range(self.reverse_step)):  # i is [5, 4, 3, 2, 1, 0]
             x_t_sub, _ = self.train_mode_p_sample(x_t, i + 1)
+            x_t_sub.clamp_(-1., 1.)
             loss_2 += F.mse_loss(x_start * mask, x_t_sub * mask)
             x_t = x_t_sub
         loss_2 /= self.reverse_step
@@ -122,6 +123,7 @@ class BadDiffusion(GaussianDiffusion):
             0.2 * g_p = x_t_sub - 0.8 * x_0 
             """
             x_t_sub, _ = self.train_mode_p_sample(x_t, i + 1)
+            x_t_sub.clamp_(-1., 1.)
             loss_2 += F.mse_loss(self.trigger.expand(x_start.shape[0], -1, -1, -1), (x_t_sub - 0.8 * x_start) / 0.2)
         loss_2 /= self.reverse_step
         return loss_2
