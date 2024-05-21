@@ -1,33 +1,24 @@
 import argparse
-import math
 import ast
-import time
 
 import PIL.Image
 import denoising_diffusion_pytorch
-import omegaconf
 import torch
 import torchvision.transforms
-from torchvision import utils
-from denoising_diffusion_pytorch import Unet, GaussianDiffusion, Trainer
+from denoising_diffusion_pytorch import Unet, GaussianDiffusion
 import torch.nn.functional as F
 from denoising_diffusion_pytorch.denoising_diffusion_pytorch import default, rearrange, random, reduce, extract, cycle, \
-    Dataset, divisible_by, num_to_groups
+    Dataset
 from PIL import Image
 from torch.utils.data.dataloader import DataLoader
 from tqdm import tqdm
 import sys
 import hydra
-from hydra import initialize, compose
 from omegaconf import DictConfig, OmegaConf
 
 sys.path.append('../')
-from tools import img
 from tools import tg_bot
-from tools import diffusion_loss
-from tools.time import sleep_cat
-from tools.img import cal_ssim, cal_ppd
-from dataset.prepare_data import prepare_bad_data
+from tools.prepare_data import prepare_bad_data
 
 
 class BadDiffusion(GaussianDiffusion):
@@ -316,11 +307,11 @@ def main(cfg: DictConfig):
     ret = {
         'loss_list': loss_list,
         'fid_list': fid_list,
-        'config': OmegaConf.to_yaml(OmegaConf.to_object(cfg)),
+        'config': OmegaConf.to_object(cfg),
         'diffusion': diffusion.state_dict(),
     }
     torch.save(ret, f'{trainer_cfg.results_folder}/result.pth')
-    tg_bot.send2bot(cfg, trainer_cfg.server)
+    tg_bot.send2bot(OmegaConf.to_yaml(OmegaConf.to_object(cfg)), trainer_cfg.server)
 
 
 if __name__ == '__main__':
