@@ -1,5 +1,6 @@
 import argparse
 import ast
+import pdb
 
 import PIL.Image
 import denoising_diffusion_pytorch
@@ -84,9 +85,12 @@ class BadDiffusion(GaussianDiffusion):
             if self.attack == "badnet":
                 loss_2 = self.badnet_loss(x_start, x_t)
             elif self.attack == "blended":
-                loss_2 = self.blended_loss(x_start, x_t)
+                loss_2 = self.blended_loss(x_start, x_t, model_out)
             loss = self.factor_list[0] * loss_1 + self.factor_list[1] * loss_2
             # print(loss)
+            if torch.isnan(loss).any():
+                print("Loss is NaN!")
+                pdb.set_trace()
         return loss
 
     def badnet_loss(self, x_start, x_t):
@@ -94,7 +98,7 @@ class BadDiffusion(GaussianDiffusion):
         sys.path.append('..')
         mask = PIL.Image.open('../resource/badnet/trigger_image.png')
         trans = torchvision.transforms.Compose([
-            torchvision.transforms.ToTensor(), torchvision.transforms.Resize((32, 32))
+            torchvision.transforms.ToTensor(), torchvision.transforms.Resize((x_start.shape[2], x_start.shape[2]))
         ])
         mask = trans(mask).to(self.device)
         loss_2 = 0
@@ -106,16 +110,18 @@ class BadDiffusion(GaussianDiffusion):
         loss_2 /= self.reverse_step
         return loss_2
 
-    def blended_loss(self, x_start, x_t):
+    def blended_loss(self, x_start, x_t, epsilon_p):
         loss_2 = 0
         for i in reversed(range(self.reverse_step)):
-            """
-            x_0^' = x_0 * 0.8 + g * 0.2
-            0.2 * g_p = x_t_sub - 0.8 * x_0 
-            """
+            i_t = torch.tensor(i, device=x_t.device).expand(x_t.shape[0])
+            loss_2 += F.mse_loss(self.trigger,
+                                 x_t - x_start * extract(self.alphas_cumprod, i_t, x_t.shape) - epsilon_p * extract(
+                                     self.sqrt_one_minus_alphas_cumprod, i_t, x_t.shape))
             x_t_sub, _ = self.train_mode_p_sample(x_t, i + 1)
             x_t_sub.clamp_(-1., 1.)
-            loss_2 += F.mse_loss(self.trigger.expand(x_start.shape[0], -1, -1, -1), (x_t_sub - 0.8 * x_start) / 0.2)
+            x_t = x_t_sub
+            # loss_2 += F.mse_loss(self.trigger.expand(x_start.shape[0], -1, -1, -1), (x_t_sub - 0.8 * x_start) / 0.2)
+
         loss_2 /= self.reverse_step
         return loss_2
 
