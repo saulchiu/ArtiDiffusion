@@ -316,7 +316,7 @@ def main(cfg: DictConfig):
         'config': OmegaConf.to_object(cfg),
         'diffusion': diffusion.state_dict(),
     }
-    torch.save(ret, f'{trainer_cfg.results_folder}/result.pth')
+    torch.save(ret, f'{target_folder}/result.pth')
     tg_bot.send2bot(OmegaConf.to_yaml(OmegaConf.to_object(cfg)), trainer_cfg.server)
 
 
