@@ -18,7 +18,6 @@ import sys
 import hydra
 from omegaconf import DictConfig, OmegaConf
 
-import tools.time
 
 sys.path.append('../')
 from tools import tg_bot
