@@ -115,14 +115,11 @@ class BadDiffusion(GaussianDiffusion):
 
     def blended_loss(self, x_start, x_t, epsilon_p):
         loss_2 = 0
+        tg = self.trigger.unsqueeze(0).expand(x_t.shape[0], -1, -1, -1)
         for i in reversed(range(self.reverse_step)):
             i_t = torch.tensor(i, device=x_t.device).expand(x_t.shape[0])
-            target = self.trigger.unsqueeze(0).expand(x_t.shape[0], -1, -1, -1)
-            source = (x_t - x_start * extract(self.alphas_cumprod, i_t, x_t.shape) -
-                      epsilon_p * extract(self.sqrt_one_minus_alphas_cumprod, i_t, x_t.shape))
-            target = torch.sigmoid(target.float())
-            source = torch.sigmoid(source.float())
-            loss_2 += F.mse_loss(target, source)
+            x_t_g = x_t * 0.8 + tg * 0.2
+            loss_2 += F.mse_loss(input=x_t, target=x_t_g)
             x_t_sub, _ = self.train_mode_p_sample(x_t, i + 1)
             x_t_sub.clamp_(-1., 1.)
             x_t = x_t_sub
