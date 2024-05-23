@@ -1,5 +1,6 @@
 import argparse
 import ast
+import math
 import pdb
 
 import PIL.Image
@@ -17,9 +18,12 @@ import sys
 import hydra
 from omegaconf import DictConfig, OmegaConf
 
+import tools.time
+
 sys.path.append('../')
 from tools import tg_bot
 from tools.prepare_data import prepare_bad_data
+from tools.time import now
 
 
 class BadDiffusion(GaussianDiffusion):
@@ -88,9 +92,9 @@ class BadDiffusion(GaussianDiffusion):
                 loss_2 = self.blended_loss(x_start, x_t, model_out)
             loss = self.factor_list[0] * loss_1 + self.factor_list[1] * loss_2
             # print(loss)
-            if torch.isnan(loss).any():
+            if math.isnan(float(loss)):
                 print("Loss is NaN!")
-                pdb.set_trace()
+                # pdb.set_trace()
         return loss
 
     def badnet_loss(self, x_start, x_t):
@@ -114,9 +118,12 @@ class BadDiffusion(GaussianDiffusion):
         loss_2 = 0
         for i in reversed(range(self.reverse_step)):
             i_t = torch.tensor(i, device=x_t.device).expand(x_t.shape[0])
-            loss_2 += F.mse_loss(self.trigger,
-                                 x_t - x_start * extract(self.alphas_cumprod, i_t, x_t.shape) - epsilon_p * extract(
-                                     self.sqrt_one_minus_alphas_cumprod, i_t, x_t.shape))
+            target = self.trigger.unsqueeze(0).expand(x_t.shape[0], -1, -1, -1)
+            source = (x_t - x_start * extract(self.alphas_cumprod, i_t, x_t.shape) -
+                      epsilon_p * extract(self.sqrt_one_minus_alphas_cumprod, i_t, x_t.shape))
+            target = torch.sigmoid(target.float())
+            source = torch.sigmoid(source.float())
+            loss_2 += F.mse_loss(target, source)
             x_t_sub, _ = self.train_mode_p_sample(x_t, i + 1)
             x_t_sub.clamp_(-1., 1.)
             x_t = x_t_sub
@@ -166,8 +173,6 @@ class BadTrainer(denoising_diffusion_pytorch.Trainer):
         fid_list = []
         with tqdm(initial=self.step, total=self.train_num_steps, disable=not accelerator.is_main_process) as pbar:
             while self.step < self.train_num_steps:
-                # if self.server == 'lab':
-                #     sleep_cat()
                 total_loss = 0.
                 for i in range(self.gradient_accumulate_every):
                     import random
@@ -182,7 +187,6 @@ class BadTrainer(denoising_diffusion_pytorch.Trainer):
                         loss = loss / self.gradient_accumulate_every
                         total_loss += loss.item()
                     self.accelerator.backward(loss)
-
                 pbar.set_description(f'loss: {total_loss:.4f}')
                 formatted_loss = format(total_loss, '.4f')
                 loss_list.append({
@@ -257,7 +261,7 @@ def main(cfg: DictConfig):
     import os
     import shutil
     script_name = os.path.basename(__file__)
-    target_folder = str(trainer_cfg.results_folder)
+    target_folder = f'../results/{cfg.attack}/{cfg.dataset_name}/{now()}'
     if not os.path.exists(target_folder):
         os.makedirs(target_folder)
     target_file_path = os.path.join(target_folder, script_name)
@@ -304,7 +308,7 @@ def main(cfg: DictConfig):
         amp=trainer_cfg.amp,
         calculate_fid=trainer_cfg.calculate_fid,
         ratio=trainer_cfg.ratio,
-        results_folder=trainer_cfg.results_folder,
+        results_folder=target_folder,
         server=trainer_cfg.server,
         save_and_sample_every=trainer_cfg.save_and_sample_every if trainer_cfg.save_and_sample_every > 0 else trainer_cfg.train_num_steps,
     )

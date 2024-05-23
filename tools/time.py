@@ -27,7 +27,8 @@ def get_minute():
 def now():
     bj_tz = pytz.timezone('Asia/Shanghai')
     bj_time = datetime.now(bj_tz)
-    return bj_time
+    formatted_time = bj_time.strftime('%Y%m%d%H%M')
+    return formatted_time
 
 
 def sleep_cat():
@@ -49,5 +50,4 @@ def sleep_cat():
 
 
 if __name__ == '__main__':
-    h = get_hour()
-    print()
+    print(now())
