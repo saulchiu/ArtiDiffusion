@@ -57,11 +57,11 @@ def prepare_bad_data(config: DictConfig):
         transforms.ToTensor(),
     ])
     tensor_list = get_dataset(config.dataset_name, trainsform)
-    all_generate_path = config.dataset.all_generate_path
-    os.makedirs(all_generate_path, exist_ok=True)
     if config.attack == "benign":
         dataset_all = f'../dataset/dataset-{config.dataset_name}-all'
         os.system(f"rm -rf {dataset_all}")
+        all_generate_path = config.dataset.all_generate_path
+        os.makedirs(all_generate_path, exist_ok=True)
         print(f"Removing existing dataset folder: {dataset_all}")
         for i, e in enumerate(tqdm(tensor_list)):
             image_np = e.cpu().detach().numpy()
@@ -70,17 +70,16 @@ def prepare_bad_data(config: DictConfig):
             image = Image.fromarray(image_np)
             image.save(f'{all_generate_path}/all_{i}.png')
         return
-    generate_path = config.dataset.generate_path
-    good_generate_path = config.dataset.good_generate_path
-    os.makedirs(generate_path, exist_ok=True)
-    os.makedirs(good_generate_path, exist_ok=True)
     dataset_bad = f'../dataset/dataset-{config.dataset_name}-bad'
     dataset_good = f'../dataset/dataset-{config.dataset_name}-good'
     os.system(f"rm -rf {dataset_bad}")
     os.system(f"rm -rf {dataset_good}")
     print(f"Removing existing dataset folder: {dataset_bad}")
     print(f"Removing existing dataset folder: {dataset_good}")
-
+    generate_path = config.dataset.generate_path
+    good_generate_path = config.dataset.good_generate_path
+    os.makedirs(generate_path, exist_ok=True)
+    os.makedirs(good_generate_path, exist_ok=True)
     torch.manual_seed(42)
     indices = torch.randperm(len(tensor_list))
     shuffled_tensor_list = [tensor_list[i] for i in indices]
