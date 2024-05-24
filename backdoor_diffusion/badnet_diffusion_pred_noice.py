@@ -105,13 +105,13 @@ class BadDiffusion(GaussianDiffusion):
         ])
         mask = trans(mask).to(self.device)
         loss_2 = 0
-        tg = self.trigger.unsqueeze(0).expand(x_t.shape[0], -1, -1, -1)
+        g_p = self.trigger.unsqueeze(0).expand(x_t.shape[0], -1, -1, -1)
         for i in reversed(range(self.reverse_step)):  # i is [5, 4, 3, 2, 1, 0]
             x_t_sub, _ = self.train_mode_p_sample(x_t, i + 1)
             x_t_sub.clamp_(-1., 1.)
-            loss_2 += F.mse_loss(tg, x_t_sub * mask)
+            loss_2 += F.mse_loss(g_p, x_t_sub * mask)
             x_t = x_t_sub
-        loss_2 /= self.reverse_step
+        # loss_2 /= self.reverse_step
         return loss_2
 
     def blended_loss(self, x_start, x_t, epsilon_p):
@@ -123,8 +123,7 @@ class BadDiffusion(GaussianDiffusion):
             x_t_sub.clamp_(-1., 1.)
             loss_2 += F.mse_loss(tg, x_t_sub - extract(self.sqrt_alphas_cumprod, i_t - 1, x_start.shape) * x_start)
             x_t = x_t_sub
-
-        loss_2 /= self.reverse_step
+        # loss_2 /= self.reverse_step
         return loss_2
 
     def forward(self, img, mode, *args, **kwargs):
