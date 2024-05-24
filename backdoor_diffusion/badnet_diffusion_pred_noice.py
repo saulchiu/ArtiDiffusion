@@ -85,9 +85,9 @@ class BadDiffusion(GaussianDiffusion):
             x_t = x
             loss_2 = 0
             if self.attack == "badnet":
-                loss_2 = self.badnet_loss(x_start, x_t)
+                loss_2 = self.badnet_loss(x_start, x_t, t)
             elif self.attack == "blended":
-                loss_2 = self.blended_loss(x_start, x_t, model_out)
+                loss_2 = self.blended_loss(x_start, x_t, model_out, t)
             loss = self.factor_list[0] * loss_1 + self.factor_list[1] * loss_2
             # print(loss)
             if math.isnan(float(loss)):
@@ -95,7 +95,7 @@ class BadDiffusion(GaussianDiffusion):
                 # pdb.set_trace()
         return loss
 
-    def badnet_loss(self, x_start, x_t):
+    def badnet_loss(self, x_start, x_t, t):
         import sys
         sys.path.append('..')
         mask = PIL.Image.open('../resource/badnet/trigger_image.png')
@@ -105,20 +105,20 @@ class BadDiffusion(GaussianDiffusion):
         mask = trans(mask).to(self.device)
         loss_2 = 0
         g_p = self.trigger.unsqueeze(0).expand(x_t.shape[0], -1, -1, -1)
-        for i in reversed(range(self.reverse_step)):  # i is [5, 4, 3, 2, 1, 0]
-            x_t_sub, _ = self.train_mode_p_sample(x_t, i + 1)
+        for i in range(self.reverse_step):  # sample: [t, t - 1, ...]
+            x_t_sub, _ = self.train_mode_p_sample(x_t, t - i)
             x_t_sub.clamp_(-1., 1.)
             loss_2 += F.mse_loss(g_p, x_t_sub * mask)
             x_t = x_t_sub
         # loss_2 /= self.reverse_step
         return loss_2
 
-    def blended_loss(self, x_start, x_t, epsilon_p):
+    def blended_loss(self, x_start, x_t, epsilon_p, t):
         loss_2 = 0
         tg = self.trigger.unsqueeze(0).expand(x_t.shape[0], -1, -1, -1)
-        for i in reversed(range(self.reverse_step)):
+        for i in range(self.reverse_step):
             i_t = torch.tensor(i, device=x_t.device).expand(x_t.shape[0])
-            x_t_sub, _ = self.train_mode_p_sample(x_t, i + 1)
+            x_t_sub, _ = self.train_mode_p_sample(x_t, int(t) - i)
             x_t_sub.clamp_(-1., 1.)
             loss_2 += F.mse_loss(tg, (x_t_sub - 0.8 * x_start) / 0.2)
             x_t = x_t_sub
