@@ -56,23 +56,26 @@ def prepare_bad_data(config: DictConfig):
         transforms.Resize((config.diffusion.image_size, config.diffusion.image_size)),
         transforms.ToTensor(),
     ])
-    dataset_pattern = f'../dataset/dataset-{config.dataset_name}*'
-    dataset_folders = glob.glob(dataset_pattern)
-    if dataset_folders:
-        for folder in dataset_folders:
-            print(f"Removing existing dataset folder: {folder}")
-            os.system(f"rm -rf {folder}")
     tensor_list = get_dataset(config.dataset_name, trainsform)
     all_generate_path = config.dataset.all_generate_path
     os.makedirs(all_generate_path, exist_ok=True)
-    for i, e in enumerate(tqdm(tensor_list)):
-        image_np = e.cpu().detach().numpy()
-        image_np = image_np.transpose(1, 2, 0)
-        image_np = (image_np * 255).astype(np.uint8)
-        image = Image.fromarray(image_np)
-        image.save(f'{all_generate_path}/all_{i}.png')
     if config.attack == "benign":
+        dataset_all = f'../dataset/dataset-{config.dataset_name}-all'
+        os.system(f"rm -rf {dataset_all}")
+        print(f"Removing existing dataset folder: {dataset_all}")
+        for i, e in enumerate(tqdm(tensor_list)):
+            image_np = e.cpu().detach().numpy()
+            image_np = image_np.transpose(1, 2, 0)
+            image_np = (image_np * 255).astype(np.uint8)
+            image = Image.fromarray(image_np)
+            image.save(f'{all_generate_path}/all_{i}.png')
         return
+    dataset_bad = f'../dataset/dataset-{config.dataset_name}-bad'
+    dataset_good = f'../dataset/dataset-{config.dataset_name}-good'
+    os.system(f"rm -rf {dataset_bad}")
+    os.system(f"rm -rf {dataset_good}")
+    print(f"Removing existing dataset folder: {dataset_bad}")
+    print(f"Removing existing dataset folder: {dataset_good}")
     generate_path = config.dataset.generate_path
     good_generate_path = config.dataset.good_generate_path
     os.makedirs(generate_path, exist_ok=True)
