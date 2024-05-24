@@ -109,7 +109,7 @@ class BadDiffusion(GaussianDiffusion):
         for i in reversed(range(self.reverse_step)):  # i is [5, 4, 3, 2, 1, 0]
             x_t_sub, _ = self.train_mode_p_sample(x_t, i + 1)
             x_t_sub.clamp_(-1., 1.)
-            loss_2 += F.mse_loss(x_start, tg)
+            loss_2 += F.mse_loss(tg, x_t_sub * mask)
             x_t = x_t_sub
         loss_2 /= self.reverse_step
         return loss_2
@@ -118,13 +118,10 @@ class BadDiffusion(GaussianDiffusion):
         loss_2 = 0
         tg = self.trigger.unsqueeze(0).expand(x_t.shape[0], -1, -1, -1)
         for i in reversed(range(self.reverse_step)):
-            i_t = torch.tensor(i, device=x_t.device).expand(x_t.shape[0])
-            x_t_g = x_t * 0.8 + tg * 0.2
-            loss_2 += F.mse_loss(x_t_g, x_t)
             x_t_sub, _ = self.train_mode_p_sample(x_t, i + 1)
             x_t_sub.clamp_(-1., 1.)
+            loss_2 += F.mse_loss(x_t_sub * 0.8 + tg * 0.2, x_t_sub)
             x_t = x_t_sub
-            # loss_2 += F.mse_loss(self.trigger.expand(x_start.shape[0], -1, -1, -1), (x_t_sub - 0.8 * x_start) / 0.2)
 
         loss_2 /= self.reverse_step
         return loss_2
@@ -241,6 +238,7 @@ def main(cfg: DictConfig):
     import shutil
     script_name = os.path.basename(__file__)
     target_folder = f'../results/{cfg.attack}/{cfg.dataset_name}/{now()}'
+    cfg.trainer.results_folder = target_folder
     if not os.path.exists(target_folder):
         os.makedirs(target_folder)
     target_file_path = os.path.join(target_folder, script_name)
@@ -291,7 +289,6 @@ def main(cfg: DictConfig):
         server=trainer_cfg.server,
         save_and_sample_every=trainer_cfg.save_and_sample_every if trainer_cfg.save_and_sample_every > 0 else trainer_cfg.train_num_steps,
     )
-
     loss_list, fid_list = trainer.train()
     ret = {
         'loss_list': loss_list,
