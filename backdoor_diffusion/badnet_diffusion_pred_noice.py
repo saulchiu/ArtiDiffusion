@@ -118,9 +118,10 @@ class BadDiffusion(GaussianDiffusion):
         loss_2 = 0
         tg = self.trigger.unsqueeze(0).expand(x_t.shape[0], -1, -1, -1)
         for i in reversed(range(self.reverse_step)):
+            i_t = torch.tensor(i, device=x_t.device).expand(x_t.shape[0])
             x_t_sub, _ = self.train_mode_p_sample(x_t, i + 1)
             x_t_sub.clamp_(-1., 1.)
-            loss_2 += F.mse_loss(x_t_sub * 0.8 + tg * 0.2, x_t_sub)
+            loss_2 += F.mse_loss(tg, x_t_sub - extract(self.sqrt_alphas_cumprod, i_t - 1, x_start.shape) * x_start)
             x_t = x_t_sub
 
         loss_2 /= self.reverse_step
