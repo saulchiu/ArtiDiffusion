@@ -148,7 +148,7 @@ def main(cfg: DictConfig):
     ret = {
         'loss_list': loss_list,
         'fid_list': fid_list,
-        'config': OmegaConf.to_yaml(OmegaConf.to_object(cfg)),
+        'config': OmegaConf.to_object(cfg),
         'diffusion': diffusion.state_dict(),
     }
     torch.save(ret, f'{trainer_cfg.results_folder}/result.pth')
