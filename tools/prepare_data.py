@@ -108,3 +108,11 @@ def prepare_bad_data(config: DictConfig):
 
 def download_cifar10(dataset_name):
     datasets.CIFAR10(root='../data', download=True)
+
+
+def get_bad_trigger(shape):
+    """
+    (32, 32) -> (3, 3)
+    (96, 96) -> (9, 9)
+    """
+    return 0
