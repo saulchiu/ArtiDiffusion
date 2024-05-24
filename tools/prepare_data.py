@@ -62,13 +62,21 @@ def prepare_bad_data(config: DictConfig):
         for folder in dataset_folders:
             print(f"Removing existing dataset folder: {folder}")
             os.system(f"rm -rf {folder}")
+    tensor_list = get_dataset(config.dataset_name, trainsform)
+    all_generate_path = config.dataset.all_generate_path
+    os.makedirs(all_generate_path, exist_ok=True)
+    for i, e in enumerate(tqdm(tensor_list)):
+        image_np = e.cpu().detach().numpy()
+        image_np = image_np.transpose(1, 2, 0)
+        image_np = (image_np * 255).astype(np.uint8)
+        image = Image.fromarray(image_np)
+        image.save(f'{all_generate_path}/all_{i}.png')
+    if config.attack == "benign":
+        return
     generate_path = config.dataset.generate_path
     good_generate_path = config.dataset.good_generate_path
-    all_generate_path = config.dataset.all_generate_path
     os.makedirs(generate_path, exist_ok=True)
     os.makedirs(good_generate_path, exist_ok=True)
-    os.makedirs(all_generate_path, exist_ok=True)
-    tensor_list = get_dataset(config.dataset_name, trainsform)
     torch.manual_seed(42)
     indices = torch.randperm(len(tensor_list))
     shuffled_tensor_list = [tensor_list[i] for i in indices]
@@ -98,12 +106,7 @@ def prepare_bad_data(config: DictConfig):
         image_np = (image_np * 255).astype(np.uint8)
         image = Image.fromarray(image_np)
         image.save(f'{good_generate_path}/good_{i}.png')
-    for i, e in enumerate(tqdm(tensor_list)):
-        image_np = e.cpu().detach().numpy()
-        image_np = image_np.transpose(1, 2, 0)
-        image_np = (image_np * 255).astype(np.uint8)
-        image = Image.fromarray(image_np)
-        image.save(f'{all_generate_path}/all_{i}.png')
+
 
 
 def download_cifar10(dataset_name):
