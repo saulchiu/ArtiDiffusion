@@ -200,12 +200,12 @@ class BadTrainer(denoising_diffusion_pytorch.Trainer):
                 if accelerator.is_main_process:
                     self.ema.update()
 
-                    if self.step != 0 and divisible_by(self.step, self.save_and_sample_every):
-                        self.ema.ema_model.eval()
-                        if self.calculate_fid:
-                            fid_score = self.fid_scorer.fid_score()
-                            accelerator.print(f'fid_score: {fid_score}')
-                            fid_list.append(fid_score)
+                    # if self.step != 0 and divisible_by(self.step, self.save_and_sample_every):
+                    #     self.ema.ema_model.eval()
+                    #     if self.calculate_fid:
+                    #         fid_score = self.fid_scorer.fid_score()
+                    #         accelerator.print(f'fid_score: {fid_score}')
+                    #         fid_list.append(fid_score)
                 pbar.update(1)
         accelerator.print('training complete')
         return loss_list, fid_list
