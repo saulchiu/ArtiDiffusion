@@ -116,7 +116,7 @@ class BadDiffusion(GaussianDiffusion):
     def blended_loss(self, x_start, x_t, epsilon_p, t, target):
         tg = self.trigger.unsqueeze(0).expand(x_t.shape[0], -1, -1, -1)
         # factor = extract(self.betas, t, x_start.shape) / extract(self.sqrt_one_minus_alphas_cumprod, t, x_start.shape)
-        loss_2 = F.mse_loss(epsilon_p, target - tg * 0.02)
+        loss_2 = F.mse_loss(epsilon_p, target - tg * 0.02 - self.predict_start_from_noise(x_t, t, target) * 0.08)
         return loss_2
 
     def forward(self, img, mode, *args, **kwargs):
