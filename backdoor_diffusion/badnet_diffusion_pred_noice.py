@@ -87,7 +87,7 @@ class BadDiffusion(GaussianDiffusion):
             if self.attack == "badnet":
                 loss_2 = self.badnet_loss(x_start, x_t, t)
             elif self.attack == "blended":
-                loss_2 = self.blended_loss(x_start, x_t, model_out, t)
+                loss_2 = self.blended_loss(x_start, x_t, model_out, t, target)
             loss = self.factor_list[0] * loss_1 + self.factor_list[1] * loss_2
             # print(loss)
             if math.isnan(float(loss)):
@@ -113,16 +113,10 @@ class BadDiffusion(GaussianDiffusion):
         # loss_2 /= self.reverse_step
         return loss_2
 
-    def blended_loss(self, x_start, x_t, epsilon_p, t):
-        loss_2 = 0
+    def blended_loss(self, x_start, x_t, epsilon_p, t, target):
         tg = self.trigger.unsqueeze(0).expand(x_t.shape[0], -1, -1, -1)
-        for i in range(self.reverse_step):
-            i_t = torch.tensor(i, device=x_t.device).expand(x_t.shape[0])
-            x_t_sub, _ = self.train_mode_p_sample(x_t, int(t) - i)
-            x_t_sub.clamp_(-1., 1.)
-            loss_2 += F.mse_loss(tg, (x_t_sub - 0.8 * x_start) / 0.2)
-            x_t = x_t_sub
-        # loss_2 /= self.reverse_step
+        # factor = extract(self.betas, t, x_start.shape) / extract(self.sqrt_one_minus_alphas_cumprod, t, x_start.shape)
+        loss_2 = F.mse_loss(epsilon_p, target - tg * 0.2)
         return loss_2
 
     def forward(self, img, mode, *args, **kwargs):
@@ -131,7 +125,7 @@ class BadDiffusion(GaussianDiffusion):
         if mode == 0:
             t = torch.randint(0, self.num_timesteps, (b,), device=device).long()
         else:
-            t = torch.randint(self.reverse_step, 20, (1,), device=device).long()
+            t = torch.randint(0, self.num_timesteps, (1,), device=device).long()
         img = self.normalize(img)
         return self.bad_p_losses(img, t, mode, *args, **kwargs)
 
