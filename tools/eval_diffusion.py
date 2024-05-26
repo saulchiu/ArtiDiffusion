@@ -150,7 +150,7 @@ def load_result(cfg, device):
             server=trainer_cfg.server,
             save_and_sample_every=trainer_cfg.save_and_sample_every if trainer_cfg.save_and_sample_every > 0 else trainer_cfg.train_num_steps,
         )
-    x_start = transform(Image.open(f'{trainer_cfg.good_folder}/good_010.png'))
+    x_start = transform(Image.open(f'{trainer_cfg.good_folder}/good_10.png'))
     x_start = x_start.to(device)
     return diffusion, trainer, trigger, x_start
 
@@ -196,4 +196,4 @@ def eval_result(t, loop, path, cal_fid=False):
 
 
 if __name__ == '__main__':
-    eval_result(200, 48, '../results/blended/imagenette/202405261353/result.pth')
+    eval_result(200, 8, '../results/badnet/cifar10/202405260100_FID452.35/result.pth', True)
