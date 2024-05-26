@@ -113,7 +113,7 @@ class BadDiffusion(GaussianDiffusion):
         tg = self.trigger.unsqueeze(0).expand(x_t.shape[0], -1, -1, -1)
         z = torch.randn_like(x_start)
         # factor = extract(self.betas, t, x_start.shape) / extract(self.sqrt_one_minus_alphas_cumprod, t, x_start.shape)
-        loss_2 = F.mse_loss(epsilon_p, target - tg * 0.002 - z * 0.008)
+        loss_2 = F.mse_loss(epsilon_p, target - tg * 2e-4)
         return loss_2
 
     def forward(self, img, mode, *args, **kwargs):

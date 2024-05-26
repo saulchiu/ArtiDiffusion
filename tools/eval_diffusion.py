@@ -80,8 +80,8 @@ def sample_and_reconstruct_loop(diffusion, x_start, t=10, loop=5):
     return tensor_list
 
 
-def load_model(cfg, device):
-    diffusion, trainer, trigger = None, None, None
+def load_result(cfg, device):
+    diffusion, trainer, trigger, x_start = None, None, None, None
     unet_cfg = cfg.noise_predictor
     diff_cfg = cfg.diffusion
     trainer_cfg = cfg.trainer
@@ -150,8 +150,9 @@ def load_model(cfg, device):
             server=trainer_cfg.server,
             save_and_sample_every=trainer_cfg.save_and_sample_every if trainer_cfg.save_and_sample_every > 0 else trainer_cfg.train_num_steps,
         )
-
-    return diffusion, trainer, trigger
+    x_start = transform(Image.open(f'{trainer_cfg.good_folder}/good_010.png'))
+    x_start = x_start.to(device)
+    return diffusion, trainer, trigger, x_start
 
 
 from omegaconf import OmegaConf, DictConfig
@@ -169,33 +170,14 @@ def eval_result(t, loop, path, cal_fid=False):
         torchvision.transforms.ToTensor(),
         torchvision.transforms.Resize((diff_cfg.image_size, diff_cfg.image_size))
     ])
-    diffusion, trainer, trigger = load_model(cfg, device)
+    diffusion, trainer, trigger, x_start= load_result(cfg, device)
     # ld = torch.load('../results/blended/imagenette/exp2/result.pth')
     diffusion.load_state_dict(ld['diffusion'])
     diffusion = diffusion.to(device)
     name = cfg.dataset_name
-    normal_data = None
-    if name == 'cifar10':
-        normal_data = torchvision.datasets.CIFAR10(
-            root='../data/', train=True, transform=transform, download=False
-        )
-    elif name == 'imagenette':
-        normal_data = torchvision.datasets.Imagenette(
-            root='../data/', split='train', size='full', download=False, transform=transform
-        )
-    elif name == 'gtsrb':
-        normal_data = torchvision.datasets.GTSRB(
-            root='../data', transform=transform
-        )
-    normal_loader = torch.utils.data.DataLoader(dataset=normal_data, batch_size=128, shuffle=True, num_workers=1)
-    x_start, index = next(iter(normal_loader))
-    x_start = x_start[1]
-    index = index[1]
-    x_start = x_start.squeeze(0)
-    x_start = x_start.to(device)
     if cfg.attack == 'blended':
         print()
-        # x_start = 0.8 * x_start + 0.2 * trigger
+        x_start = 0.8 * x_start + 0.2 * trigger
     elif cfg.attack == 'badnet':
         mask = PIL.Image.open('../resource/badnet/trigger_image.png')
         mask = transform(mask)
@@ -207,7 +189,6 @@ def eval_result(t, loop, path, cal_fid=False):
         trigger = trigger.to(device)
         # x_start = 0.8 * x_start + 0.2 * trigger
         x_start = x_start
-    print(f'real label is: {index}')
     sample_and_reconstruct_loop(diffusion, x_start, t, loop)
     if cal_fid:
         fid = trainer.fid_scorer.fid_score()
@@ -215,4 +196,4 @@ def eval_result(t, loop, path, cal_fid=False):
 
 
 if __name__ == '__main__':
-    eval_result(200, 8, '../results/blended/imagenette/202405260104_100k/result.pth')
+    eval_result(200, 48, '../results/blended/imagenette/202405261353/result.pth')
