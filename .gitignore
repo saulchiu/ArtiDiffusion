@@ -13,7 +13,6 @@ dataset/dataset*
 dataset/outputs
 backdoor_diffusion/res*
 tools/lightning_logs
-tools/eval_diffusion.py
 backdoor_diffusion/outputs
 results
 
