@@ -157,7 +157,7 @@ def load_model(cfg, device):
 from omegaconf import OmegaConf, DictConfig
 
 
-def eval_bad(t, loop, path):
+def eval_result(t, loop, path, cal_fid=False):
     device = 'cuda:0'
     # load resnet
     ld = torch.load(path, map_location=device)
@@ -205,13 +205,14 @@ def eval_bad(t, loop, path):
         trigger = Image.open('../resource/blended/hello_kitty.jpeg')
         trigger = transform(trigger)
         trigger = trigger.to(device)
-        x_start = 0.8 * x_start + 0.2 * trigger
+        # x_start = 0.8 * x_start + 0.2 * trigger
         x_start = x_start
     print(f'real label is: {index}')
     sample_and_reconstruct_loop(diffusion, x_start, t, loop)
-    fid = trainer.fid_scorer.fid_score()
-    print(fid)
+    if cal_fid:
+        fid = trainer.fid_scorer.fid_score()
+        print(fid)
 
 
 if __name__ == '__main__':
-    eval_bad(200, 8, '../results/blended/imagenette/202405260104/result.pth')
+    eval_result(200, 8, '../results/blended/imagenette/202405260104_100k/result.pth')
