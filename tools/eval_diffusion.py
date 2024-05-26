@@ -10,7 +10,6 @@ from PIL import Image
 import sys
 import torchvision.transforms.transforms as T
 
-from backdoor_diffusion.benign_deffusion import BenignTrainer
 
 sys.path.append('../')
 from backdoor_diffusion.badnet_diffusion_pred_noice import BadDiffusion, BadTrainer
@@ -23,6 +22,7 @@ from models.resnet import ResNet18, ResNet50
 from tools.classfication import MyLightningModule
 from torch.utils.data import DataLoader
 from tools.dataset import transform_cifar10
+from backdoor_diffusion.benign_deffusion import BenignTrainer
 
 
 def plot_images(images, num_images, net=None):
