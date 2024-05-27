@@ -1,3 +1,4 @@
+import argparse
 import ast
 import math
 
@@ -9,7 +10,6 @@ from denoising_diffusion_pytorch import Unet, Trainer
 from PIL import Image
 import sys
 import torchvision.transforms.transforms as T
-
 
 sys.path.append('../')
 from backdoor_diffusion.badnet_diffusion_pred_noice import BadDiffusion, BadTrainer
@@ -58,6 +58,7 @@ def plot_images(images, num_images, net=None):
 
     plt.tight_layout()
     plt.show()
+
 
 def sample_and_reconstruct(diffusion, x_start, t=10, device='cuda:0', plot=False):
     x_t = diffusion.q_sample(x_start=x_start, t=torch.tensor([t]).to(device))
@@ -158,19 +159,18 @@ def load_result(cfg, device):
 from omegaconf import OmegaConf, DictConfig
 
 
-def eval_result(t, loop, path, cal_fid=False):
+def eval_result(t, loop, path, cal_fid):
     device = 'cuda:0'
     # load resnet
     ld = torch.load(path, map_location=device)
     cfg = DictConfig(ld['config'])
-    unet_cfg = cfg.noise_predictor
+    fid_list = ld['fid_list']
     diff_cfg = cfg.diffusion
-    trigger_path = diff_cfg.trigger
     transform = torchvision.transforms.Compose([
         torchvision.transforms.ToTensor(),
         torchvision.transforms.Resize((diff_cfg.image_size, diff_cfg.image_size))
     ])
-    diffusion, trainer, trigger, x_start= load_result(cfg, device)
+    diffusion, trainer, trigger, x_start = load_result(cfg, device)
     # ld = torch.load('../results/blended/imagenette/exp2/result.pth')
     diffusion.load_state_dict(ld['diffusion'])
     diffusion = diffusion.to(device)
@@ -191,9 +191,23 @@ def eval_result(t, loop, path, cal_fid=False):
         x_start = x_start
     sample_and_reconstruct_loop(diffusion, x_start, t, loop)
     if cal_fid:
-        fid = trainer.fid_scorer.fid_score()
-        print(fid)
+        # fid = trainer.fid_scorer.fid_score()
+        fid = -1
+        fid_list.append(fid)
+        print(fid_list)
+        ld['fid_list'] = fid_list
+        torch.save(ld, path)
 
 
 if __name__ == '__main__':
-    eval_result(200, 8, '../results/badnet/cifar10/202405260100_FID452.35/result.pth', True)
+    parser = argparse.ArgumentParser('evaluation parser')
+    parser.add_argument('--step', type=int)
+    parser.add_argument('--loop', type=int)
+    parser.add_argument('--path', type=str)
+    parser.add_argument('--cal_fid', type=bool)
+    args = parser.parse_args()
+    step = args.step
+    loop = args.loop
+    path = args.path
+    cal_fid = args.cal_fid
+    eval_result(step, loop, path, cal_fid)
