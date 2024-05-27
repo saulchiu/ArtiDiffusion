@@ -191,8 +191,7 @@ def eval_result(t, loop, path, cal_fid):
         x_start = x_start
     sample_and_reconstruct_loop(diffusion, x_start, t, loop)
     if cal_fid:
-        # fid = trainer.fid_scorer.fid_score()
-        fid = -1
+        fid = trainer.fid_scorer.fid_score()
         fid_list.append(fid)
         print(fid_list)
         ld['fid_list'] = fid_list
