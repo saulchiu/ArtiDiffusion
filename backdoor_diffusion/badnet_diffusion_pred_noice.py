@@ -35,7 +35,6 @@ class BadDiffusion(GaussianDiffusion):
                          objective=objective)
         self.trigger = trigger
         self.factor_list = factor_list
-        self.device = device
         self.reverse_step = reverse_step
         self.attack = attack
 
@@ -152,7 +151,7 @@ class BadTrainer(denoising_diffusion_pytorch.Trainer):
 
     def train(self):
         accelerator = self.accelerator
-        device = self.device
+        device = accelerator.device
         loss_list = []
         fid_list = []
         with tqdm(initial=self.step, total=self.train_num_steps, disable=not accelerator.is_main_process) as pbar:
@@ -234,21 +233,19 @@ def main(cfg: DictConfig):
     shutil.copy(__file__, target_file_path)
 
     device = diff_cfg.device
-    import os
-    os.environ["ACCELERATE_TORCH_DEVICE"] = device
     trigger_path = diff_cfg.trigger
     transform = torchvision.transforms.Compose([
         torchvision.transforms.ToTensor(),
         torchvision.transforms.Resize((diff_cfg.image_size, diff_cfg.image_size))
     ])
     trigger = Image.open(trigger_path)
-    trigger = transform(trigger).to(device)
+    trigger = transform(trigger)
     model = Unet(
         dim=unet_cfg.dim,
         dim_mults=tuple(map(int, unet_cfg.dim_mults[1:-1].split(', '))),
         flash_attn=unet_cfg.flash_attn
     )
-    model = model.to(device)
+    model = model
     diffusion = BadDiffusion(
         model,
         image_size=diff_cfg.image_size,
