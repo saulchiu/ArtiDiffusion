@@ -37,6 +37,7 @@ class BadDiffusion(GaussianDiffusion):
         self.factor_list = factor_list
         self.reverse_step = reverse_step
         self.attack = attack
+        self.device = device
 
     def train_mode_p_sample(self, x, t, x_self_cond=None):
         b, *_, device = *x.shape, self.device
