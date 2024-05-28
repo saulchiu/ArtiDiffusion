@@ -10,7 +10,7 @@ import torchvision.transforms
 from denoising_diffusion_pytorch import Unet, GaussianDiffusion
 import torch.nn.functional as F
 from denoising_diffusion_pytorch.denoising_diffusion_pytorch import default, rearrange, random, reduce, extract, cycle, \
-    Dataset, divisible_by
+    Dataset, divisible_by, num_to_groups
 from PIL import Image
 from torch.utils.data.dataloader import DataLoader
 from tqdm import tqdm
@@ -187,13 +187,31 @@ class BadTrainer(denoising_diffusion_pytorch.Trainer):
                 self.step += 1
                 if accelerator.is_main_process:
                     self.ema.update()
-                    # if self.step != 0 and divisible_by(self.step, self.save_and_sample_every):
-                    #     self.ema.ema_model.eval()
-                    #     if self.calculate_fid:
-                    #         fid_score = self.fid_scorer.fid_score()
-                    #         accelerator.print(f'fid_score: {fid_score}')
-                    #         fid_list.append(fid_score)
-                pbar.update(1)
+
+                    if self.step != 0 and divisible_by(self.step, self.save_and_sample_every):
+                        self.ema.ema_model.eval()
+
+                        with torch.inference_mode():
+                            milestone = self.step // self.save_and_sample_every
+                            batches = num_to_groups(self.num_samples, self.batch_size)
+                            all_images_list = list(map(lambda n: self.ema.ema_model.sample(batch_size=n), batches))
+
+                        all_images = torch.cat(all_images_list, dim=0)
+
+                        torchvision.utils.save_image(all_images, str(self.results_folder / f'sample-{milestone}.png'),
+                                                     nrow=int(math.sqrt(self.num_samples)))
+                        # whether to calculate fid
+                        if self.calculate_fid:
+                            fid_score = self.fid_scorer.fid_score()
+                            fid_list.append(fid_score)
+                            accelerator.print(f'fid_score: {fid_score}')
+                        if self.save_best_and_latest_only:
+                            if self.best_fid > fid_score:
+                                self.best_fid = fid_score
+                                self.save("best")
+                            self.save("latest")
+                        else:
+                            self.save(milestone)
         accelerator.print('training complete')
         return loss_list, fid_list
 
@@ -283,6 +301,7 @@ def main(cfg: DictConfig):
         'diffusion': diffusion.state_dict(),
     }
     torch.save(ret, f'{target_folder}/result.pth')
+    print(target_folder)
     tg_bot.send2bot(OmegaConf.to_yaml(OmegaConf.to_object(cfg)), trainer_cfg.server)
 
 
