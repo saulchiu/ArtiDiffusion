@@ -212,6 +212,7 @@ class BadTrainer(denoising_diffusion_pytorch.Trainer):
                             self.save("latest")
                         else:
                             self.save(milestone)
+                pbar.update(1)
         accelerator.print('training complete')
         return loss_list, fid_list
 
