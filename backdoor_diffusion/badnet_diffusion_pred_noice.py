@@ -30,7 +30,7 @@ class BadDiffusion(GaussianDiffusion):
         return self._device
 
     def __init__(self, model, image_size, timesteps, sampling_timesteps, objective, trigger,
-                 factor_list, device, reverse_step, attack):
+                 factor_list, device, reverse_step, attack, gamma):
         super().__init__(model, image_size=image_size, timesteps=timesteps, sampling_timesteps=sampling_timesteps,
                          objective=objective)
         self.trigger = trigger
@@ -38,6 +38,7 @@ class BadDiffusion(GaussianDiffusion):
         self.reverse_step = reverse_step
         self.attack = attack
         self.device = device
+        self.gamma = gamma
 
     def train_mode_p_sample(self, x, t, x_self_cond=None):
         b, *_, device = *x.shape, self.device
@@ -106,14 +107,14 @@ class BadDiffusion(GaussianDiffusion):
         tg = self.trigger.unsqueeze(0).expand(x_t.shape[0], -1, -1, -1)
         mask = mask.unsqueeze(0).expand(x_t.shape[0], -1, -1, -1)
         z = torch.randn_like(x_start)
-        loss_2 = F.mse_loss(epsilon_p, target - tg * mask - 0.08 * z)
+        loss_2 = F.mse_loss(epsilon_p, target - tg * mask * self.gamma)
         return loss_2
 
     def blended_loss(self, x_start, x_t, epsilon_p, t, target):
         tg = self.trigger.unsqueeze(0).expand(x_t.shape[0], -1, -1, -1)
         z = torch.randn_like(x_start)
         # factor = extract(self.betas, t, x_start.shape) / extract(self.sqrt_one_minus_alphas_cumprod, t, x_start.shape)
-        loss_2 = F.mse_loss(epsilon_p, target - tg * 2e-4)
+        loss_2 = F.mse_loss(epsilon_p, target - tg * self.gamma)
         return loss_2
 
     def forward(self, img, mode, *args, **kwargs):
@@ -277,7 +278,8 @@ def main(cfg: DictConfig):
         factor_list=ast.literal_eval(str(diff_cfg.factor_list)),
         device=device,
         reverse_step=diff_cfg.reverse_step,
-        attack=diff_cfg.attack
+        attack=diff_cfg.attack,
+        gamma=diff_cfg.gamma
     )
 
     trainer = BadTrainer(

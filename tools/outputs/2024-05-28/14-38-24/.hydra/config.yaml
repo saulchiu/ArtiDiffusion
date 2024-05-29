@@ -1,0 +1,4 @@
+step: 999
+loop: 8
+cal_fid: Flase
+path: '.../results/blended/imagenette/202405261353/result.pth'

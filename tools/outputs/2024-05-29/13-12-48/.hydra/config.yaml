@@ -1,0 +1,4 @@
+step: 200
+loop: 8
+cal_fid: Flase
+path: ../results/blended/imagenette/202405281302_FID128.32/

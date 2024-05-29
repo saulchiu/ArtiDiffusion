@@ -11,6 +11,8 @@ from PIL import Image
 import sys
 import torchvision.transforms.transforms as T
 
+from tools.time import now
+
 sys.path.append('../')
 from backdoor_diffusion.badnet_diffusion_pred_noice import BadDiffusion, BadTrainer
 import torchvision.transforms
@@ -23,6 +25,7 @@ from tools.classfication import MyLightningModule
 from torch.utils.data import DataLoader
 from tools.dataset import transform_cifar10
 from backdoor_diffusion.benign_deffusion import BenignTrainer
+from prepare_data import prepare_bad_data
 
 
 def plot_images(images, num_images, net=None):
@@ -151,21 +154,29 @@ def load_result(cfg, device):
             server=trainer_cfg.server,
             save_and_sample_every=trainer_cfg.save_and_sample_every if trainer_cfg.save_and_sample_every > 0 else trainer_cfg.train_num_steps,
         )
-    x_start = transform(Image.open(f'{trainer_cfg.good_folder}/good_10.png'))
+    x_start = transform(Image.open(f'{trainer_cfg.good_folder}/good_8888.png'))
+    if x_start.shape[1] != cfg.diffusion.image_size:
+        prepare_bad_data(cfg)
     x_start = x_start.to(device)
     return diffusion, trainer, trigger, x_start
 
 
 from omegaconf import OmegaConf, DictConfig
+import hydra
 
 
-def eval_result(t, loop, path, cal_fid):
+@hydra.main(version_base=None, config_path='../config/eval/', config_name='default')
+def eval_result(cfg: DictConfig):
+    t = cfg.step
+    loop = cfg.loop
+    path = cfg.path
     device = 'cuda:0'
     # load resnet
-    ld = torch.load(path, map_location=device)
+    ld = torch.load(f'{path}/result.pth', map_location=device)
     cfg = DictConfig(ld['config'])
     fid_list = ld['fid_list']
     diff_cfg = cfg.diffusion
+    dataset_cfg = cfg.dataset
     transform = torchvision.transforms.Compose([
         torchvision.transforms.ToTensor(),
         torchvision.transforms.Resize((diff_cfg.image_size, diff_cfg.image_size))
@@ -174,6 +185,13 @@ def eval_result(t, loop, path, cal_fid):
     # ld = torch.load('../results/blended/imagenette/exp2/result.pth')
     diffusion.load_state_dict(ld['diffusion'])
     diffusion = diffusion.to(device)
+    # trainer.my_sample()
+    batches = [16, 9]
+    diffusion.is_ddim_sampling = False
+    all_images_list = list(map(lambda n: diffusion.sample(batch_size=n), batches))
+    all_images = torch.cat(all_images_list, dim=0)
+    torchvision.utils.save_image(all_images, f'{path}/sample-{now()}.png',
+                                 nrow=int(math.sqrt(trainer.num_samples)))
     name = cfg.dataset_name
     if cfg.attack == 'blended':
         print()
@@ -187,26 +205,16 @@ def eval_result(t, loop, path, cal_fid):
         trigger = Image.open('../resource/blended/hello_kitty.jpeg')
         trigger = transform(trigger)
         trigger = trigger.to(device)
-        # x_start = 0.8 * x_start + 0.2 * trigger
+        x_start = 0.8 * x_start + 0.2 * trigger
         x_start = x_start
     sample_and_reconstruct_loop(diffusion, x_start, t, loop)
-    if cal_fid:
-        fid = trainer.fid_scorer.fid_score()
-        fid_list.append(fid)
-        print(fid_list)
-        ld['fid_list'] = fid_list
-        torch.save(ld, path)
+    # if cal_fid:
+    #     fid = trainer.fid_scorer.fid_score()
+    #     fid_list.append(fid)
+    #     print(fid_list)
+    #     ld['fid_list'] = fid_list
+    #     torch.save(ld, path)
 
 
 if __name__ == '__main__':
-    parser = argparse.ArgumentParser('evaluation parser')
-    parser.add_argument('--step', type=int)
-    parser.add_argument('--loop', type=int)
-    parser.add_argument('--path', type=str)
-    parser.add_argument('--cal_fid', type=bool)
-    args = parser.parse_args()
-    step = args.step
-    loop = args.loop
-    path = args.path
-    cal_fid = args.cal_fid
-    eval_result(step, loop, path, cal_fid)
+    eval_result()

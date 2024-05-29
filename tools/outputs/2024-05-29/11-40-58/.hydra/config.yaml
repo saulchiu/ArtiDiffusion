@@ -1,0 +1,4 @@
+step: 200
+loop: 8
+cal_fid: Flase
+path: ../results/badnet/cifar10/202405281102_FID18.16/result.pth

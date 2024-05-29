@@ -1,0 +1,4 @@
+step: 200
+loop: 8
+cal_fid: Flase
+path: ../results/benign/imagenette/202405250107_40k/result.pth
