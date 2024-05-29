@@ -207,13 +207,6 @@ class BadTrainer(denoising_diffusion_pytorch.Trainer):
                             fid_score = self.fid_scorer.fid_score()
                             fid_list.append(fid_score)
                             accelerator.print(f'fid_score: {fid_score}')
-                        if self.save_best_and_latest_only:
-                            if self.best_fid > fid_score:
-                                self.best_fid = fid_score
-                                self.save("best")
-                            self.save("latest")
-                        else:
-                            self.save(milestone)
                 pbar.update(1)
         accelerator.print('training complete')
         return loss_list, fid_list

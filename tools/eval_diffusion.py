@@ -136,7 +136,8 @@ def load_result(cfg, device):
             factor_list=ast.literal_eval(str(diff_cfg.factor_list)),
             device=device,
             reverse_step=diff_cfg.reverse_step,
-            attack=diff_cfg.attack
+            attack=diff_cfg.attack,
+            gamma=0
         )
         trainer = BadTrainer(
             diffusion,
