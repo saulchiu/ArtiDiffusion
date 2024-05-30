@@ -260,7 +260,6 @@ def main(cfg: DictConfig):
         dim_mults=tuple(map(int, unet_cfg.dim_mults[1:-1].split(', '))),
         flash_attn=unet_cfg.flash_attn
     )
-    model = model
     diffusion = BadDiffusion(
         model,
         image_size=diff_cfg.image_size,

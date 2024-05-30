@@ -29,13 +29,14 @@ class BenignTrainer(denoising_diffusion_pytorch.Trainer):
 
     def train(self):
         accelerator = self.accelerator
+        device = accelerator.device
         loss_list = []
         fid_list = []
         with tqdm(initial=self.step, total=self.train_num_steps, disable=not accelerator.is_main_process) as pbar:
             while self.step < self.train_num_steps:
                 total_loss = 0.
                 for mode in range(self.gradient_accumulate_every):
-                    data = next(self.dl).to(self.device)
+                    data = next(self.dl).to(device)
                     with self.accelerator.autocast():
                         loss = self.model(data)
                         loss = loss / self.gradient_accumulate_every
@@ -105,16 +106,12 @@ def main(cfg: DictConfig):
         os.makedirs(target_folder)
     target_file_path = os.path.join(target_folder, script_name)
     shutil.copy(__file__, target_file_path)
-
     device = diff_cfg.device
-    import os
-    os.environ["ACCELERATE_TORCH_DEVICE"] = device
     model = Unet(
         dim=unet_cfg.dim,
         dim_mults=tuple(map(int, unet_cfg.dim_mults[1:-1].split(', '))),
         flash_attn=unet_cfg.flash_attn
     )
-    model = model.to(device)
     diffusion = GaussianDiffusion(
         model,
         image_size=diff_cfg.image_size,
