@@ -245,8 +245,9 @@ def main(cfg: DictConfig):
         os.makedirs(target_folder)
     target_file_path = os.path.join(target_folder, script_name)
     shutil.copy(__file__, target_file_path)
-
     device = diff_cfg.device
+    import os
+    os.environ["ACCELERATE_TORCH_DEVICE"] = device
     trigger_path = diff_cfg.trigger
     transform = torchvision.transforms.Compose([
         torchvision.transforms.ToTensor(),
