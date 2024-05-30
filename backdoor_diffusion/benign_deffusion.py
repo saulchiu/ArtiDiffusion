@@ -46,6 +46,9 @@ class BenignTrainer(denoising_diffusion_pytorch.Trainer):
                 formatted_loss = format(total_loss, '.4f')
                 loss_list.append(float(formatted_loss))
                 accelerator.wait_for_everyone()
+                for param in self.model.parameters():
+                    if param.grad is not None:
+                        param.grad = param.grad.contiguous()
                 accelerator.clip_grad_norm_(self.model.parameters(), self.max_grad_norm)
                 self.opt.step()
                 self.opt.zero_grad()
