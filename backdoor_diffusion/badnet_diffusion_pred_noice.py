@@ -12,6 +12,7 @@ import torch.nn.functional as F
 from denoising_diffusion_pytorch.denoising_diffusion_pytorch import default, rearrange, random, reduce, extract, cycle, \
     Dataset, divisible_by, num_to_groups
 from PIL import Image
+from torch import nn
 from torch.utils.data.dataloader import DataLoader
 from tqdm import tqdm
 import sys
@@ -274,7 +275,9 @@ def main(cfg: DictConfig):
         attack=diff_cfg.attack,
         gamma=diff_cfg.gamma
     )
-
+    if torch.cuda.device_count() > 1:
+        print(f"Let's use {torch.cuda.device_count()} GPUs!")
+        diffusion = nn.DataParallel(diffusion)
     trainer = BadTrainer(
         diffusion,
         bad_folder=trainer_cfg.bad_folder,

@@ -63,7 +63,7 @@ def plot_images(images, num_images, net=None):
     plt.show()
 
 
-def sample_and_reconstruct(diffusion, x_start, t=10, device='cuda:0', plot=False):
+def data_sanitization(diffusion, x_start, t=10, device='cuda:0', plot=False):
     x_t = diffusion.q_sample(x_start=x_start, t=torch.tensor([t]).to(device))
     x_t = x_t.unsqueeze(0)
     for i in reversed(range(t)):
@@ -73,10 +73,10 @@ def sample_and_reconstruct(diffusion, x_start, t=10, device='cuda:0', plot=False
     return x_t
 
 
-def sample_and_reconstruct_loop(diffusion, x_start, t=10, loop=5):
+def iter_data_sanitization(diffusion, x_start, t=200, loop=8):
     tensor_list = [x_start]
     for i in range(loop):
-        x_t1 = sample_and_reconstruct(diffusion, x_start, t)
+        x_t1 = data_sanitization(diffusion, x_start, t)
         tensor_list.append(x_t1)
         x_start = x_t1
     tensors = torch.stack(tensor_list, dim=0)
@@ -171,6 +171,7 @@ def eval_result(cfg: DictConfig):
     t = cfg.step
     loop = cfg.loop
     path = cfg.path
+    do_sample = cfg.sample
     device = 'cuda:0'
     # load resnet
     ld = torch.load(f'{path}/result.pth', map_location=device)
@@ -187,16 +188,17 @@ def eval_result(cfg: DictConfig):
     diffusion.load_state_dict(ld['diffusion'])
     diffusion = diffusion.to(device)
     # trainer.my_sample()
-    batches = [16, 9]
-    diffusion.is_ddim_sampling = False
-    all_images_list = list(map(lambda n: diffusion.sample(batch_size=n), batches))
-    all_images = torch.cat(all_images_list, dim=0)
-    torchvision.utils.save_image(all_images, f'{path}/sample-{now()}.png',
-                                 nrow=int(math.sqrt(trainer.num_samples)))
+    if do_sample:
+        batches = [16, 9]
+        diffusion.is_ddim_sampling = False
+        all_images_list = list(map(lambda n: diffusion.sample(batch_size=n), batches))
+        all_images = torch.cat(all_images_list, dim=0)
+        torchvision.utils.save_image(all_images, f'{path}/sample-{now()}.png',
+                                     nrow=int(math.sqrt(trainer.num_samples)))
     name = cfg.dataset_name
     if cfg.attack == 'blended':
         print()
-        x_start = 0.8 * x_start + 0.2 * trigger
+        # x_start = 0.8 * x_start + 0.2 * trigger
     elif cfg.attack == 'badnet':
         mask = PIL.Image.open('../resource/badnet/trigger_image.png')
         mask = transform(mask)
@@ -208,7 +210,7 @@ def eval_result(cfg: DictConfig):
         trigger = trigger.to(device)
         x_start = 0.8 * x_start + 0.2 * trigger
         x_start = x_start
-    sample_and_reconstruct_loop(diffusion, x_start, t, loop)
+    iter_data_sanitization(diffusion, x_start, t, loop)
     # if cal_fid:
     #     fid = trainer.fid_scorer.fid_score()
     #     fid_list.append(fid)
