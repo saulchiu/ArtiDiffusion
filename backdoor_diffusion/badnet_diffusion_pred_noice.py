@@ -290,6 +290,7 @@ def main(cfg: DictConfig):
         server=trainer_cfg.server,
         save_and_sample_every=trainer_cfg.save_and_sample_every if trainer_cfg.save_and_sample_every > 0 else trainer_cfg.train_num_steps,
     )
+    diffusion.trigger = trainer.accelerator.prepare(trigger)
     if trainer.accelerator.is_main_process:
         prepare_bad_data(cfg)
     loss_list, fid_list = trainer.train()
