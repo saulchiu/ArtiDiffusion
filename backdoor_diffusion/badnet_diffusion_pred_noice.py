@@ -262,6 +262,9 @@ def main(cfg: DictConfig):
         dim_mults=tuple(map(int, unet_cfg.dim_mults[1:-1].split(', '))),
         flash_attn=unet_cfg.flash_attn
     )
+    if torch.cuda.device_count() > 1:
+        print(f"Let's use {torch.cuda.device_count()} GPUs!")
+        model = nn.DataParallel(model)
     diffusion = BadDiffusion(
         model,
         image_size=diff_cfg.image_size,
@@ -275,9 +278,6 @@ def main(cfg: DictConfig):
         attack=diff_cfg.attack,
         gamma=diff_cfg.gamma
     )
-    if torch.cuda.device_count() > 1:
-        print(f"Let's use {torch.cuda.device_count()} GPUs!")
-        diffusion = nn.DataParallel(diffusion)
     trainer = BadTrainer(
         diffusion,
         bad_folder=trainer_cfg.bad_folder,
