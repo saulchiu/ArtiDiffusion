@@ -114,6 +114,7 @@ class BadDiffusion(GaussianDiffusion):
 
     def blended_loss(self, x_start, x_t, epsilon_p, t, target):
         tg = self.trigger.unsqueeze(0).expand(x_t.shape[0], -1, -1, -1)
+        tg = tg.to(epsilon_p.device)
         z = torch.randn_like(x_start)
         # factor = extract(self.betas, t, x_start.shape) / extract(self.sqrt_one_minus_alphas_cumprod, t, x_start.shape)
         loss_2 = F.mse_loss(epsilon_p, target - tg * self.gamma)
@@ -290,7 +291,6 @@ def main(cfg: DictConfig):
         server=trainer_cfg.server,
         save_and_sample_every=trainer_cfg.save_and_sample_every if trainer_cfg.save_and_sample_every > 0 else trainer_cfg.train_num_steps,
     )
-    diffusion.trigger = trainer.accelerator.prepare(trigger)
     if trainer.accelerator.is_main_process:
         prepare_bad_data(cfg)
     loss_list, fid_list = trainer.train()
