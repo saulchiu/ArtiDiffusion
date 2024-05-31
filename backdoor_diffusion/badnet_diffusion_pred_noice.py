@@ -256,13 +256,11 @@ def main(cfg: DictConfig):
     ])
     trigger = Image.open(trigger_path)
     trigger = transform(trigger)
-    trigger = trigger.to(device)
     model = Unet(
         dim=unet_cfg.dim,
         dim_mults=tuple(map(int, unet_cfg.dim_mults[1:-1].split(', '))),
         flash_attn=unet_cfg.flash_attn
     )
-    model = model.to(device)
     diffusion = BadDiffusion(
         model,
         image_size=diff_cfg.image_size,
