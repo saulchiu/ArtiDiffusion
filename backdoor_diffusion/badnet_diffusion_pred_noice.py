@@ -247,8 +247,8 @@ def main(cfg: DictConfig):
     target_file_path = os.path.join(target_folder, script_name)
     shutil.copy(__file__, target_file_path)
     device = diff_cfg.device
-    import os
-    os.environ["ACCELERATE_TORCH_DEVICE"] = device
+    # import os
+    # os.environ["ACCELERATE_TORCH_DEVICE"] = device
     trigger_path = diff_cfg.trigger
     transform = torchvision.transforms.Compose([
         torchvision.transforms.ToTensor(),
@@ -262,9 +262,6 @@ def main(cfg: DictConfig):
         dim_mults=tuple(map(int, unet_cfg.dim_mults[1:-1].split(', '))),
         flash_attn=unet_cfg.flash_attn
     )
-    if torch.cuda.device_count() > 1:
-        print(f"Let's use {torch.cuda.device_count()} GPUs!")
-        model = nn.DataParallel(model)
     diffusion = BadDiffusion(
         model,
         image_size=diff_cfg.image_size,
