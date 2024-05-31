@@ -2,6 +2,7 @@ import argparse
 import ast
 import math
 import pdb
+import time
 
 import PIL.Image
 import denoising_diffusion_pytorch
@@ -261,6 +262,7 @@ def main(cfg: DictConfig):
         dim_mults=tuple(map(int, unet_cfg.dim_mults[1:-1].split(', '))),
         flash_attn=unet_cfg.flash_attn
     )
+    model = model.to(device)
     diffusion = BadDiffusion(
         model,
         image_size=diff_cfg.image_size,
