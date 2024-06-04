@@ -22,6 +22,7 @@ from omegaconf import DictConfig, OmegaConf
 
 sys.path.append('../')
 from tools import tg_bot
+from tools.img import cal_ssim
 from tools.prepare_data import prepare_bad_data
 from tools.time import now
 
@@ -42,6 +43,9 @@ class BadDiffusion(GaussianDiffusion):
         self.device = device
         self.gamma = gamma
 
+    def set_param_from_parent(self, parent_instance):
+        self.param = parent_instance.param
+
     def train_mode_p_sample(self, x, t, x_self_cond=None):
         b, *_, device = *x.shape, self.device
         batched_times = torch.full((b,), t, device=device, dtype=torch.long)
@@ -51,7 +55,7 @@ class BadDiffusion(GaussianDiffusion):
         pred_img = model_mean + (0.5 * model_log_variance).exp() * noise
         return pred_img, x_start
 
-    def bad_p_losses(self, x_start, t, mode, noise=None, offset_noise_strength=None):
+    def bad_p_loss(self, x_start, t, mode, noise=None, offset_noise_strength=None):
         b, c, h, w = x_start.shape
         noise = default(noise, lambda: torch.randn_like(x_start))
         offset_noise_strength = default(offset_noise_strength, self.offset_noise_strength)
@@ -108,7 +112,7 @@ class BadDiffusion(GaussianDiffusion):
         mask = trans(mask).to(self.device)
         tg = self.trigger.unsqueeze(0).expand(x_t.shape[0], -1, -1, -1)
         mask = mask.unsqueeze(0).expand(x_t.shape[0], -1, -1, -1)
-        z = torch.randn_like(x_start)
+        z = torch.randn_like(x_start).to(x_start.device)
         loss_2 = F.mse_loss(epsilon_p, target - tg * mask * self.gamma)
         return loss_2
 
@@ -120,15 +124,15 @@ class BadDiffusion(GaussianDiffusion):
         loss_2 = F.mse_loss(epsilon_p, target - tg * self.gamma)
         return loss_2
 
-    def forward(self, img, mode, *args, **kwargs):
+    def bad_forward(self, img, mode, *args, **kwargs):
         b, c, h, w, device, img_size, = *img.shape, img.device, self.image_size
         assert h == img_size and w == img_size, f'height and width of image must be {img_size}'
         if mode == 0:
             t = torch.randint(0, self.num_timesteps, (b,), device=device).long()
         else:
-            t = torch.randint(0, self.num_timesteps, (1,), device=device).long()
+            t = torch.randint(200, 300, (b,), device=device).long()
         img = self.normalize(img)
-        return self.bad_p_losses(img, t, mode, *args, **kwargs)
+        return self.bad_p_loss(img, t, mode, *args, **kwargs)
 
     @device.setter
     def device(self, value):
@@ -171,7 +175,7 @@ class BadTrainer(denoising_diffusion_pytorch.Trainer):
                         data = next(self.dl).to(device)
                         mode = 0
                     with self.accelerator.autocast():
-                        loss = self.model(data, mode)
+                        loss = self.model.bad_forward(data, mode)
                         loss = loss / self.gradient_accumulate_every
                         total_loss += loss.item()
                     self.accelerator.backward(loss)
@@ -240,13 +244,10 @@ def main(cfg: DictConfig):
     trainer_cfg = cfg.trainer
     import os
     import shutil
-    script_name = os.path.basename(__file__)
     target_folder = f'../results/{cfg.attack}/{cfg.dataset_name}/{now()}'
     cfg.trainer.results_folder = target_folder
     if not os.path.exists(target_folder):
         os.makedirs(target_folder)
-    target_file_path = os.path.join(target_folder, script_name)
-    shutil.copy(__file__, target_file_path)
     device = diff_cfg.device
     # import os
     # os.environ["ACCELERATE_TORCH_DEVICE"] = device
@@ -257,13 +258,14 @@ def main(cfg: DictConfig):
     ])
     trigger = Image.open(trigger_path)
     trigger = transform(trigger)
-    model = Unet(
+    trigger = trigger.to(device)
+    unet = Unet(
         dim=unet_cfg.dim,
         dim_mults=tuple(map(int, unet_cfg.dim_mults[1:-1].split(', '))),
         flash_attn=unet_cfg.flash_attn
     )
     diffusion = BadDiffusion(
-        model,
+        unet,
         image_size=diff_cfg.image_size,
         timesteps=diff_cfg.timesteps,  # number of steps
         sampling_timesteps=diff_cfg.sampling_timesteps,
@@ -298,11 +300,15 @@ def main(cfg: DictConfig):
         'loss_list': loss_list,
         'fid_list': fid_list,
         'config': OmegaConf.to_object(cfg),
+        'unet': unet.state_dict(),
         'diffusion': diffusion.state_dict(),
     }
     torch.save(ret, f'{target_folder}/result.pth')
-    print(target_folder)
+    script_name = os.path.basename(__file__)
+    target_file_path = os.path.join(target_folder, script_name)
+    shutil.copy(__file__, target_file_path)
     tg_bot.send2bot(OmegaConf.to_yaml(OmegaConf.to_object(cfg)), trainer_cfg.server)
+    print(target_folder)
 
 
 if __name__ == '__main__':

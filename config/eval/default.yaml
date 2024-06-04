@@ -2,4 +2,4 @@ step: 200
 loop: 8
 cal_fid: False
 sample: False
-path: ../results/blended/imagenette/202405261353/result.pth
+path: ../results/blended/imagenette/202405261353

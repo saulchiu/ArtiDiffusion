@@ -5,6 +5,6 @@ objective: pred_noise
 attack: ${attack}
 trigger: ../resource/${attack}/${trigger_name}
 factor_list: [1, 1]
-device: cuda:0
+device: ${device}
 reverse_step: 3 # max 6, if 7, the memory is not enough
 gamma: 1e-5

@@ -109,13 +109,13 @@ def main(cfg: DictConfig):
     device = diff_cfg.device
     import os
     os.environ["ACCELERATE_TORCH_DEVICE"] = device
-    model = Unet(
+    unet = Unet(
         dim=unet_cfg.dim,
         dim_mults=tuple(map(int, unet_cfg.dim_mults[1:-1].split(', '))),
         flash_attn=unet_cfg.flash_attn
     )
     diffusion = GaussianDiffusion(
-        model,
+        unet,
         image_size=diff_cfg.image_size,
         timesteps=diff_cfg.timesteps,  # number of steps
         sampling_timesteps=diff_cfg.sampling_timesteps,
@@ -141,6 +141,7 @@ def main(cfg: DictConfig):
         'loss_list': loss_list,
         'fid_list': fid_list,
         'config': OmegaConf.to_object(cfg),
+        'unet': unet.state_dict(),
         'diffusion': diffusion.state_dict(),
     }
     torch.save(ret, f'{trainer_cfg.results_folder}/result.pth')

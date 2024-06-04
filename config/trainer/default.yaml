@@ -10,5 +10,5 @@ amp: True
 calculate_fid: True
 ratio: 0.1
 results_folder: results_test
-server: pc
+server: ${server}
 save_and_sample_every: 0 # if 0, means not save before whole train end

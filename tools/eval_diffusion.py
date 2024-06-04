@@ -1,6 +1,7 @@
 import argparse
 import ast
 import math
+import random
 
 import PIL.Image
 import detectors
@@ -25,7 +26,7 @@ from tools.classfication import MyLightningModule
 from torch.utils.data import DataLoader
 from tools.dataset import transform_cifar10
 from backdoor_diffusion.benign_deffusion import BenignTrainer
-from prepare_data import prepare_bad_data
+from tools.prepare_data import prepare_bad_data
 
 
 def plot_images(images, num_images, net=None):
@@ -89,18 +90,16 @@ def load_result(cfg, device):
     unet_cfg = cfg.noise_predictor
     diff_cfg = cfg.diffusion
     trainer_cfg = cfg.trainer
+    transform = torchvision.transforms.Compose([
+        torchvision.transforms.ToTensor(),
+        torchvision.transforms.Resize((diff_cfg.image_size, diff_cfg.image_size))
+    ])
     model = Unet(
         dim=unet_cfg.dim,
         dim_mults=tuple(map(int, unet_cfg.dim_mults[1:-1].split(', '))),
         flash_attn=unet_cfg.flash_attn
     )
     model = model.to(device)
-    trigger_path = diff_cfg.trigger
-    transform = torchvision.transforms.Compose([
-        torchvision.transforms.ToTensor(),
-        torchvision.transforms.Resize((diff_cfg.image_size, diff_cfg.image_size))
-    ])
-
     if cfg.attack == "benign":
         diffusion = GaussianDiffusion(
             model,
@@ -124,6 +123,7 @@ def load_result(cfg, device):
             save_and_sample_every=trainer_cfg.save_and_sample_every if trainer_cfg.save_and_sample_every > 0 else trainer_cfg.train_num_steps,
         )
     else:
+        trigger_path = diff_cfg.trigger
         trigger = Image.open(trigger_path)
         trigger = transform(trigger).to(device)
         diffusion = BadDiffusion(
@@ -155,7 +155,8 @@ def load_result(cfg, device):
             server=trainer_cfg.server,
             save_and_sample_every=trainer_cfg.save_and_sample_every if trainer_cfg.save_and_sample_every > 0 else trainer_cfg.train_num_steps,
         )
-    x_start = transform(Image.open(f'{trainer_cfg.good_folder}/good_8888.png'))
+    index = random.Random().randint(a=1, b=1000)
+    x_start = transform(Image.open(f'{trainer_cfg.good_folder}/good_{index}.png'))
     if x_start.shape[1] != cfg.diffusion.image_size:
         prepare_bad_data(cfg)
     x_start = x_start.to(device)
@@ -208,7 +209,7 @@ def eval_result(cfg: DictConfig):
         trigger = Image.open('../resource/blended/hello_kitty.jpeg')
         trigger = transform(trigger)
         trigger = trigger.to(device)
-        x_start = 0.8 * x_start + 0.2 * trigger
+        # x_start = 0.8 * x_start + 0.2 * trigger
         x_start = x_start
     iter_data_sanitization(diffusion, x_start, t, loop)
     # if cal_fid:

@@ -1,0 +1,5 @@
+step: 200
+loop: 8
+cal_fid: false
+sample: false
+path: ../results/blended/cifar10/202406031203

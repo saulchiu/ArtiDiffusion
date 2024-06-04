@@ -1,0 +1,5 @@
+step: 200
+loop: 8
+cal_fid: false
+sample: false
+path: ../results/ft/blended/imagenette/202406031453
