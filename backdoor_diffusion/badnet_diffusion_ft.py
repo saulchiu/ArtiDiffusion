@@ -50,7 +50,7 @@ def ft_benign_model(cfg: DictConfig):
         bad_folder=trainer_cfg.bad_folder,
         good_folder=trainer_cfg.good_folder,
         train_batch_size=trainer_cfg.train_batch_size,
-        train_lr=trainer_cfg.train_lr / 1e5,
+        train_lr=trainer_cfg.train_lr,
         train_num_steps=trainer_cfg.train_num_steps,
         gradient_accumulate_every=trainer_cfg.gradient_accumulate_every,
         ema_decay=trainer_cfg.ema_decay,
