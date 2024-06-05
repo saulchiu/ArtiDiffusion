@@ -27,10 +27,9 @@ def ft_benign_model(cfg: DictConfig):
     device = cfg.device
     ft_cfg = cfg.ft
     ld = torch.load(f'{ft_cfg.path}/result.pth', map_location=device)
-    diffusion_old, _, _, _ = load_result(DictConfig(ld['config']), device)
+    diffusion, _, _, _ = load_result(DictConfig(ld['config']), device)
     cfg.diffusion.image_size = ld['config']['diffusion']['image_size']
     cfg.trainer.train_batch_size = ld['config']['trainer']['train_batch_size']
-    unet = diffusion_old.model
     diff_cfg = cfg.diffusion
     trainer_cfg = cfg.trainer
     trigger_path = diff_cfg.trigger
@@ -41,19 +40,7 @@ def ft_benign_model(cfg: DictConfig):
     trigger = Image.open(trigger_path)
     trigger = transform(trigger)
     trigger = trigger.to(device)
-    diffusion = BadDiffusion(
-        unet,
-        image_size=diff_cfg.image_size,
-        timesteps=diff_cfg.timesteps,  # number of steps
-        sampling_timesteps=diff_cfg.sampling_timesteps,
-        objective=diff_cfg.objective,
-        trigger=trigger,
-        factor_list=ast.literal_eval(str(diff_cfg.factor_list)),
-        device=device,
-        reverse_step=diff_cfg.reverse_step,
-        attack=diff_cfg.attack,
-        gamma=diff_cfg.gamma
-    )
+
     target_folder = f'../results/ft/{cfg.attack}/{cfg.dataset_name}/{now()}'
     cfg.trainer.results_folder = target_folder
     if not os.path.exists(target_folder):
@@ -63,7 +50,7 @@ def ft_benign_model(cfg: DictConfig):
         bad_folder=trainer_cfg.bad_folder,
         good_folder=trainer_cfg.good_folder,
         train_batch_size=trainer_cfg.train_batch_size,
-        train_lr=trainer_cfg.train_lr,
+        train_lr=trainer_cfg.train_lr / 1e5,
         train_num_steps=trainer_cfg.train_num_steps,
         gradient_accumulate_every=trainer_cfg.gradient_accumulate_every,
         ema_decay=trainer_cfg.ema_decay,
@@ -76,12 +63,11 @@ def ft_benign_model(cfg: DictConfig):
     )
     if trainer.accelerator.is_main_process:
         prepare_bad_data(cfg)
-    loss_list, fid_list = trainer.train()
+    loss_list, fid_list = trainer.ft_train(trigger, 1e-5, "badnet")
     ret = {
         'loss_list': loss_list,
         'fid_list': fid_list,
         'config': OmegaConf.to_object(cfg),
-        'unet': unet.state_dict(),
         'diffusion': diffusion.state_dict(),
     }
     torch.save(ret, f'{target_folder}/result.pth')

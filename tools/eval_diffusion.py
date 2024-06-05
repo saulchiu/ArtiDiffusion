@@ -66,20 +66,22 @@ def plot_images(images, num_images, net=None):
 
 def data_sanitization(diffusion, x_start, t=10, device='cuda:0', plot=False):
     x_t = diffusion.q_sample(x_start=x_start, t=torch.tensor([t]).to(device))
+    x_T = x_t
     x_t = x_t.unsqueeze(0)
     for i in reversed(range(t)):
         pred_img, _ = diffusion.p_sample(x=x_t, t=i + 1)
         x_t = pred_img
-    x_t = x_t.squeeze(0)
-    return x_t
+    x_z = x_t.squeeze(0)
+    return x_T, x_z
 
 
 def iter_data_sanitization(diffusion, x_start, t=200, loop=8):
     tensor_list = [x_start]
     for i in range(loop):
-        x_t1 = data_sanitization(diffusion, x_start, t)
-        tensor_list.append(x_t1)
-        x_start = x_t1
+        x_t, x_z = data_sanitization(diffusion, x_start, t)
+        tensor_list.append(x_t)
+        tensor_list.append(x_z)
+        x_start = x_z
     tensors = torch.stack(tensor_list, dim=0)
     plot_images(images=tensors, num_images=tensors.shape[0])
     return tensor_list
@@ -155,7 +157,8 @@ def load_result(cfg, device):
             server=trainer_cfg.server,
             save_and_sample_every=trainer_cfg.save_and_sample_every if trainer_cfg.save_and_sample_every > 0 else trainer_cfg.train_num_steps,
         )
-    index = random.Random().randint(a=1, b=1000)
+    # index = random.Random().randint(a=1, b=1000)
+    index = 25
     x_start = transform(Image.open(f'{trainer_cfg.good_folder}/good_{index}.png'))
     if x_start.shape[1] != cfg.diffusion.image_size:
         prepare_bad_data(cfg)
@@ -204,7 +207,7 @@ def eval_result(cfg: DictConfig):
         mask = PIL.Image.open('../resource/badnet/trigger_image.png')
         mask = transform(mask)
         mask = mask.to(device)
-        x_start = (1 - mask) * x_start + mask * trigger
+        # x_start = (1 - mask) * x_start + mask * trigger
     elif cfg.attack == "benign":
         trigger = Image.open('../resource/blended/hello_kitty.jpeg')
         trigger = transform(trigger)

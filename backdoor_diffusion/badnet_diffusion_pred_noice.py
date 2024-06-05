@@ -43,9 +43,6 @@ class BadDiffusion(GaussianDiffusion):
         self.device = device
         self.gamma = gamma
 
-    def set_param_from_parent(self, parent_instance):
-        self.param = parent_instance.param
-
     def train_mode_p_sample(self, x, t, x_self_cond=None):
         b, *_, device = *x.shape, self.device
         batched_times = torch.full((b,), t, device=device, dtype=torch.long)
@@ -56,7 +53,6 @@ class BadDiffusion(GaussianDiffusion):
         return pred_img, x_start
 
     def bad_p_loss(self, x_start, t, mode, noise=None, offset_noise_strength=None):
-        b, c, h, w = x_start.shape
         noise = default(noise, lambda: torch.randn_like(x_start))
         offset_noise_strength = default(offset_noise_strength, self.offset_noise_strength)
         if offset_noise_strength > 0.:
@@ -157,6 +153,97 @@ class BadTrainer(denoising_diffusion_pytorch.Trainer):
                                 num_workers=4)
             bad_dl = self.accelerator.prepare(bad_dl)
             self.bad_dl = cycle(bad_dl)
+
+    def ft_train(self, trigger, gamma, attack):
+        accelerator = self.accelerator
+        device = accelerator.device
+        loss_list = []
+        fid_list = []
+        with tqdm(initial=self.step, total=self.train_num_steps, disable=not accelerator.is_main_process) as pbar:
+            while self.step < self.train_num_steps:
+                total_loss = 0.
+                for i in range(self.gradient_accumulate_every):
+                    import random
+                    if random.random() < self.ratio:
+                        data = next(self.bad_dl).to(device)
+                        mode = 0  # poisoning
+                    else:
+                        data = next(self.dl).to(device)
+                        mode = 0
+                    with self.accelerator.autocast():
+                        if mode == 0:
+                            t = torch.randint(0, self.model.num_timesteps, (data.shape[0],), device=device).long()
+                        else:
+                            t = torch.randint(200, 300, (data.shape[0],), device=device).long()
+                        img = self.model.normalize(data)
+                        noise = torch.randn_like(img)
+                        x_t = self.model.q_sample(x_start=img, t=t, noise=noise)
+                        noise_p = self.model.model(x_t, t)
+                        if mode == 0:
+                            loss = F.mse_loss(noise_p, noise, reduction='none')
+                            loss = reduce(loss, 'b ... -> b', 'mean')
+                            loss = loss * extract(self.model.loss_weight, t, loss.shape)
+                            loss = loss.mean()
+                        elif mode == 1:
+                            # backdoor attack
+                            loss_1 = F.mse_loss(noise_p, noise, reduction='none')
+                            loss_1 = reduce(loss_1, 'b ... -> b', 'mean')
+                            loss_1 = loss_1 * extract(self.model.loss_weight, t, loss_1.shape)
+                            loss_1 = loss_1.mean()
+                            if attack == "badnet":
+                                mask = PIL.Image.open('../resource/badnet/trigger_image.png')
+                                trans = torchvision.transforms.Compose([
+                                    torchvision.transforms.ToTensor(),
+                                    torchvision.transforms.Resize((img.shape[2], img.shape[2]))
+                                ])
+                                mask = trans(mask).to(self.device)
+                                tg = trigger.unsqueeze(0).expand(x_t.shape[0], -1, -1, -1)
+                                mask = mask.unsqueeze(0).expand(x_t.shape[0], -1, -1, -1)
+                                loss_2 = F.mse_loss(noise_p, noise - tg * mask * gamma)
+                            # elif self.attack == "blended":
+                            loss = loss_1 + loss_2
+                        # loss = self.model.bad_forward(data, mode)
+                        loss = loss / self.gradient_accumulate_every
+                        total_loss += loss.item()
+                    self.accelerator.backward(loss)
+                pbar.set_description(f'loss: {total_loss:.4f}')
+                formatted_loss = format(total_loss, '.4f')
+                loss_list.append({
+                    'loss': float(formatted_loss),
+                    'mode': mode
+                })
+                accelerator.wait_for_everyone()
+                accelerator.clip_grad_norm_(self.model.parameters(), self.max_grad_norm)
+
+                self.opt.step()
+                self.opt.zero_grad()
+
+                accelerator.wait_for_everyone()
+
+                self.step += 1
+                if accelerator.is_main_process:
+                    self.ema.update()
+
+                    if self.step != 0 and divisible_by(self.step, self.save_and_sample_every):
+                        self.ema.ema_model.eval()
+
+                        with torch.inference_mode():
+                            milestone = self.step // self.save_and_sample_every
+                            batches = num_to_groups(self.num_samples, self.batch_size)
+                            all_images_list = list(map(lambda n: self.ema.ema_model.sample(batch_size=n), batches))
+
+                        all_images = torch.cat(all_images_list, dim=0)
+
+                        torchvision.utils.save_image(all_images, str(self.results_folder / f'sample-{milestone}.png'),
+                                                     nrow=int(math.sqrt(self.num_samples)))
+                        # whether to calculate fid
+                        if self.calculate_fid:
+                            fid_score = self.fid_scorer.fid_score()
+                            fid_list.append(fid_score)
+                            accelerator.print(f'fid_score: {fid_score}')
+                pbar.update(1)
+        accelerator.print('training complete')
+        return loss_list, fid_list
 
     def train(self):
         accelerator = self.accelerator
