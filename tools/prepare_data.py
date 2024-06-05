@@ -46,6 +46,10 @@ def get_dataset(dataset_name, trainsform):
             tensor_list.append(x)
         for x, y in train_data:
             tensor_list.append(x)
+    elif dataset_name == "celeba":
+        train_data = datasets.CelebA(root='../data', split="all", transform=trainsform, download=True)
+        for x, y in train_data:
+            tensor_list.append(x)
     else:
         raise Exception(f"dataset {dataset_name} not support, choose the right dataset")
     return tensor_list
