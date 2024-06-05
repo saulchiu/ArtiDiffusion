@@ -107,8 +107,8 @@ class BadDiffusion(GaussianDiffusion):
         ])
         mask = trans(mask).to(self.device)
         tg = self.trigger.unsqueeze(0).expand(x_t.shape[0], -1, -1, -1)
+        tg = tg.to(x_start.device)
         mask = mask.unsqueeze(0).expand(x_t.shape[0], -1, -1, -1)
-        z = torch.randn_like(x_start).to(x_start.device)
         loss_2 = F.mse_loss(epsilon_p, target - tg * mask * self.gamma)
         return loss_2
 
