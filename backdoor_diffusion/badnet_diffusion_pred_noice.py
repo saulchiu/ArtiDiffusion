@@ -336,8 +336,8 @@ def main(cfg: DictConfig):
     if not os.path.exists(target_folder):
         os.makedirs(target_folder)
     device = diff_cfg.device
-    # import os
-    # os.environ["ACCELERATE_TORCH_DEVICE"] = device
+    import os
+    os.environ["ACCELERATE_TORCH_DEVICE"] = device
     trigger_path = diff_cfg.trigger
     transform = torchvision.transforms.Compose([
         torchvision.transforms.ToTensor(),
