@@ -157,8 +157,8 @@ def load_result(cfg, device):
             server=trainer_cfg.server,
             save_and_sample_every=trainer_cfg.save_and_sample_every if trainer_cfg.save_and_sample_every > 0 else trainer_cfg.train_num_steps,
         )
-    # index = random.Random().randint(a=1, b=1000)
-    index = 25
+    index = random.Random().randint(a=1, b=1000)
+    # index = 25
     x_start = transform(Image.open(f'{trainer_cfg.good_folder}/good_{index}.png'))
     if x_start.shape[1] != cfg.diffusion.image_size:
         prepare_bad_data(cfg)
@@ -204,10 +204,10 @@ def eval_result(cfg: DictConfig):
         print()
         # x_start = 0.8 * x_start + 0.2 * trigger
     elif cfg.attack == 'badnet':
-        mask = PIL.Image.open('../resource/badnet/trigger_image_32_3.png')
+        mask = PIL.Image.open('../resource/badnet/mask_32_3.png')
         mask = transform(mask)
         mask = mask.to(device)
-        # x_start = (1 - mask) * x_start + mask * trigger
+        x_start = (1 - mask) * x_start + mask * trigger
     elif cfg.attack == "benign":
         trigger = Image.open('../resource/blended/hello_kitty.jpeg')
         trigger = transform(trigger)

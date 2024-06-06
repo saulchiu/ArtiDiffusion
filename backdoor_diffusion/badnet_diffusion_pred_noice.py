@@ -251,20 +251,17 @@ class BadTrainer(denoising_diffusion_pytorch.Trainer):
                         loss = loss / self.gradient_accumulate_every
                         total_loss += loss.item()
                     self.accelerator.backward(loss)
-                pbar.set_description(f'loss: {total_loss:.4f}')
-                formatted_loss = format(total_loss, '.4f')
+                pbar.set_description(f'loss: {total_loss:.7f}')
+                formatted_loss = format(total_loss, '.7f')
                 loss_list.append({
                     'loss': float(formatted_loss),
                     'mode': mode
                 })
                 accelerator.wait_for_everyone()
                 accelerator.clip_grad_norm_(self.model.parameters(), self.max_grad_norm)
-
                 self.opt.step()
                 self.opt.zero_grad()
-
                 accelerator.wait_for_everyone()
-
                 self.step += 1
                 if accelerator.is_main_process:
                     self.ema.update()

@@ -10,4 +10,3 @@ defaults:
   - trainer: default
   - diffusion: default
   - dataset: default
-  - ft: default
