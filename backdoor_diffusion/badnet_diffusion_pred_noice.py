@@ -99,17 +99,9 @@ class BadDiffusion(GaussianDiffusion):
         return loss
 
     def badnet_loss(self, x_start, x_t, epsilon_p, t, target):
-        import sys
-        sys.path.append('..')
-        mask = PIL.Image.open('../resource/badnet/trigger_image_32_3.png')
-        trans = torchvision.transforms.Compose([
-            torchvision.transforms.ToTensor(), torchvision.transforms.Resize((x_start.shape[2], x_start.shape[2]))
-        ])
-        mask = trans(mask).to(self.device)
         tg = self.trigger.unsqueeze(0).expand(x_t.shape[0], -1, -1, -1)
         tg = tg.to(x_start.device)
-        mask = mask.unsqueeze(0).expand(x_t.shape[0], -1, -1, -1)
-        loss_2 = F.mse_loss(epsilon_p, target - tg * mask * self.gamma)
+        loss_2 = F.mse_loss(epsilon_p, target - tg * self.gamma)
         return loss_2
 
     def blended_loss(self, x_start, x_t, epsilon_p, t, target):
@@ -191,15 +183,8 @@ class BadTrainer(denoising_diffusion_pytorch.Trainer):
                             loss_1 = loss_1 * extract(self.model.loss_weight, t, loss_1.shape)
                             loss_1 = loss_1.mean()
                             if attack == "badnet":
-                                mask = PIL.Image.open('../resource/badnet/trigger_image_32_3.png')
-                                trans = torchvision.transforms.Compose([
-                                    torchvision.transforms.ToTensor(),
-                                    torchvision.transforms.Resize((img.shape[2], img.shape[2]))
-                                ])
-                                mask = trans(mask).to(self.device)
                                 tg = trigger.unsqueeze(0).expand(x_t.shape[0], -1, -1, -1)
-                                mask = mask.unsqueeze(0).expand(x_t.shape[0], -1, -1, -1)
-                                loss_2 = F.mse_loss(noise_p, noise - tg * mask * gamma)
+                                loss_2 = F.mse_loss(noise_p, noise - tg * gamma)
                             # elif self.attack == "blended":
                             loss = loss_1 + loss_2
                         # loss = self.model.bad_forward(data, mode)

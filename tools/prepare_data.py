@@ -92,11 +92,10 @@ def prepare_bad_data(config: DictConfig):
     part2 = shuffled_tensor_list[split_index:]  # 90%
     for i, e in enumerate(tqdm(part1)):
         if config.attack == "badnet":
-            trigger = Image.open(config.dataset.trigger_path)
-            trigger = trainsform(trigger)
-            mask = trainsform(
-                PIL.Image.open('../resource/badnet/trigger_image_32_3.png')
-            )
+            mask_path = f'../resource/badnet/mask_{config.diffusion.image_size}_{config.diffusion.image_size / 10}.png'
+            trigger_path = f'../resource/badnet/trigger_{config.diffusion.image_size}_{config.diffusion.image_size / 10}.png'
+            trigger = trainsform(Image.open(trigger_path))
+            mask = trainsform(Image.open(mask_path))
             e = e * (1 - mask) + mask * trigger
         elif config.attack == "blended":
             trigger = Image.open(config.dataset.trigger_path)
@@ -113,7 +112,6 @@ def prepare_bad_data(config: DictConfig):
         image_np = (image_np * 255).astype(np.uint8)
         image = Image.fromarray(image_np)
         image.save(f'{good_generate_path}/good_{i}.png')
-
 
 
 def download_cifar10(dataset_name):
