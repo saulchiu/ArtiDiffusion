@@ -101,7 +101,7 @@ class BadDiffusion(GaussianDiffusion):
     def badnet_loss(self, x_start, x_t, epsilon_p, t, target):
         import sys
         sys.path.append('..')
-        mask = PIL.Image.open('../resource/badnet/trigger_image.png')
+        mask = PIL.Image.open('../resource/badnet/trigger_image_32_3.png')
         trans = torchvision.transforms.Compose([
             torchvision.transforms.ToTensor(), torchvision.transforms.Resize((x_start.shape[2], x_start.shape[2]))
         ])
@@ -191,7 +191,7 @@ class BadTrainer(denoising_diffusion_pytorch.Trainer):
                             loss_1 = loss_1 * extract(self.model.loss_weight, t, loss_1.shape)
                             loss_1 = loss_1.mean()
                             if attack == "badnet":
-                                mask = PIL.Image.open('../resource/badnet/trigger_image.png')
+                                mask = PIL.Image.open('../resource/badnet/trigger_image_32_3.png')
                                 trans = torchvision.transforms.Compose([
                                     torchvision.transforms.ToTensor(),
                                     torchvision.transforms.Resize((img.shape[2], img.shape[2]))

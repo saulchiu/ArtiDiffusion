@@ -63,8 +63,8 @@ if __name__ == '__main__':
     device = "cuda:0"
     net = ResNet50().to(device)
     batch, nw = 32, 2
-    mask_path = '../resource/badnet/trigger_image.png'
-    trigger_path = '../resource/badnet/trigger_image_grid.png'
+    mask_path = '../resource/badnet/trigger_image_32_3.png'
+    trigger_path = '../resource/badnet/trigger_image_grid_32_3.png'
     train_dataset, test_dataset = prepare_poisoning_dataset(ratio=1e-1, mask_path=mask_path, trigger_path=trigger_path)
     train_set_size = int(len(train_dataset) * 0.8)
     valid_set_size = len(train_dataset) - train_set_size

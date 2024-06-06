@@ -204,7 +204,7 @@ def eval_result(cfg: DictConfig):
         print()
         # x_start = 0.8 * x_start + 0.2 * trigger
     elif cfg.attack == 'badnet':
-        mask = PIL.Image.open('../resource/badnet/trigger_image.png')
+        mask = PIL.Image.open('../resource/badnet/trigger_image_32_3.png')
         mask = transform(mask)
         mask = mask.to(device)
         # x_start = (1 - mask) * x_start + mask * trigger

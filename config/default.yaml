@@ -1,6 +1,6 @@
 dataset_name: cifar10
 attack: badnet
-trigger_name: trigger_image_grid.png
+trigger_name: trigger_image_grid_32_3.png
 device: 'cuda:0'
 server: pc
 

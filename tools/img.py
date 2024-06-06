@@ -36,12 +36,12 @@ def cal_ppd(tensor1, tensor2):
 
 
 if __name__ == "__main__":
-    triger_path = '../resource/badnet/trigger_image_grid.png'
+    triger_path = '../resource/badnet/trigger_image_grid_32_3.png'
     transform = torchvision.transforms.Compose([
         torchvision.transforms.ToTensor(),
     ])
     triger = Image.open(triger_path)
     triger = transform(triger).to('cuda:0')
-    mask_path = '../resource/badnet/trigger_image.png'
+    mask_path = '../resource/badnet/trigger_image_32_3.png'
     mask = transform(Image.open(mask_path)).to('cuda:0')
     print(cal_ppd(triger, mask))

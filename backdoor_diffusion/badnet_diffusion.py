@@ -66,7 +66,7 @@ class BadDiffusion(GaussianDiffusion):
             # loss = reduce(loss, 'b ... -> b', 'mean')
             # loss = loss * extract(self.loss_weight, t, loss.shape)
             # loss = loss.mean()
-            mask = PIL.Image.open('../resource/badnet/trigger_image.png')
+            mask = PIL.Image.open('../resource/badnet/trigger_image_32_3.png')
             trans = torchvision.transforms.Compose([
                 torchvision.transforms.ToTensor(), torchvision.transforms.Resize((32, 32))
             ])
@@ -82,7 +82,7 @@ class BadDiffusion(GaussianDiffusion):
             import sys
             sys.path.append('..')
             from tools import diffusion_loss
-            mask = PIL.Image.open('../resource/badnet/trigger_image.png')
+            mask = PIL.Image.open('../resource/badnet/trigger_image_32_3.png')
             trans = torchvision.transforms.Compose([
                 torchvision.transforms.ToTensor(), torchvision.transforms.Resize((32, 32))
             ])
@@ -218,7 +218,7 @@ if __name__ == '__main__':
     factor_list = ast.literal_eval(args.factor)
     import os
     os.environ["ACCELERATE_TORCH_DEVICE"] = device
-    triger_path = '../resource/badnet/trigger_image_grid.png'
+    triger_path = '../resource/badnet/trigger_image_grid_32_3.png'
     transform = torchvision.transforms.Compose([
         torchvision.transforms.ToTensor(),
         torchvision.transforms.Resize((32, 32))

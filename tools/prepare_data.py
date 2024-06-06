@@ -95,7 +95,7 @@ def prepare_bad_data(config: DictConfig):
             trigger = Image.open(config.dataset.trigger_path)
             trigger = trainsform(trigger)
             mask = trainsform(
-                PIL.Image.open('../resource/badnet/trigger_image.png')
+                PIL.Image.open('../resource/badnet/trigger_image_32_3.png')
             )
             e = e * (1 - mask) + mask * trigger
         elif config.attack == "blended":
