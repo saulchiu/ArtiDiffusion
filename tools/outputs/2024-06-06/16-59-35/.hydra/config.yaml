@@ -2,4 +2,4 @@ step: 200
 loop: 8
 cal_fid: false
 sample: false
-path: ../results/badnet/cifar10/202406041356_FID23
+path: ../results/badnet/cifar10/202406041356_FID23_BadBackdoor

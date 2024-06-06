@@ -4,7 +4,7 @@ all_folder: ../dataset/dataset-${dataset_name}-all
 train_batch_size: 64
 train_lr: 8e-5
 train_num_steps: 100000
-gradient_accumulate_every: 10
+gradient_accumulate_every: 2
 ema_decay: 0.995
 amp: True
 calculate_fid: True

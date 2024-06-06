@@ -1,0 +1,5 @@
+step: 50
+loop: 8
+cal_fid: false
+sample: false
+path: ../results/badnet/cifar10/202406041356_FID23

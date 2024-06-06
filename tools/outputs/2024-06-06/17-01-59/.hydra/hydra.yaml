@@ -112,13 +112,13 @@ hydra:
     hydra:
     - hydra.mode=RUN
     task:
-    - path=../results/badnet/cifar10/202406041356_FID23
+    - path=../results/badnet/cifar10/202406041356_FID23_BadBackdoor
     - sample=False
     - step=100
   job:
     name: eval_diffusion
     chdir: null
-    override_dirname: path=../results/badnet/cifar10/202406041356_FID23,sample=False,step=100
+    override_dirname: path=../results/badnet/cifar10/202406041356_FID23_BadBackdoor,sample=False,step=100
     id: ???
     num: ???
     config_name: default

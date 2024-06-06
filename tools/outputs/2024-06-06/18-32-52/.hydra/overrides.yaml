@@ -1,0 +1,3 @@
+- path=../results/badnet/cifar10/202406041356_FID23_BadBackdoor
+- sample=False
+- step=50
