@@ -46,7 +46,7 @@ class BenignTrainer(denoising_diffusion_pytorch.Trainer):
                     self.accelerator.backward(loss)
                 pbar.set_description(f'loss: {total_loss:.7f}')
                 formatted_loss = format(total_loss, '.7f')
-                min_loss = min(min_loss, formatted_loss)
+                min_loss = min(min_loss, total_loss)
                 loss_list.append(float(formatted_loss))
                 accelerator.wait_for_everyone()
                 accelerator.clip_grad_norm_(self.model.parameters(), self.max_grad_norm)

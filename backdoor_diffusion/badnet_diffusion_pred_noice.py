@@ -255,7 +255,7 @@ class BadTrainer(denoising_diffusion_pytorch.Trainer):
                     self.accelerator.backward(loss)
                 pbar.set_description(f'loss: {total_loss:.7f}')
                 formatted_loss = format(total_loss, '.7f')
-                min_loss = min(min_loss, formatted_loss)
+                min_loss = min(min_loss, total_loss)
                 loss_list.append({
                     'loss': float(formatted_loss),
                     'mode': mode
