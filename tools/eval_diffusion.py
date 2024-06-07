@@ -12,7 +12,6 @@ from PIL import Image
 import sys
 import torchvision.transforms.transforms as T
 
-from tools.time import now
 
 sys.path.append('../')
 from backdoor_diffusion.badnet_diffusion_pred_noice import BadDiffusion, BadTrainer
@@ -27,6 +26,8 @@ from torch.utils.data import DataLoader
 from tools.dataset import transform_cifar10
 from backdoor_diffusion.benign_deffusion import BenignTrainer
 from tools.prepare_data import prepare_bad_data
+from tools.time import now
+
 
 
 def plot_images(images, num_images, net=None):

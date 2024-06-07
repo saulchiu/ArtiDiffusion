@@ -235,6 +235,8 @@ class BadTrainer(denoising_diffusion_pytorch.Trainer):
         device = accelerator.device
         loss_list = []
         fid_list = []
+        min_loss = 1e3
+        min_fid = 1e3
         with tqdm(initial=self.step, total=self.train_num_steps, disable=not accelerator.is_main_process) as pbar:
             while self.step < self.train_num_steps:
                 total_loss = 0.
@@ -253,6 +255,7 @@ class BadTrainer(denoising_diffusion_pytorch.Trainer):
                     self.accelerator.backward(loss)
                 pbar.set_description(f'loss: {total_loss:.7f}')
                 formatted_loss = format(total_loss, '.7f')
+                min_loss = min(min_loss, formatted_loss)
                 loss_list.append({
                     'loss': float(formatted_loss),
                     'mode': mode
@@ -282,6 +285,11 @@ class BadTrainer(denoising_diffusion_pytorch.Trainer):
                         if self.calculate_fid:
                             fid_score = self.fid_scorer.fid_score()
                             fid_list.append(fid_score)
+                            min_fid = min(fid_score, min_fid)
+                            tg_bot.send2bot(msg=f'min loss: {min_loss};\n min fid: {min_fid}', title='status')
+                            if min_loss < 1e-3 or min_fid < 10:
+                                print(self.step)
+                                break
                             accelerator.print(f'fid_score: {fid_score}')
                 pbar.update(1)
         accelerator.print('training complete')
