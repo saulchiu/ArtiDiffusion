@@ -15,6 +15,7 @@ backdoor_diffusion/res*
 tools/lightning_logs
 backdoor_diffusion/outputs
 results
+tools/outputs
 
 
 
