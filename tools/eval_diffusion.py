@@ -222,7 +222,7 @@ def eval_result(cfg: DictConfig):
     device = 'cuda:0'
     # load resnet
     ld = torch.load(f'{path}/result.pth', map_location=device)
-    draw_loss(ld, 300000, 700000)
+    #draw_loss(ld, 300000, 700000)
     cfg = DictConfig(ld['config'])
     fid_list = ld['fid_list']
     diff_cfg = cfg.diffusion
