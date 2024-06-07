@@ -1,5 +1,0 @@
-step: 200
-loop: 8
-cal_fid: false
-sample: true
-path: ../results/badnet/cifar10/202406022008

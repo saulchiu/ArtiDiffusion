@@ -1,5 +1,0 @@
-step: 200
-loop: 8
-cal_fid: false
-sample: false
-path: ../results/benign/imagenette/202405250107_40k
