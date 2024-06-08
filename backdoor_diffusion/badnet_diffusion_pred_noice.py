@@ -118,7 +118,7 @@ class BadDiffusion(GaussianDiffusion):
         if mode == 0:
             t = torch.randint(0, self.num_timesteps, (b,), device=device).long()
         else:
-            t = torch.randint(200, 500, (b,), device=device).long()
+            t = torch.randint(200, 400, (b,), device=device).long()
         img = self.normalize(img)
         return self.bad_p_loss(img, t, mode, *args, **kwargs)
 
