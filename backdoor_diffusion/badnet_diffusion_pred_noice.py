@@ -112,7 +112,7 @@ class BadDiffusion(GaussianDiffusion):
         loss_2 = F.mse_loss(epsilon_p, target - tg * self.gamma)
         return loss_2
 
-    def bad_forward(self, img, mode, *args, **kwargs):
+    def forward(self, img, mode, *args, **kwargs):
         b, c, h, w, device, img_size, = *img.shape, img.device, self.image_size
         assert h == img_size and w == img_size, f'height and width of image must be {img_size}'
         if mode == 0:
@@ -249,7 +249,7 @@ class BadTrainer(denoising_diffusion_pytorch.Trainer):
                         data = next(self.dl).to(device)
                         mode = 0
                     with self.accelerator.autocast():
-                        loss = self.model.bad_forward(data, mode)
+                        loss = self.model(data, mode)
                         loss = loss / self.gradient_accumulate_every
                         total_loss += loss.item()
                     self.accelerator.backward(loss)
@@ -376,16 +376,17 @@ def main(cfg: DictConfig):
     if trainer.accelerator.is_main_process:
         prepare_bad_data(cfg)
     loss_list, fid_list = trainer.train()
-    ret = {
-        'loss_list': loss_list,
-        'fid_list': fid_list,
-        'config': OmegaConf.to_object(cfg),
-        'unet': unet.state_dict(),
-        'diffusion': diffusion.state_dict(),
-    }
-    torch.save(ret, f'{target_folder}/result.pth')
-    tg_bot.send2bot(OmegaConf.to_yaml(OmegaConf.to_object(cfg)), trainer_cfg.server)
-    print(target_folder)
+    if trainer.accelerator.is_main_process:
+        ret = {
+            'loss_list': loss_list,
+            'fid_list': fid_list,
+            'config': OmegaConf.to_object(cfg),
+            'unet': unet.state_dict(),
+            'diffusion': diffusion.state_dict(),
+        }
+        torch.save(ret, f'{target_folder}/result.pth')
+        tg_bot.send2bot(OmegaConf.to_yaml(OmegaConf.to_object(cfg)), trainer_cfg.server)
+        print(target_folder)
 
 
 if __name__ == '__main__':
