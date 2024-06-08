@@ -1,0 +1,14 @@
+bad_folder: ../dataset/dataset-${dataset_name}-bad
+good_folder: ../dataset/dataset-${dataset_name}-good
+all_folder: ../dataset/dataset-${dataset_name}-all
+train_batch_size: 512
+train_lr: 8e-5
+train_num_steps: 2000000
+gradient_accumulate_every: 2
+ema_decay: 0.995
+amp: True
+calculate_fid: True
+ratio: 0.1
+results_folder: results_test
+server: ${server}
+save_and_sample_every: 100000 # if 0, means not save before whole train end

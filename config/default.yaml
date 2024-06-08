@@ -1,10 +1,8 @@
 dataset_name: cifar10
 attack: badnet
-trigger_name: trigger_image_grid_32_3.png
+trigger_name: trigger_32_3.png
 device: 'cuda:0'
 server: pc
-
-poison_pretrain: False
 defaults:
   - noise_predictor: default
   - trainer: default
