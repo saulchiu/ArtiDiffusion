@@ -322,12 +322,12 @@ def main(cfg: DictConfig):
     import os
     import shutil
     target_folder = f'../results/{cfg.attack}/{cfg.dataset_name}/{now()}'
+    if not os.path.exists(target_folder):
+        os.makedirs(target_folder)
     script_name = os.path.basename(__file__)
     target_file_path = os.path.join(target_folder, script_name)
     shutil.copy(__file__, target_file_path)
     cfg.trainer.results_folder = target_folder
-    if not os.path.exists(target_folder):
-        os.makedirs(target_folder)
     device = diff_cfg.device
     import os
     os.environ["ACCELERATE_TORCH_DEVICE"] = device
