@@ -329,8 +329,8 @@ def main(cfg: DictConfig):
     shutil.copy(__file__, target_file_path)
     cfg.trainer.results_folder = target_folder
     device = diff_cfg.device
-    import os
-    os.environ["ACCELERATE_TORCH_DEVICE"] = device
+    # import os
+    # os.environ["ACCELERATE_TORCH_DEVICE"] = device
     trigger_path = diff_cfg.trigger
     transform = torchvision.transforms.Compose([
         torchvision.transforms.ToTensor(),
@@ -339,7 +339,6 @@ def main(cfg: DictConfig):
     trigger = Image.open(trigger_path)
     trigger = transform(trigger)
     trigger = trigger.to(device)
-    prepare_bad_data(cfg)
     unet = Unet(
         dim=unet_cfg.dim,
         dim_mults=tuple(map(int, unet_cfg.dim_mults[1:-1].split(', '))),
@@ -374,6 +373,8 @@ def main(cfg: DictConfig):
         server=trainer_cfg.server,
         save_and_sample_every=trainer_cfg.save_and_sample_every if trainer_cfg.save_and_sample_every > 0 else trainer_cfg.train_num_steps,
     )
+    if trainer.accelerator.is_main_process:
+        prepare_bad_data(cfg)
     loss_list, fid_list = trainer.train()
     ret = {
         'loss_list': loss_list,
