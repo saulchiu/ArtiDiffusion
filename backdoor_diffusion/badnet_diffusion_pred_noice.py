@@ -118,7 +118,7 @@ class BadDiffusion(GaussianDiffusion):
         if mode == 0:
             t = torch.randint(0, self.num_timesteps, (b,), device=device).long()
         else:
-            t = torch.randint(200, 400, (b,), device=device).long()
+            t = torch.randint(200, 500, (b,), device=device).long()
         img = self.normalize(img)
         return self.bad_p_loss(img, t, mode, *args, **kwargs)
 
@@ -322,6 +322,9 @@ def main(cfg: DictConfig):
     import os
     import shutil
     target_folder = f'../results/{cfg.attack}/{cfg.dataset_name}/{now()}'
+    script_name = os.path.basename(__file__)
+    target_file_path = os.path.join(target_folder, script_name)
+    shutil.copy(__file__, target_file_path)
     cfg.trainer.results_folder = target_folder
     if not os.path.exists(target_folder):
         os.makedirs(target_folder)
@@ -380,9 +383,6 @@ def main(cfg: DictConfig):
         'diffusion': diffusion.state_dict(),
     }
     torch.save(ret, f'{target_folder}/result.pth')
-    script_name = os.path.basename(__file__)
-    target_file_path = os.path.join(target_folder, script_name)
-    shutil.copy(__file__, target_file_path)
     tg_bot.send2bot(OmegaConf.to_yaml(OmegaConf.to_object(cfg)), trainer_cfg.server)
     print(target_folder)
 
