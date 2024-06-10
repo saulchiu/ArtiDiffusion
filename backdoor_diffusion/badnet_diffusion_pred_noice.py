@@ -11,7 +11,7 @@ import torchvision.transforms
 from denoising_diffusion_pytorch import Unet, GaussianDiffusion
 import torch.nn.functional as F
 from denoising_diffusion_pytorch.denoising_diffusion_pytorch import default, rearrange, random, reduce, extract, cycle, \
-    Dataset, divisible_by, num_to_groups
+    Dataset, divisible_by, num_to_groups, exists
 from PIL import Image
 from torch import nn
 from torch.utils.data.dataloader import DataLoader
@@ -230,6 +230,21 @@ class BadTrainer(denoising_diffusion_pytorch.Trainer):
         accelerator.print('training complete')
         return loss_list, fid_list
 
+    def save(self, milestone):
+        if not self.accelerator.is_local_main_process:
+            return
+
+        data = {
+            'step': self.step,
+            'diffusion': self.accelerator.get_state_dict(self.model),
+            'unet': self.model.model.state_dict(),
+            'opt': self.opt.state_dict(),
+            'ema': self.ema.state_dict(),
+            'scaler': self.accelerator.scaler.state_dict() if exists(self.accelerator.scaler) else None,
+        }
+
+        torch.save(data, str(self.results_folder / f'model-{milestone}.pt'))
+
     def train(self):
         accelerator = self.accelerator
         device = accelerator.device
@@ -271,7 +286,7 @@ class BadTrainer(denoising_diffusion_pytorch.Trainer):
 
                     if self.step != 0 and divisible_by(self.step, self.save_and_sample_every):
                         self.ema.ema_model.eval()
-
+                        self.save(milestone)
                         with torch.inference_mode():
                             milestone = self.step // self.save_and_sample_every
                             batches = num_to_groups(self.num_samples, self.batch_size)
