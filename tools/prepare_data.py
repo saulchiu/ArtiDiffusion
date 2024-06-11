@@ -14,6 +14,9 @@ import numpy as np
 import random
 from tqdm import tqdm
 
+def exist(path):
+    return os.path.exists(path) and os.path.isdir(path)
+
 
 def get_dataset(dataset_name, trainsform):
     tensor_list = []
@@ -61,33 +64,34 @@ def prepare_bad_data(config: DictConfig):
         transforms.ToTensor(),
     ])
     tensor_list = get_dataset(config.dataset_name, trainsform)
-    if config.attack == "benign":
-        dataset_all = f'../dataset/dataset-{config.dataset_name}-all'
-        os.system(f"rm -rf {dataset_all}")
-        all_generate_path = config.dataset.all_generate_path
-        os.makedirs(all_generate_path, exist_ok=True)
-        print(f"Removing existing dataset folder: {dataset_all}")
+    # genberate all dataset
+    dataset_all = f'../dataset/dataset-{config.dataset_name}-all'
+    if exist(dataset_all):
+        print('all dataset have been generated')
+    else:
+        os.makedirs(dataset_all, exist_ok=True)
         for i, e in enumerate(tqdm(tensor_list)):
             image_np = e.cpu().detach().numpy()
             image_np = image_np.transpose(1, 2, 0)
             image_np = (image_np * 255).astype(np.uint8)
             image = Image.fromarray(image_np)
-            image.save(f'{all_generate_path}/all_{i}.png')
+            image.save(f'{dataset_all}/all_{i}.png')
+    if config.attack == "benign":
+        # that is enough
         return
-    dataset_bad = f'../dataset/dataset-{config.dataset_name}-bad'
-    dataset_good = f'../dataset/dataset-{config.dataset_name}-good'
-    os.system(f"rm -rf {dataset_bad}")
-    os.system(f"rm -rf {dataset_good}")
-    print(f"Removing existing dataset folder: {dataset_bad}")
-    print(f"Removing existing dataset folder: {dataset_good}")
-    generate_path = config.dataset.generate_path
-    good_generate_path = config.dataset.good_generate_path
-    os.makedirs(generate_path, exist_ok=True)
-    os.makedirs(good_generate_path, exist_ok=True)
+    ratio = config.trainer.ratio
+    dataset_bad = f'../dataset/dataset-{config.dataset_name}-bad-{config.attack}-{str(ratio)}'
+    dataset_good = f'../dataset/dataset-{config.dataset_name}-good{config.attack}-{str(ratio)}'
+    if exist(dataset_good) and exist(dataset_bad):
+        # no need to generate poisoning dataset
+        print('poisoning datasets have been crafted')
+        return
+    os.makedirs(dataset_bad, exist_ok=True)
+    os.makedirs(dataset_good, exist_ok=True)
     torch.manual_seed(42)
     indices = torch.randperm(len(tensor_list))
     shuffled_tensor_list = [tensor_list[i] for i in indices]
-    split_index = len(tensor_list) // 10
+    split_index = len(tensor_list) // (int(100 * ratio))
     part1 = shuffled_tensor_list[:split_index]  # 10%
     part2 = shuffled_tensor_list[split_index:]  # 90%
     for i, e in enumerate(tqdm(part1)):
@@ -105,13 +109,13 @@ def prepare_bad_data(config: DictConfig):
         image_np = image_np.transpose(1, 2, 0)
         image_np = (image_np * 255).astype(np.uint8)
         image = Image.fromarray(image_np)
-        image.save(f'{generate_path}/bad_{i}.png')
+        image.save(f'{dataset_bad}/bad_{i}.png')
     for i, e in enumerate(tqdm(part2)):
         image_np = e.cpu().detach().numpy()
         image_np = image_np.transpose(1, 2, 0)
         image_np = (image_np * 255).astype(np.uint8)
         image = Image.fromarray(image_np)
-        image.save(f'{good_generate_path}/good_{i}.png')
+        image.save(f'{dataset_good}/good_{i}.png')
 
 
 def download_cifar10(dataset_name):

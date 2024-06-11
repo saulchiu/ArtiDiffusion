@@ -130,9 +130,8 @@ class BadDiffusion(GaussianDiffusion):
 class BadTrainer(denoising_diffusion_pytorch.Trainer):
     def __init__(self, diffusion, good_folder, train_batch_size, train_lr, train_num_steps,
                  gradient_accumulate_every, ratio, results_folder, server, save_and_sample_every, ema_decay, amp,
-                 calculate_fid,
-                 bad_folder=None):
-        super().__init__(diffusion_model=diffusion, folder=good_folder, train_batch_size=train_batch_size,
+                 calculate_fid, bad_folder, all_folder):
+        super().__init__(diffusion_model=diffusion, folder=all_folder, train_batch_size=train_batch_size,
                          train_lr=train_lr, train_num_steps=train_num_steps,
                          gradient_accumulate_every=gradient_accumulate_every, ema_decay=ema_decay, amp=amp,
                          calculate_fid=calculate_fid, results_folder=results_folder,
@@ -145,6 +144,12 @@ class BadTrainer(denoising_diffusion_pytorch.Trainer):
                                 num_workers=4)
             bad_dl = self.accelerator.prepare(bad_dl)
             self.bad_dl = cycle(bad_dl)
+        if good_folder is not None:
+            self.good_ds = Dataset(good_folder, self.image_size, augment_horizontal_flip=True, convert_image_to='RGB')
+            good_dl = DataLoader(self.good_ds, batch_size=train_batch_size, shuffle=True, pin_memory=True,
+                                num_workers=4)
+            good_dl = self.accelerator.prepare(good_dl)
+            self.good_dl = cycle(good_dl)
 
     def ft_train(self, trigger, gamma, attack):
         accelerator = self.accelerator
@@ -160,7 +165,7 @@ class BadTrainer(denoising_diffusion_pytorch.Trainer):
                         data = next(self.bad_dl).to(device)
                         mode = 0  # poisoning
                     else:
-                        data = next(self.dl).to(device)
+                        data = next(self.good_dl).to(device)
                         mode = 0
                     with self.accelerator.autocast():
                         if mode == 0:
@@ -261,7 +266,7 @@ class BadTrainer(denoising_diffusion_pytorch.Trainer):
                         data = next(self.bad_dl).to(device)
                         mode = 1  # poisoning
                     else:
-                        data = next(self.dl).to(device)
+                        data = next(self.good_dl).to(device)
                         mode = 0
                     with self.accelerator.autocast():
                         loss = self.model(data, mode)
@@ -286,7 +291,6 @@ class BadTrainer(denoising_diffusion_pytorch.Trainer):
 
                     if self.step != 0 and divisible_by(self.step, self.save_and_sample_every):
                         self.ema.ema_model.eval()
-                        self.save(milestone)
                         with torch.inference_mode():
                             milestone = self.step // self.save_and_sample_every
                             batches = num_to_groups(self.num_samples, self.batch_size)
@@ -296,6 +300,7 @@ class BadTrainer(denoising_diffusion_pytorch.Trainer):
 
                         torchvision.utils.save_image(all_images, str(self.results_folder / f'sample-{milestone}.png'),
                                                      nrow=int(math.sqrt(self.num_samples)))
+                        self.save(milestone)
                         # whether to calculate fid
                         if self.calculate_fid:
                             fid_score = self.fid_scorer.fid_score()
@@ -354,6 +359,7 @@ def main(cfg: DictConfig):
     trigger = Image.open(trigger_path)
     trigger = transform(trigger)
     trigger = trigger.to(device)
+    prepare_bad_data(cfg)
     unet = Unet(
         dim=unet_cfg.dim,
         dim_mults=tuple(map(int, unet_cfg.dim_mults[1:-1].split(', '))),
@@ -372,10 +378,15 @@ def main(cfg: DictConfig):
         attack=diff_cfg.attack,
         gamma=diff_cfg.gamma
     )
+    ratio = cfg.trainer.ratio
+    dataset_all = f'../dataset/dataset-{cfg.dataset_name}-all'
+    dataset_bad = f'../dataset/dataset-{cfg.dataset_name}-bad-{cfg.attack}-{str(ratio)}'
+    dataset_good = f'../dataset/dataset-{cfg.dataset_name}-good{cfg.attack}-{str(ratio)}'
     trainer = BadTrainer(
         diffusion,
-        bad_folder=trainer_cfg.bad_folder,
-        good_folder=trainer_cfg.good_folder,
+        bad_folder=dataset_bad,
+        good_folder=dataset_good,
+        all_folder=dataset_all,
         train_batch_size=trainer_cfg.train_batch_size,
         train_lr=trainer_cfg.train_lr,
         train_num_steps=trainer_cfg.train_num_steps,
@@ -388,8 +399,6 @@ def main(cfg: DictConfig):
         server=trainer_cfg.server,
         save_and_sample_every=trainer_cfg.save_and_sample_every if trainer_cfg.save_and_sample_every > 0 else trainer_cfg.train_num_steps,
     )
-    if trainer.accelerator.is_main_process:
-        prepare_bad_data(cfg)
     loss_list, fid_list = trainer.train()
     if trainer.accelerator.is_main_process:
         ret = {

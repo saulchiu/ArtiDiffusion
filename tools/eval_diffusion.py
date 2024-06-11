@@ -12,7 +12,6 @@ from PIL import Image
 import sys
 import torchvision.transforms.transforms as T
 
-
 sys.path.append('../')
 from backdoor_diffusion.badnet_diffusion_pred_noice import BadDiffusion, BadTrainer
 import torchvision.transforms
@@ -27,7 +26,6 @@ from tools.dataset import transform_cifar10
 from backdoor_diffusion.benign_deffusion import BenignTrainer
 from tools.prepare_data import prepare_bad_data
 from tools.time import now
-
 
 
 def plot_images(images, num_images, net=None):
@@ -210,6 +208,31 @@ def draw_loss(result, start, end):
     plt.show()
 
 
+def eval_tmp(path):
+    ld = torch.load(path)
+    unet = Unet(
+        dim=64,
+        dim_mults=(1, 2, 4, 8),
+        flash_attn=True
+    )
+    unet.load_state_dict(ld['unet'])
+    diffusion = BadDiffusion(
+        model=unet,
+        image_size=32,
+        sampling_timesteps=250,
+        objective='pred_noise',
+        trigger=None,
+        factor_list=None,
+        device='cuda:0',
+        reverse_step=None,
+        attack='badnet',
+        gamma=1e-3,
+        timesteps=1000
+    )
+    diffusion.load_state_dict(ld['diffusion'])
+    return diffusion
+
+
 from omegaconf import OmegaConf, DictConfig
 import hydra
 
@@ -223,7 +246,7 @@ def eval_result(cfg: DictConfig):
     device = 'cuda:0'
     # load resnet
     ld = torch.load(f'{path}/result.pth', map_location=device)
-    #draw_loss(ld, 300000, 700000)
+    # draw_loss(ld, 300000, 700000)
     cfg = DictConfig(ld['config'])
     fid_list = ld['fid_list']
     diff_cfg = cfg.diffusion
@@ -233,8 +256,8 @@ def eval_result(cfg: DictConfig):
         torchvision.transforms.Resize((diff_cfg.image_size, diff_cfg.image_size))
     ])
     diffusion, trainer, trigger, x_start = load_result(cfg, device)
-    # ld = torch.load('../results/blended/imagenette/exp2/result.pth')
     diffusion.load_state_dict(ld['diffusion'])
+    diffusion = eval_tmp('../results/badnet/cifar10/202406101847/model-2.pt')
     diffusion = diffusion.to(device)
     # trainer.my_sample()
     if do_sample:
