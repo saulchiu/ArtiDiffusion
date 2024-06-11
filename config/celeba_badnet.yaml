@@ -1,0 +1,10 @@
+dataset_name: celeba
+attack: badnet
+trigger_name: trigger_64_6.png
+device: 'cuda:1'
+server: pc
+defaults:
+  - noise_predictor: default
+  - trainer: scale_64
+  - diffusion: scale_64
+  - dataset: default
