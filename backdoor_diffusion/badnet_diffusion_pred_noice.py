@@ -273,7 +273,7 @@ def main(config: DictConfig):
     ratio = config.trainer.ratio
     dataset_all = f'../dataset/dataset-{config.dataset_name}-all'
     dataset_bad = f'../dataset/dataset-{config.dataset_name}-bad-{config.attack}-{str(ratio)}'
-    dataset_good = f'../dataset/dataset-{config.dataset_name}-good{config.attack}-{str(ratio)}'
+    dataset_good = f'../dataset/dataset-{config.dataset_name}-good-{config.attack}-{str(ratio)}'
     trainer = BadTrainer(
         diffusion,
         bad_folder=dataset_bad,
