@@ -257,7 +257,7 @@ def eval_result(cfg: DictConfig):
     ])
     diffusion, trainer, trigger, x_start = load_result(cfg, device)
     diffusion.load_state_dict(ld['diffusion'])
-    diffusion = eval_tmp('../results/badnet/cifar10/202406101847/model-2.pt')
+    # diffusion = eval_tmp('../results/badnet/cifar10/202406101847/model-2.pt')
     diffusion = diffusion.to(device)
     # trainer.my_sample()
     if do_sample:

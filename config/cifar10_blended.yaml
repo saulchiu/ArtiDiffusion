@@ -1,13 +1,12 @@
-dataset_name: celeba
-attack: badnet
-trigger_name: trigger_64_6.png
+dataset_name: cifar10
+attack: blended
+trigger_name: hello_kitty.jpeg
 device: cuda:0
-server: pc
 batch: 1024
 epoch: 2000000
-save_epoch: 400000
+save_epoch: 500000
 defaults:
   - noise_predictor: default
   - trainer: default
-  - diffusion: scale_64
+  - diffusion: scale_32
   - dataset: default

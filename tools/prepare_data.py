@@ -102,6 +102,7 @@ def prepare_bad_data(config: DictConfig):
             mask = trainsform(Image.open(mask_path))
             e = e * (1 - mask) + mask * trigger
         elif config.attack == "blended":
+            trigger_path = '../resource/blended/hello_kitty.jpeg'
             trigger = Image.open(config.dataset.trigger_path)
             trigger = trainsform(trigger)
             e = e * 0.8 + trigger * 0.2

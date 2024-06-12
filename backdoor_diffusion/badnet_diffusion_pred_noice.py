@@ -32,13 +32,10 @@ class BadDiffusion(GaussianDiffusion):
     def device(self):
         return self._device
 
-    def __init__(self, model, image_size, timesteps, sampling_timesteps, objective, trigger,
-                 factor_list, device, reverse_step, attack, gamma):
+    def __init__(self, model, image_size, timesteps, sampling_timesteps, objective, trigger, device, attack, gamma):
         super().__init__(model, image_size=image_size, timesteps=timesteps, sampling_timesteps=sampling_timesteps,
                          objective=objective)
         self.trigger = trigger
-        self.factor_list = factor_list
-        self.reverse_step = reverse_step
         self.attack = attack
         self.device = device
         self.gamma = gamma
@@ -91,7 +88,7 @@ class BadDiffusion(GaussianDiffusion):
                 loss_2 = self.badnet_loss(x_start, x_t, model_out, t, target)
             elif self.attack == "blended":
                 loss_2 = self.blended_loss(x_start, x_t, model_out, t, target)
-            loss = self.factor_list[0] * loss_1 + self.factor_list[1] * loss_2
+            loss = loss_1 + loss_2
             # print(loss)
             if math.isnan(float(loss)):
                 print("Loss is NaN!")
@@ -129,7 +126,7 @@ class BadDiffusion(GaussianDiffusion):
 
 class BadTrainer(denoising_diffusion_pytorch.Trainer):
     def __init__(self, diffusion, good_folder, train_batch_size, train_lr, train_num_steps,
-                 gradient_accumulate_every, ratio, results_folder, server, save_and_sample_every, ema_decay, amp,
+                 gradient_accumulate_every, ratio, results_folder, save_and_sample_every, ema_decay, amp,
                  calculate_fid, bad_folder, all_folder):
         super().__init__(diffusion_model=diffusion, folder=all_folder, train_batch_size=train_batch_size,
                          train_lr=train_lr, train_num_steps=train_num_steps,
@@ -137,7 +134,6 @@ class BadTrainer(denoising_diffusion_pytorch.Trainer):
                          calculate_fid=calculate_fid, results_folder=results_folder,
                          save_and_sample_every=save_and_sample_every)
         self.ratio = ratio
-        self.server = server
         if bad_folder is not None:
             self.bad_ds = Dataset(bad_folder, self.image_size, augment_horizontal_flip=True, convert_image_to='RGB')
             bad_dl = DataLoader(self.bad_ds, batch_size=train_batch_size, shuffle=True, pin_memory=True,
@@ -147,93 +143,9 @@ class BadTrainer(denoising_diffusion_pytorch.Trainer):
         if good_folder is not None:
             self.good_ds = Dataset(good_folder, self.image_size, augment_horizontal_flip=True, convert_image_to='RGB')
             good_dl = DataLoader(self.good_ds, batch_size=train_batch_size, shuffle=True, pin_memory=True,
-                                num_workers=4)
+                                 num_workers=4)
             good_dl = self.accelerator.prepare(good_dl)
             self.good_dl = cycle(good_dl)
-
-    def ft_train(self, trigger, gamma, attack):
-        accelerator = self.accelerator
-        device = accelerator.device
-        loss_list = []
-        fid_list = []
-        with tqdm(initial=self.step, total=self.train_num_steps, disable=not accelerator.is_main_process) as pbar:
-            while self.step < self.train_num_steps:
-                total_loss = 0.
-                for i in range(self.gradient_accumulate_every):
-                    import random
-                    if random.random() < self.ratio:
-                        data = next(self.bad_dl).to(device)
-                        mode = 0  # poisoning
-                    else:
-                        data = next(self.good_dl).to(device)
-                        mode = 0
-                    with self.accelerator.autocast():
-                        if mode == 0:
-                            t = torch.randint(0, self.model.num_timesteps, (data.shape[0],), device=device).long()
-                        else:
-                            t = torch.randint(200, 300, (data.shape[0],), device=device).long()
-                        img = self.model.normalize(data)
-                        noise = torch.randn_like(img)
-                        x_t = self.model.q_sample(x_start=img, t=t, noise=noise)
-                        noise_p = self.model.model(x_t, t)
-                        if mode == 0:
-                            loss = F.mse_loss(noise_p, noise, reduction='none')
-                            loss = reduce(loss, 'b ... -> b', 'mean')
-                            loss = loss * extract(self.model.loss_weight, t, loss.shape)
-                            loss = loss.mean()
-                        elif mode == 1:
-                            # backdoor attack
-                            loss_1 = F.mse_loss(noise_p, noise, reduction='none')
-                            loss_1 = reduce(loss_1, 'b ... -> b', 'mean')
-                            loss_1 = loss_1 * extract(self.model.loss_weight, t, loss_1.shape)
-                            loss_1 = loss_1.mean()
-                            if attack == "badnet":
-                                tg = trigger.unsqueeze(0).expand(x_t.shape[0], -1, -1, -1)
-                                loss_2 = F.mse_loss(noise_p, noise - tg * gamma)
-                            # elif self.attack == "blended":
-                            loss = loss_1 + loss_2
-                        # loss = self.model.bad_forward(data, mode)
-                        loss = loss / self.gradient_accumulate_every
-                        total_loss += loss.item()
-                    self.accelerator.backward(loss)
-                pbar.set_description(f'loss: {total_loss:.4f}')
-                formatted_loss = format(total_loss, '.4f')
-                loss_list.append({
-                    'loss': float(formatted_loss),
-                    'mode': mode
-                })
-                accelerator.wait_for_everyone()
-                accelerator.clip_grad_norm_(self.model.parameters(), self.max_grad_norm)
-
-                self.opt.step()
-                self.opt.zero_grad()
-
-                accelerator.wait_for_everyone()
-
-                self.step += 1
-                if accelerator.is_main_process:
-                    self.ema.update()
-
-                    if self.step != 0 and divisible_by(self.step, self.save_and_sample_every):
-                        self.ema.ema_model.eval()
-
-                        with torch.inference_mode():
-                            milestone = self.step // self.save_and_sample_every
-                            batches = num_to_groups(self.num_samples, self.batch_size)
-                            all_images_list = list(map(lambda n: self.ema.ema_model.sample(batch_size=n), batches))
-
-                        all_images = torch.cat(all_images_list, dim=0)
-
-                        torchvision.utils.save_image(all_images, str(self.results_folder / f'sample-{milestone}.png'),
-                                                     nrow=int(math.sqrt(self.num_samples)))
-                        # whether to calculate fid
-                        if self.calculate_fid:
-                            fid_score = self.fid_scorer.fid_score()
-                            fid_list.append(fid_score)
-                            accelerator.print(f'fid_score: {fid_score}')
-                pbar.update(1)
-        accelerator.print('training complete')
-        return loss_list, fid_list
 
     def save(self, milestone):
         if not self.accelerator.is_local_main_process:
@@ -316,42 +228,24 @@ class BadTrainer(denoising_diffusion_pytorch.Trainer):
         return loss_list, fid_list
 
 
-def get_args():
-    parser = argparse.ArgumentParser(description='This script does amazing things.')
-    parser.add_argument('--batch', type=int, default=128, help='Batch size for processing')
-    parser.add_argument('--step', type=int, default=10000, help='Number of steps for the diffusion model')
-    parser.add_argument('--loss_mode', type=int, default=4, help='Mode for loss function')
-    parser.add_argument('--factor', type=str, default='[1, 1, 1]',
-                        help='Factor to be used in the loss function, given as a string representation of a list')
-    parser.add_argument('--device', type=str, default='cuda:0',
-                        help='Device to run the process on (e.g., "cpu" or "cuda:0")')
-    parser.add_argument('--ratio', type=float, default=0.1, help='A poisoning ratio value to be used in calculations')
-    parser.add_argument('--results_folder', type=str, default='./res_test', help='Folder to save results')
-    parser.add_argument('--server', type=str, default='pc', help='which server you use, lab, pc, or lv')
-    parser.add_argument('--save_and_sample_every', type=int, default=0, help='save every step')
-    parser.add_help = True
-    return parser.parse_args()
-
-
 @hydra.main(version_base=None, config_path='../config', config_name='default')
-def main(cfg: DictConfig):
-    print(OmegaConf.to_yaml(OmegaConf.to_object(cfg)))
-    unet_cfg = cfg.noise_predictor
-    diff_cfg = cfg.diffusion
-    trainer_cfg = cfg.trainer
+def main(config: DictConfig):
+    print(OmegaConf.to_yaml(OmegaConf.to_object(config)))
+    unet_cfg = config.noise_predictor
+    diff_cfg = config.diffusion
+    trainer_cfg = config.trainer
     import os
     import shutil
-    target_folder = f'../results/{cfg.attack}/{cfg.dataset_name}/{now()}'
+    target_folder = f'../results/{config.attack}/{config.dataset_name}/{now()}'
     if not os.path.exists(target_folder):
         os.makedirs(target_folder)
     script_name = os.path.basename(__file__)
     target_file_path = os.path.join(target_folder, script_name)
     shutil.copy(__file__, target_file_path)
-    cfg.trainer.results_folder = target_folder
     device = diff_cfg.device
     import os
     os.environ["ACCELERATE_TORCH_DEVICE"] = device
-    trigger_path = diff_cfg.trigger
+    trigger_path = f'../resource/{config.attack}/{config.trigger_name}'
     transform = torchvision.transforms.Compose([
         torchvision.transforms.ToTensor(),
         torchvision.transforms.Resize((diff_cfg.image_size, diff_cfg.image_size))
@@ -359,7 +253,7 @@ def main(cfg: DictConfig):
     trigger = Image.open(trigger_path)
     trigger = transform(trigger)
     trigger = trigger.to(device)
-    prepare_bad_data(cfg)
+    prepare_bad_data(config)
     unet = Unet(
         dim=unet_cfg.dim,
         dim_mults=tuple(map(int, unet_cfg.dim_mults[1:-1].split(', '))),
@@ -372,16 +266,14 @@ def main(cfg: DictConfig):
         sampling_timesteps=diff_cfg.sampling_timesteps,
         objective=diff_cfg.objective,
         trigger=trigger,
-        factor_list=ast.literal_eval(str(diff_cfg.factor_list)),
         device=device,
-        reverse_step=diff_cfg.reverse_step,
         attack=diff_cfg.attack,
         gamma=diff_cfg.gamma
     )
-    ratio = cfg.trainer.ratio
-    dataset_all = f'../dataset/dataset-{cfg.dataset_name}-all'
-    dataset_bad = f'../dataset/dataset-{cfg.dataset_name}-bad-{cfg.attack}-{str(ratio)}'
-    dataset_good = f'../dataset/dataset-{cfg.dataset_name}-good{cfg.attack}-{str(ratio)}'
+    ratio = config.trainer.ratio
+    dataset_all = f'../dataset/dataset-{config.dataset_name}-all'
+    dataset_bad = f'../dataset/dataset-{config.dataset_name}-bad-{config.attack}-{str(ratio)}'
+    dataset_good = f'../dataset/dataset-{config.dataset_name}-good{config.attack}-{str(ratio)}'
     trainer = BadTrainer(
         diffusion,
         bad_folder=dataset_bad,
@@ -396,7 +288,6 @@ def main(cfg: DictConfig):
         calculate_fid=trainer_cfg.calculate_fid,
         ratio=trainer_cfg.ratio,
         results_folder=target_folder,
-        server=trainer_cfg.server,
         save_and_sample_every=trainer_cfg.save_and_sample_every if trainer_cfg.save_and_sample_every > 0 else trainer_cfg.train_num_steps,
     )
     loss_list, fid_list = trainer.train()
@@ -404,12 +295,12 @@ def main(cfg: DictConfig):
         ret = {
             'loss_list': loss_list,
             'fid_list': fid_list,
-            'config': OmegaConf.to_object(cfg),
+            'config': OmegaConf.to_object(config),
             'unet': unet.state_dict(),
             'diffusion': diffusion.state_dict(),
         }
         torch.save(ret, f'{target_folder}/result.pth')
-        tg_bot.send2bot(OmegaConf.to_yaml(OmegaConf.to_object(cfg)), trainer_cfg.server)
+        tg_bot.send2bot(OmegaConf.to_yaml(OmegaConf.to_object(config)), 'over')
         print(target_folder)
 
 

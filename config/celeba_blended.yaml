@@ -1,6 +1,6 @@
 dataset_name: celeba
-attack: badnet
-trigger_name: trigger_64_6.png
+attack: blended
+trigger_name: hello_kitty.jpeg
 device: cuda:0
 server: pc
 batch: 1024
