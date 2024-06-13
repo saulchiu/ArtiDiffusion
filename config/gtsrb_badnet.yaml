@@ -1,0 +1,12 @@
+dataset_name: gtsrb
+attack: badnet
+trigger_name: trigger_32_3.png
+device: cuda:0
+batch: 1024
+epoch: 2000000
+save_epoch: 500000
+defaults:
+  - noise_predictor: default
+  - trainer: default
+  - diffusion: scale_32
+  - dataset: default

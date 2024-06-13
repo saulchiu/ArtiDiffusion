@@ -1,0 +1,13 @@
+dataset_name: gtsrb
+attack: blended
+trigger_name: hello_kitty.jpeg
+device: cuda:0
+batch: 1024
+epoch: 2000000
+save_epoch: 500000
+defaults:
+  - noise_predictor: default
+  - trainer: default
+  - diffusion: scale_32
+  - dataset: default
+                                                                                                                                 batch: 1024                                                                                                                                                                    epoch: 2000000                                                                                                                                                                 save_epoch: 500000                                                                                                                                                             defaults:                                                                                                                                                                        - noise_predictor: default                                                                                                                                                     - trainer: default                                                                                                                                                             - diffusion: scale_32                                                                                                                                                          - dataset: default
