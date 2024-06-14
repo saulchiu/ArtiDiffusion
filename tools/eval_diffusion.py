@@ -191,7 +191,7 @@ def draw_loss(result, start, end):
     plt.show()
 
 
-def eval_tmp(path):
+def eval_tmp(path, attack, x_start, device='cuda:0'):
     ld = torch.load(path)
     unet = Unet(
         dim=64,
@@ -211,7 +211,16 @@ def eval_tmp(path):
         timesteps=1000
     )
     diffusion.load_state_dict(ld['diffusion'])
-    return diffusion
+    if attack == 'blended':
+        transform = transforms.Compose([
+            transforms.ToTensor(), transforms.Resize((64, 64))
+        ])
+        trigger = transform(
+            PIL.Image.open('../resource/blended/hello_kitty.jpeg')
+        )
+        trigger = trigger.to(device)
+        x_start = 0.8 * x_start + 0.2 * trigger
+    iter_data_sanitization(diffusion, x_start, 8, 200)
 
 
 from omegaconf import OmegaConf, DictConfig
@@ -238,10 +247,8 @@ def eval_result(cfg: DictConfig):
     ])
     diffusion, trainer, trigger, x_start = load_result(cfg, device)
     diffusion.load_state_dict(ld['diffusion'])
-    # diffusion = eval_tmp('../results/ft/diffusion.pth')
     diffusion = diffusion.to(device)
     name = cfg.dataset_name
-    cfg.attack = 'blended'
     if cfg.attack == 'blended':
         transform = transforms.Compose([
             transforms.ToTensor(), transforms.Resize((32, 32))
@@ -263,7 +270,3 @@ def eval_result(cfg: DictConfig):
         # x_start = 0.8 * x_start + 0.2 * trigger
         x_start = x_start
     iter_data_sanitization(diffusion, x_start, t, loop)
-
-
-if __name__ == '__main__':
-    eval_result()
