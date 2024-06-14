@@ -2,9 +2,9 @@ dataset_name: cifar10
 attack: blended
 trigger_name: hello_kitty.jpeg
 device: cuda:0
-batch: 1024
-epoch: 2000000
-save_epoch: 500000
+batch: 16
+epoch: 500000
+save_epoch: 0
 defaults:
   - noise_predictor: default
   - trainer: default

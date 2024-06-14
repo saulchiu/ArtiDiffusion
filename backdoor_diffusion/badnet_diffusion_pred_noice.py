@@ -162,7 +162,6 @@ class BadTrainer(denoising_diffusion_pytorch.Trainer):
             'scaler': self.accelerator.scaler.state_dict() if exists(self.accelerator.scaler) else None,
             "config": task_config
         }
-
         torch.save(data, str(self.results_folder / f'model-{milestone}.pt'))
 
     def train(self):
@@ -215,7 +214,7 @@ class BadTrainer(denoising_diffusion_pytorch.Trainer):
 
                         torchvision.utils.save_image(all_images, str(self.results_folder / f'sample-{milestone}.png'),
                                                      nrow=int(math.sqrt(self.num_samples)))
-                        self.save(milestone)
+                        # self.save(milestone)
                         # whether to calculate fid
                         if self.calculate_fid:
                             fid_score = self.fid_scorer.fid_score()
@@ -228,7 +227,18 @@ class BadTrainer(denoising_diffusion_pytorch.Trainer):
                             accelerator.print(f'fid_score: {fid_score}')
                 pbar.update(1)
         accelerator.print('training complete')
-        return loss_list, fid_list
+        data = {
+            'step': self.step,
+            'diffusion': self.accelerator.get_state_dict(self.model),
+            'unet': self.model.model.state_dict(),
+            'opt': self.opt.state_dict(),
+            'ema': self.ema.state_dict(),
+            'scaler': self.accelerator.scaler.state_dict() if exists(self.accelerator.scaler) else None,
+            "config": task_config,
+            "loss_list": loss_list,
+            'fid_list': fid_list
+        }
+        return data
 
 
 @hydra.main(version_base=None, config_path='../config', config_name='default')
@@ -295,16 +305,9 @@ def main(config: DictConfig):
     )
     global task_config
     task_config = OmegaConf.to_object(config)
-    loss_list, fid_list = trainer.train()
+    res = trainer.train()
     if trainer.accelerator.is_main_process:
-        ret = {
-            'loss_list': loss_list,
-            'fid_list': fid_list,
-            'config': OmegaConf.to_object(config),
-            'unet': unet.state_dict(),
-            'diffusion': diffusion.state_dict(),
-        }
-        torch.save(ret, f'{target_folder}/result.pth')
+        torch.save(res, f'{target_folder}/result.pth')
         tg_bot.send2bot(OmegaConf.to_yaml(OmegaConf.to_object(config)), 'over')
         print(target_folder)
 

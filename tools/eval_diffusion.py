@@ -211,6 +211,7 @@ def eval_tmp(path, attack, x_start, device='cuda:0'):
         timesteps=1000
     )
     diffusion.load_state_dict(ld['diffusion'])
+    diffusion.to(device)
     if attack == 'blended':
         transform = transforms.Compose([
             transforms.ToTensor(), transforms.Resize((64, 64))
@@ -219,8 +220,8 @@ def eval_tmp(path, attack, x_start, device='cuda:0'):
             PIL.Image.open('../resource/blended/hello_kitty.jpeg')
         )
         trigger = trigger.to(device)
-        x_start = 0.8 * x_start + 0.2 * trigger
-    iter_data_sanitization(diffusion, x_start, 8, 200)
+        # x_start = 0.8 * x_start + 0.2 * trigger
+    iter_data_sanitization(diffusion, x_start, 200, 8)
 
 
 from omegaconf import OmegaConf, DictConfig
@@ -270,3 +271,11 @@ def eval_result(cfg: DictConfig):
         # x_start = 0.8 * x_start + 0.2 * trigger
         x_start = x_start
     iter_data_sanitization(diffusion, x_start, t, loop)
+
+
+tf = torchvision.transforms.transforms.Compose([
+    torchvision.transforms.transforms.ToTensor(),
+    torchvision.transforms.transforms.Resize((64, 64))
+])
+x = tf(PIL.Image.open('../dataset/dataset-celeba-all/all_17.png')).to('cuda:0')
+eval_tmp(path='/home/chengyiqiu/model-1.pt', x_start=x, attack="blended")
