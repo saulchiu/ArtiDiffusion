@@ -11,6 +11,7 @@ from denoising_diffusion_pytorch import Unet, Trainer
 from PIL import Image
 import sys
 import torchvision.transforms.transforms as T
+from torchvision.transforms import transforms
 
 sys.path.append('../')
 from backdoor_diffusion.badnet_diffusion_pred_noice import BadDiffusion, BadTrainer
@@ -134,31 +135,13 @@ def load_result(cfg, device):
             sampling_timesteps=diff_cfg.sampling_timesteps,
             objective=diff_cfg.objective,
             trigger=trigger,
-            factor_list=ast.literal_eval(str(diff_cfg.factor_list)),
             device=device,
-            reverse_step=diff_cfg.reverse_step,
             attack=diff_cfg.attack,
             gamma=0
         )
-        trainer = BadTrainer(
-            diffusion,
-            bad_folder=trainer_cfg.bad_folder,
-            good_folder=trainer_cfg.good_folder,
-            train_batch_size=trainer_cfg.train_batch_size,
-            train_lr=trainer_cfg.train_lr,
-            train_num_steps=trainer_cfg.train_num_steps,
-            gradient_accumulate_every=trainer_cfg.gradient_accumulate_every,
-            ema_decay=trainer_cfg.ema_decay,
-            amp=trainer_cfg.amp,
-            calculate_fid=trainer_cfg.calculate_fid,
-            ratio=trainer_cfg.ratio,
-            results_folder=trainer_cfg.results_folder,
-            server=trainer_cfg.server,
-            save_and_sample_every=trainer_cfg.save_and_sample_every if trainer_cfg.save_and_sample_every > 0 else trainer_cfg.train_num_steps,
-        )
     index = random.Random().randint(a=1, b=1000)
     # index = 25
-    x_start = transform(Image.open(f'{trainer_cfg.good_folder}/good_{index}.png'))
+    x_start = transform(Image.open(f'../dataset/dataset-{cfg.dataset_name}-all/all_{index}.png'))
     if x_start.shape[1] != cfg.diffusion.image_size:
         prepare_bad_data(cfg)
     x_start = x_start.to(device)
@@ -222,10 +205,8 @@ def eval_tmp(path):
         sampling_timesteps=250,
         objective='pred_noise',
         trigger=None,
-        factor_list=None,
         device='cuda:0',
-        reverse_step=None,
-        attack='badnet',
+        attack='blended',
         gamma=1e-3,
         timesteps=1000
     )
@@ -248,29 +229,28 @@ def eval_result(cfg: DictConfig):
     ld = torch.load(f'{path}/result.pth', map_location=device)
     # draw_loss(ld, 300000, 700000)
     cfg = DictConfig(ld['config'])
-    fid_list = ld['fid_list']
+    # fid_list = ld['fid_list']
     diff_cfg = cfg.diffusion
-    dataset_cfg = cfg.dataset
+    # dataset_cfg = cfg.dataset
     transform = torchvision.transforms.Compose([
         torchvision.transforms.ToTensor(),
         torchvision.transforms.Resize((diff_cfg.image_size, diff_cfg.image_size))
     ])
     diffusion, trainer, trigger, x_start = load_result(cfg, device)
     diffusion.load_state_dict(ld['diffusion'])
-    # diffusion = eval_tmp('../results/badnet/cifar10/202406101847/model-2.pt')
+    # diffusion = eval_tmp('../results/ft/diffusion.pth')
     diffusion = diffusion.to(device)
-    # trainer.my_sample()
-    if do_sample:
-        batches = [16, 9]
-        diffusion.is_ddim_sampling = False
-        all_images_list = list(map(lambda n: diffusion.sample(batch_size=n), batches))
-        all_images = torch.cat(all_images_list, dim=0)
-        torchvision.utils.save_image(all_images, f'{path}/sample-{now()}.png',
-                                     nrow=int(math.sqrt(trainer.num_samples)))
     name = cfg.dataset_name
+    cfg.attack = 'blended'
     if cfg.attack == 'blended':
-        print()
-        # x_start = 0.8 * x_start + 0.2 * trigger
+        transform = transforms.Compose([
+            transforms.ToTensor(), transforms.Resize((32, 32))
+        ])
+        trigger = transform(
+            PIL.Image.open('../resource/blended/hello_kitty.jpeg')
+        )
+        trigger = trigger.to(device)
+        x_start = 0.8 * x_start + 0.2 * trigger
     elif cfg.attack == 'badnet':
         mask = PIL.Image.open(f'../resource/badnet/mask_{diff_cfg.image_size}_{int(diff_cfg.image_size / 10)}.png')
         mask = transform(mask)
@@ -283,12 +263,6 @@ def eval_result(cfg: DictConfig):
         # x_start = 0.8 * x_start + 0.2 * trigger
         x_start = x_start
     iter_data_sanitization(diffusion, x_start, t, loop)
-    # if cal_fid:
-    #     fid = trainer.fid_scorer.fid_score()
-    #     fid_list.append(fid)
-    #     print(fid_list)
-    #     ld['fid_list'] = fid_list
-    #     torch.save(ld, path)
 
 
 if __name__ == '__main__':

@@ -26,6 +26,8 @@ from tools.img import cal_ssim
 from tools.prepare_data import prepare_bad_data
 from tools.time import now
 
+task_config = None
+
 
 class BadDiffusion(GaussianDiffusion):
     @property
@@ -158,6 +160,7 @@ class BadTrainer(denoising_diffusion_pytorch.Trainer):
             'opt': self.opt.state_dict(),
             'ema': self.ema.state_dict(),
             'scaler': self.accelerator.scaler.state_dict() if exists(self.accelerator.scaler) else None,
+            "config": task_config
         }
 
         torch.save(data, str(self.results_folder / f'model-{milestone}.pt'))
@@ -290,6 +293,8 @@ def main(config: DictConfig):
         results_folder=target_folder,
         save_and_sample_every=trainer_cfg.save_and_sample_every if trainer_cfg.save_and_sample_every > 0 else trainer_cfg.train_num_steps,
     )
+    global task_config
+    task_config = OmegaConf.to_object(config)
     loss_list, fid_list = trainer.train()
     if trainer.accelerator.is_main_process:
         ret = {
