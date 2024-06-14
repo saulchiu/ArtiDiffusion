@@ -125,9 +125,6 @@ def load_result(cfg, device):
             save_and_sample_every=trainer_cfg.save_and_sample_every if trainer_cfg.save_and_sample_every > 0 else trainer_cfg.train_num_steps,
         )
     else:
-        trigger_path = diff_cfg.trigger
-        trigger = Image.open(trigger_path)
-        trigger = transform(trigger).to(device)
         diffusion = BadDiffusion(
             model,
             image_size=diff_cfg.image_size,
@@ -263,6 +260,9 @@ def eval_result(cfg: DictConfig):
         mask = PIL.Image.open(f'../resource/badnet/mask_{diff_cfg.image_size}_{int(diff_cfg.image_size / 10)}.png')
         mask = transform(mask)
         mask = mask.to(device)
+        trigger = PIL.Image.open(f'../resource/badnet/trigger_{diff_cfg.image_size}_{int(diff_cfg.image_size / 10)}.png')
+        trigger = transform(trigger)
+        trigger = trigger.to(device)
         x_start = (1 - mask) * x_start + mask * trigger
     elif cfg.attack == "benign":
         trigger = Image.open('../resource/blended/hello_kitty.jpeg')
@@ -273,9 +273,5 @@ def eval_result(cfg: DictConfig):
     iter_data_sanitization(diffusion, x_start, t, loop)
 
 
-tf = torchvision.transforms.transforms.Compose([
-    torchvision.transforms.transforms.ToTensor(),
-    torchvision.transforms.transforms.Resize((64, 64))
-])
-x = tf(PIL.Image.open('../dataset/dataset-celeba-all/all_17.png')).to('cuda:0')
-eval_tmp(path='/home/chengyiqiu/model-1.pt', x_start=x, attack="blended")
+if __name__ == '__main__':
+    eval_result()
