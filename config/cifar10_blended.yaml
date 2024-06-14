@@ -6,7 +6,7 @@ batch: 16
 epoch: 500000
 save_epoch: 0
 defaults:
-  - noise_predictor: default
+  - noise_predictor: dim_128
   - trainer: default
   - diffusion: scale_32
   - dataset: default
