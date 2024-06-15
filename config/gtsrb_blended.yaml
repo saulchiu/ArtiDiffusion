@@ -3,10 +3,10 @@ attack: blended
 trigger_name: hello_kitty.jpeg
 device: cuda:0
 batch: 1024
-epoch: 2000000
-save_epoch: 500000
+epoch: 500000
+save_epoch: 0
 defaults:
-  - noise_predictor: default
+  - noise_predictor: dim_128
   - trainer: default
   - diffusion: scale_32
   - dataset: default

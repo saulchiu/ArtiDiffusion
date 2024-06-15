@@ -2,9 +2,9 @@ dataset_name: gtsrb
 attack: badnet
 trigger_name: trigger_32_3.png
 device: cuda:0
-batch: 1024
-epoch: 2000000
-save_epoch: 500000
+batch: 64
+epoch: 500000
+save_epoch: 0
 defaults:
   - noise_predictor: dim_128
   - trainer: default

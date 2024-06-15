@@ -4,10 +4,10 @@ trigger_name: trigger_64_6.png
 device: cuda:0
 server: pc
 batch: 1024
-epoch: 2000000
-save_epoch: 400000
+epoch: 500000
+save_epoch: 0
 defaults:
-  - noise_predictor: default
+  - noise_predictor: dim_128
   - trainer: default
   - diffusion: scale_64
   - dataset: default

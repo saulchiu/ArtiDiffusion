@@ -5,6 +5,7 @@ import random
 
 import PIL.Image
 import detectors
+import numpy as np
 import timm
 import torch
 from denoising_diffusion_pytorch import Unet, Trainer
@@ -12,6 +13,7 @@ from PIL import Image
 import sys
 import torchvision.transforms.transforms as T
 from torchvision.transforms import transforms
+from torchvision.utils import make_grid
 
 sys.path.append('../')
 from backdoor_diffusion.badnet_diffusion_pred_noice import BadDiffusion, BadTrainer
@@ -64,26 +66,25 @@ def plot_images(images, num_images, net=None):
     plt.show()
 
 
-def data_sanitization(diffusion, x_start, t=10, device='cuda:0', plot=False):
+def data_sanitization(diffusion, x_start, t, device='cuda:0'):
     x_t = diffusion.q_sample(x_start=x_start, t=torch.tensor([t]).to(device))
-    x_T = x_t
-    x_t = x_t.unsqueeze(0)
+    x_t_before = x_t
     for i in reversed(range(t)):
         pred_img, _ = diffusion.p_sample(x=x_t, t=i + 1)
         x_t = pred_img
-    x_z = x_t.squeeze(0)
-    return x_T, x_z
+    x_start = x_t
+    x_t = x_t_before
+    return x_t, x_start
 
 
 def iter_data_sanitization(diffusion, x_start, t=200, loop=8):
     tensor_list = [x_start]
     for i in range(loop):
-        x_t, x_z = data_sanitization(diffusion, x_start, t)
-        tensor_list.append(x_t)
-        tensor_list.append(x_z)
-        x_start = x_z
+        x_t, x_start = data_sanitization(diffusion, x_start, t)
+        # tensor_list.append(x_t)
+        tensor_list.append(x_start)
     tensors = torch.stack(tensor_list, dim=0)
-    plot_images(images=tensors, num_images=tensors.shape[0])
+    # plot_images(images=tensors, num_images=tensors.shape[0])
     return tensor_list
 
 
@@ -136,13 +137,15 @@ def load_result(cfg, device):
             attack=diff_cfg.attack,
             gamma=0
         )
-    index = random.Random().randint(a=1, b=1000)
-    # index = 25
-    x_start = transform(Image.open(f'../dataset/dataset-{cfg.dataset_name}-all/all_{index}.png'))
+    x_start_list = []
+    for i in range(9):
+        index = random.Random().randint(a=1, b=1000)
+        x_start = transform(Image.open(f'../dataset/dataset-{cfg.dataset_name}-all/all_{index}.png'))
+        x_start = x_start.to(device)
+        x_start_list.append(x_start)
     if x_start.shape[1] != cfg.diffusion.image_size:
         prepare_bad_data(cfg)
-    x_start = x_start.to(device)
-    return diffusion, trainer, trigger, x_start
+    return diffusion, trainer, trigger, x_start_list
 
 
 def draw_loss(result, start, end):
@@ -217,7 +220,7 @@ def eval_tmp(path, attack, x_start, device='cuda:0'):
             PIL.Image.open('../resource/blended/hello_kitty.jpeg')
         )
         trigger = trigger.to(device)
-        # x_start = 0.8 * x_start + 0.2 * trigger
+        x_start = 0.8 * x_start + 0.2 * trigger
     iter_data_sanitization(diffusion, x_start, 200, 8)
 
 
@@ -236,17 +239,16 @@ def eval_result(cfg: DictConfig):
     ld = torch.load(f'{path}/result.pth', map_location=device)
     # draw_loss(ld, 300000, 700000)
     cfg = DictConfig(ld['config'])
-    # fid_list = ld['fid_list']
     diff_cfg = cfg.diffusion
     # dataset_cfg = cfg.dataset
     transform = torchvision.transforms.Compose([
         torchvision.transforms.ToTensor(),
         torchvision.transforms.Resize((diff_cfg.image_size, diff_cfg.image_size))
     ])
-    diffusion, trainer, trigger, x_start = load_result(cfg, device)
+    diffusion, trainer, trigger, x_start_list = load_result(cfg, device)
     diffusion.load_state_dict(ld['diffusion'])
     diffusion = diffusion.to(device)
-    name = cfg.dataset_name
+    tmp = []
     if cfg.attack == 'blended':
         transform = transforms.Compose([
             transforms.ToTensor(), transforms.Resize((32, 32))
@@ -255,7 +257,10 @@ def eval_result(cfg: DictConfig):
             PIL.Image.open('../resource/blended/hello_kitty.jpeg')
         )
         trigger = trigger.to(device)
-        x_start = 0.8 * x_start + 0.2 * trigger
+        for x_start in x_start_list:
+            x_start = 0.8 * x_start + 0.2 * trigger
+            tmp.append(x_start)
+        x_start_list = tmp
     elif cfg.attack == 'badnet':
         mask = PIL.Image.open(f'../resource/badnet/mask_{diff_cfg.image_size}_{int(diff_cfg.image_size / 10)}.png')
         mask = transform(mask)
@@ -263,14 +268,34 @@ def eval_result(cfg: DictConfig):
         trigger = PIL.Image.open(f'../resource/badnet/trigger_{diff_cfg.image_size}_{int(diff_cfg.image_size / 10)}.png')
         trigger = transform(trigger)
         trigger = trigger.to(device)
-        x_start = (1 - mask) * x_start + mask * trigger
+        for x_start in x_start_list:
+            x_start = (1 - mask) * x_start + mask * trigger
+            tmp.append(x_start)
+        x_start_list = tmp
     elif cfg.attack == "benign":
         trigger = Image.open('../resource/blended/hello_kitty.jpeg')
         trigger = transform(trigger)
         trigger = trigger.to(device)
-        # x_start = 0.8 * x_start + 0.2 * trigger
-        x_start = x_start
-    iter_data_sanitization(diffusion, x_start, t, loop)
+        # for x_start in x_start_list:
+        #     x_start = 0.8 * x_start + 0.2 * trigger
+        #     tmp.append(x_start)
+        # x_start_list = tmp
+    x_starts = torch.stack(x_start_list, dim=0)
+    chain = iter_data_sanitization(diffusion, x_starts, t, loop)
+    res = []
+    for i in range(9):
+        tensors = chain[i]
+        torchvision.utils.save_image(tensors, f'{path}/res_{i}.png', nrow=int(math.sqrt(tensors.shape[0])))
+        grid = make_grid(tensors, nrow=int(math.sqrt(tensors.shape[0])))
+        ndarr = grid.mul(255).add_(0.5).clamp_(0, 255).permute(1, 2, 0).to("cpu", torch.uint8).numpy()
+        im = Image.fromarray(ndarr)
+        res.append(torchvision.transforms.transforms.ToTensor()(im))
+
+    res = torch.stack(res, dim=0)
+    plot_images(images=res, num_images=res.shape[0])
+
+
+
 
 
 if __name__ == '__main__':

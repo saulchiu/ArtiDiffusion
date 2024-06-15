@@ -1,8 +1,4 @@
 attack: ${attack}
-trigger_path: ../resource/${attack}/${trigger_name}
-generate_path: ../dataset/dataset-${dataset_name}-bad
-good_generate_path: ../dataset/dataset-${dataset_name}-good
-all_generate_path: ../dataset/dataset-${dataset_name}-all
 batch: 64
 num_workers: 4
 part: 0.8
