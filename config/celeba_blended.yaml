@@ -3,7 +3,7 @@ attack: blended
 trigger_name: hello_kitty.jpeg
 device: cuda:0
 server: pc
-batch: 16
+batch: 32
 epoch: 500000
 save_epoch: 0
 defaults:
