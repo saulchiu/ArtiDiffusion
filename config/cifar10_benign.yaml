@@ -1,8 +1,8 @@
 dataset_name: cifar10
 attack: benign
 device: cuda:0
-batch: 16
-epoch: 500000
+batch: 128
+epoch: 600000
 save_epoch: 0
 defaults:
   - noise_predictor: cifar10
