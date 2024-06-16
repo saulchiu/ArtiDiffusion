@@ -79,7 +79,7 @@ def prepare_bad_data(config: DictConfig):
     if config.attack == "benign":
         # that is enough
         return
-    ratio = config.trainer.ratio
+    ratio = config.ratio
     dataset_bad = f'../dataset/dataset-{config.dataset_name}-bad-{config.attack}-{str(ratio)}'
     dataset_good = f'../dataset/dataset-{config.dataset_name}-good-{config.attack}-{str(ratio)}'
     if exist(dataset_good) and exist(dataset_bad):
