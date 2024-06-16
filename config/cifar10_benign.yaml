@@ -8,4 +8,3 @@ defaults:
   - noise_predictor: default
   - trainer: default
   - diffusion: scale_32
-  - dataset: default

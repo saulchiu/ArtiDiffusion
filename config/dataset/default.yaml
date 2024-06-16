@@ -1,5 +1,0 @@
-attack: ${attack}
-batch: 64
-num_workers: 4
-device: ${device}
-

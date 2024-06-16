@@ -10,4 +10,3 @@ defaults:
   - noise_predictor: celeba
   - trainer: default
   - diffusion: scale_64
-  - dataset: default

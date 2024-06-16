@@ -10,4 +10,3 @@ defaults:
   - noise_predictor: default
   - trainer: default
   - diffusion: default
-  - dataset: default

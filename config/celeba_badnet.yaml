@@ -10,4 +10,3 @@ defaults:
   - noise_predictor: dim_128
   - trainer: default
   - diffusion: scale_64
-  - dataset: default
