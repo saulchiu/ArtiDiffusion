@@ -4,7 +4,7 @@ import math
 import hydra
 import torch
 from denoising_diffusion_pytorch import Unet, GaussianDiffusion, denoising_diffusion_pytorch
-from denoising_diffusion_pytorch.denoising_diffusion_pytorch import divisible_by, num_to_groups
+from denoising_diffusion_pytorch.denoising_diffusion_pytorch import divisible_by, num_to_groups, exists
 from torchvision import utils
 from tqdm import tqdm
 import sys
@@ -18,14 +18,13 @@ from tools.time import now
 
 class BenignTrainer(denoising_diffusion_pytorch.Trainer):
     def __init__(self, diffusion, good_folder, train_batch_size, train_lr, train_num_steps,
-                 gradient_accumulate_every, results_folder, server, save_and_sample_every, ema_decay, amp,
+                 gradient_accumulate_every, results_folder, save_and_sample_every, ema_decay, amp,
                  calculate_fid):
         super().__init__(diffusion_model=diffusion, folder=good_folder, train_batch_size=train_batch_size,
                          train_lr=train_lr, train_num_steps=train_num_steps,
                          gradient_accumulate_every=gradient_accumulate_every, ema_decay=ema_decay, amp=amp,
                          calculate_fid=calculate_fid, results_folder=results_folder,
                          save_and_sample_every=save_and_sample_every)
-        self.server = server
 
     def train(self):
         accelerator = self.accelerator
@@ -71,14 +70,22 @@ class BenignTrainer(denoising_diffusion_pytorch.Trainer):
                             fid_list.append(fid_score)
                             min_fid = min(fid_score, min_fid)
                             tg_bot.send2bot(msg=f'min loss: {min_loss};\n min fid: {min_fid}', title='status')
-                            if min_loss < 1e-3 or min_fid < 10:
-                                print(self.step)
-                                break
                             accelerator.print(f'fid_score: {fid_score}')
                 pbar.update(1)
 
         accelerator.print('training complete')
-        return loss_list, fid_list
+        data = {
+            'step': self.step,
+            'diffusion': self.accelerator.get_state_dict(self.model),
+            'unet': self.model.model.state_dict(),
+            'opt': self.opt.state_dict(),
+            'ema': self.ema.state_dict(),
+            'scaler': self.accelerator.scaler.state_dict() if exists(self.accelerator.scaler) else None,
+            "config": task_config,
+            "loss_list": loss_list,
+            'fid_list': fid_list
+        }
+        return data
 
 
 def get_args():
@@ -98,62 +105,57 @@ from omegaconf import DictConfig, OmegaConf
 
 
 @hydra.main(version_base=None, config_path='../config', config_name='default')
-def main(cfg: DictConfig):
-    prepare_bad_data(cfg)
-    print(OmegaConf.to_yaml(OmegaConf.to_object(cfg)))
-    unet_cfg = cfg.noise_predictor
-    diff_cfg = cfg.diffusion
-    trainer_cfg = cfg.trainer
-
+def main(config: DictConfig):
+    prepare_bad_data(config)
+    print(OmegaConf.to_yaml(OmegaConf.to_object(config)))
+    unet_config = config.noise_predictor
+    diff_config = config.diffusion
+    trainer_config = config.trainer
     import os
     import shutil
     script_name = os.path.basename(__file__)
-    target_folder = f'../results/{cfg.attack}/{cfg.dataset_name}/{now()}'
-    cfg.trainer.results_folder = target_folder
+    target_folder = f'../results/{config.attack}/{config.dataset_name}/{now()}'
+    dataset_all = f'../dataset/dataset-{config.dataset_name}-all'
     if not os.path.exists(target_folder):
         os.makedirs(target_folder)
     target_file_path = os.path.join(target_folder, script_name)
     shutil.copy(__file__, target_file_path)
-    device = diff_cfg.device
+    device = diff_config.device
     import os
     os.environ["ACCELERATE_TORCH_DEVICE"] = device
     unet = Unet(
-        dim=unet_cfg.dim,
-        dim_mults=tuple(map(int, unet_cfg.dim_mults[1:-1].split(', '))),
-        flash_attn=unet_cfg.flash_attn
+        dim=unet_config.dim,
+        dim_mults=tuple(map(int, unet_config.dim_mults[1:-1].split(', '))),
+        flash_attn=unet_config.flash_attn
     )
     diffusion = GaussianDiffusion(
         unet,
-        image_size=diff_cfg.image_size,
-        timesteps=diff_cfg.timesteps,  # number of steps
-        sampling_timesteps=diff_cfg.sampling_timesteps,
-        objective=diff_cfg.objective,
+        image_size=diff_config.image_size,
+        timesteps=diff_config.timesteps,  # number of steps
+        sampling_timesteps=diff_config.sampling_timesteps,
+        objective=diff_config.objective,
     )
 
     trainer = BenignTrainer(
         diffusion,
-        good_folder=trainer_cfg.all_folder,
-        train_batch_size=trainer_cfg.train_batch_size,
-        train_lr=trainer_cfg.train_lr,
-        train_num_steps=trainer_cfg.train_num_steps,
-        gradient_accumulate_every=trainer_cfg.gradient_accumulate_every,
-        ema_decay=trainer_cfg.ema_decay,
-        amp=trainer_cfg.amp,
-        calculate_fid=trainer_cfg.calculate_fid,
-        results_folder=trainer_cfg.results_folder,
-        server=trainer_cfg.server,
-        save_and_sample_every=trainer_cfg.save_and_sample_every if trainer_cfg.save_and_sample_every > 0 else trainer_cfg.train_num_steps,
+        good_folder=dataset_all,
+        train_batch_size=trainer_config.train_batch_size,
+        train_lr=trainer_config.train_lr,
+        train_num_steps=trainer_config.train_num_steps,
+        gradient_accumulate_every=trainer_config.gradient_accumulate_every,
+        ema_decay=trainer_config.ema_decay,
+        amp=trainer_config.amp,
+        calculate_fid=trainer_config.calculate_fid,
+        results_folder=target_folder,
+        save_and_sample_every=trainer_config.save_and_sample_every if trainer_config.save_and_sample_every > 0 else trainer_config.train_num_steps,
     )
-    loss_list, fid_list = trainer.train()
-    ret = {
-        'loss_list': loss_list,
-        'fid_list': fid_list,
-        'config': OmegaConf.to_object(cfg),
-        'unet': unet.state_dict(),
-        'diffusion': diffusion.state_dict(),
-    }
-    torch.save(ret, f'{trainer_cfg.results_folder}/result.pth')
-    tg_bot.send2bot(OmegaConf.to_yaml(OmegaConf.to_object(cfg)), trainer_cfg.server)
+    global task_config
+    task_config = OmegaConf.to_object(config)
+    res = trainer.train()
+    if trainer.accelerator.is_main_process:
+        torch.save(res, f'{target_folder}/result.pth')
+        tg_bot.send2bot(OmegaConf.to_yaml(OmegaConf.to_object(config)), 'over')
+        print(target_folder)
 
 
 if __name__ == '__main__':

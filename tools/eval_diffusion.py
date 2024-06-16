@@ -81,7 +81,9 @@ def iter_data_sanitization(diffusion, x_start, t=200, loop=8):
     tensor_list = [x_start]
     for i in range(loop):
         x_t, x_start = data_sanitization(diffusion, x_start, t)
-        # tensor_list.append(x_t)
+        # whether append the sample with noise
+        tensor_list.append(x_t)
+        # append the sample after data sanitization
         tensor_list.append(x_start)
     tensors = torch.stack(tensor_list, dim=0)
     # plot_images(images=tensors, num_images=tensors.shape[0])
@@ -122,7 +124,6 @@ def load_result(cfg, device):
             amp=trainer_cfg.amp,
             calculate_fid=trainer_cfg.calculate_fid,
             results_folder=trainer_cfg.results_folder,
-            server=trainer_cfg.server,
             save_and_sample_every=trainer_cfg.save_and_sample_every if trainer_cfg.save_and_sample_every > 0 else trainer_cfg.train_num_steps,
         )
     else:
@@ -138,8 +139,9 @@ def load_result(cfg, device):
             gamma=0
         )
     x_start_list = []
-    for i in range(9):
+    for i in range(1):
         index = random.Random().randint(a=1, b=1000)
+        print(index)
         x_start = transform(Image.open(f'../dataset/dataset-{cfg.dataset_name}-all/all_{index}.png'))
         x_start = x_start.to(device)
         x_start_list.append(x_start)
@@ -191,37 +193,37 @@ def draw_loss(result, start, end):
     plt.show()
 
 
-def eval_tmp(path, attack, x_start, device='cuda:0'):
-    ld = torch.load(path)
-    unet = Unet(
-        dim=64,
-        dim_mults=(1, 2, 4, 8),
-        flash_attn=True
-    )
-    unet.load_state_dict(ld['unet'])
-    diffusion = BadDiffusion(
-        model=unet,
-        image_size=32,
-        sampling_timesteps=250,
-        objective='pred_noise',
-        trigger=None,
-        device='cuda:0',
-        attack='blended',
-        gamma=1e-3,
-        timesteps=1000
-    )
-    diffusion.load_state_dict(ld['diffusion'])
-    diffusion.to(device)
-    if attack == 'blended':
-        transform = transforms.Compose([
-            transforms.ToTensor(), transforms.Resize((64, 64))
-        ])
-        trigger = transform(
-            PIL.Image.open('../resource/blended/hello_kitty.jpeg')
-        )
-        trigger = trigger.to(device)
-        x_start = 0.8 * x_start + 0.2 * trigger
-    iter_data_sanitization(diffusion, x_start, 200, 8)
+# def eval_tmp(path, attack, x_start, device='cuda:0'):
+#     ld = torch.load(path)
+#     unet = Unet(
+#         dim=64,
+#         dim_mults=(1, 2, 4, 8),
+#         flash_attn=True
+#     )
+#     unet.load_state_dict(ld['unet'])
+#     diffusion = BadDiffusion(
+#         model=unet,
+#         image_size=32,
+#         sampling_timesteps=250,
+#         objective='pred_noise',
+#         trigger=None,
+#         device='cuda:0',
+#         attack='blended',
+#         gamma=1e-3,
+#         timesteps=1000
+#     )
+#     diffusion.load_state_dict(ld['diffusion'])
+#     diffusion.to(device)
+#     if attack == 'blended':
+#         transform = transforms.Compose([
+#             transforms.ToTensor(), transforms.Resize((64, 64))
+#         ])
+#         trigger = transform(
+#             PIL.Image.open('../resource/blended/hello_kitty.jpeg')
+#         )
+#         trigger = trigger.to(device)
+#         x_start = 0.8 * x_start + 0.2 * trigger
+#     iter_data_sanitization(diffusion, x_start, 200, 8)
 
 
 from omegaconf import OmegaConf, DictConfig
@@ -283,7 +285,7 @@ def eval_result(cfg: DictConfig):
     x_starts = torch.stack(x_start_list, dim=0)
     chain = iter_data_sanitization(diffusion, x_starts, t, loop)
     res = []
-    for i in range(9):
+    for i in range(len(chain)):
         tensors = chain[i]
         torchvision.utils.save_image(tensors, f'{path}/res_{i}.png', nrow=int(math.sqrt(tensors.shape[0])))
         grid = make_grid(tensors, nrow=int(math.sqrt(tensors.shape[0])))

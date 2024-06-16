@@ -5,5 +5,4 @@ gradient_accumulate_every: 2
 ema_decay: 0.995
 amp: True
 calculate_fid: True
-ratio: 0.1
 save_and_sample_every: ${save_epoch} # if 0, means not save before whole train end

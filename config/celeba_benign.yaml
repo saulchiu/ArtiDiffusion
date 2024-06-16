@@ -1,13 +1,11 @@
 dataset_name: celeba
-attack: badnet
-trigger_name: trigger_64_6.png
+attack: benign
 device: cuda:0
 batch: 32
 epoch: 500000
 save_epoch: 0
-ratio: 0.1
 defaults:
-  - noise_predictor: dim_128
+  - noise_predictor: celeba
   - trainer: default
   - diffusion: scale_64
   - dataset: default

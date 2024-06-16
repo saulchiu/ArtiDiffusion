@@ -2,11 +2,12 @@ dataset_name: cifar10
 attack: badnet
 trigger_name: trigger_32_3.png
 device: cuda:0
-batch: 1024
-epoch: 2000000
-save_epoch: 500000
+batch: 16
+epoch: 500000
+save_epoch: 0
+ratio: 0.1
 defaults:
-  - noise_predictor: default
+  - noise_predictor: dim_128
   - trainer: default
   - diffusion: scale_32
   - dataset: default

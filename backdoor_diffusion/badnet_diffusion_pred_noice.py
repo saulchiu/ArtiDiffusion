@@ -221,9 +221,6 @@ class BadTrainer(denoising_diffusion_pytorch.Trainer):
                             fid_list.append(fid_score)
                             min_fid = min(fid_score, min_fid)
                             tg_bot.send2bot(msg=f'min loss: {min_loss};\n min fid: {min_fid}', title='status')
-                            if min_loss < 1e-3 or min_fid < 10:
-                                print(self.step)
-                                break
                             accelerator.print(f'fid_score: {fid_score}')
                 pbar.update(1)
         accelerator.print('training complete')
@@ -283,7 +280,7 @@ def main(config: DictConfig):
         attack=diff_cfg.attack,
         gamma=diff_cfg.gamma
     )
-    ratio = config.trainer.ratio
+    ratio = config.ratio
     dataset_all = f'../dataset/dataset-{config.dataset_name}-all'
     dataset_bad = f'../dataset/dataset-{config.dataset_name}-bad-{config.attack}-{str(ratio)}'
     dataset_good = f'../dataset/dataset-{config.dataset_name}-good-{config.attack}-{str(ratio)}'
@@ -299,7 +296,7 @@ def main(config: DictConfig):
         ema_decay=trainer_cfg.ema_decay,
         amp=trainer_cfg.amp,
         calculate_fid=trainer_cfg.calculate_fid,
-        ratio=trainer_cfg.ratio,
+        ratio=config.ratio,
         results_folder=target_folder,
         save_and_sample_every=trainer_cfg.save_and_sample_every if trainer_cfg.save_and_sample_every > 0 else trainer_cfg.train_num_steps,
     )
