@@ -11,11 +11,11 @@ from tqdm import tqdm
 from torch.utils.tensorboard import SummaryWriter
 import sys
 
-
 sys.path.append('..')
 from tools import tg_bot
 from tools.prepare_data import prepare_bad_data
 from tools.time import now
+from tools.dataset import rm_if_exist
 
 
 class BenignTrainer(denoising_diffusion_pytorch.Trainer):
@@ -29,8 +29,10 @@ class BenignTrainer(denoising_diffusion_pytorch.Trainer):
                          save_and_sample_every=save_and_sample_every)
 
     def train(self):
-        writer1 = SummaryWriter('../runs/loss')
-        writer2 = SummaryWriter('../runs/fid')
+        rm_if_exist(f'../runs/{tag}_loss')
+        rm_if_exist(f'../runs/{tag}_fid')
+        writer1 = SummaryWriter(f'../runs/{tag}_loss')
+        writer2 = SummaryWriter(f'../runs/{tag}_fid')
         accelerator = self.accelerator
         device = accelerator.device
         loss_list = []
@@ -89,7 +91,7 @@ class BenignTrainer(denoising_diffusion_pytorch.Trainer):
                             fid_score = self.fid_scorer.fid_score()
                             fid_list.append(fid_score)
                             min_fid = min(fid_score, min_fid)
-                            tg_bot.send2bot(msg=f'min loss: {min_loss};\n min fid: {min_fid}', title='status')
+                            tg_bot.send2bot(msg=f'min loss: {min_loss};\n min fid: {min_fid}', title=tag)
                             accelerator.print(f'fid_score: {fid_score}')
                 writer1.flush()
                 writer2.flush()
@@ -145,18 +147,34 @@ def main(config: DictConfig):
     device = diff_config.device
     import os
     os.environ["ACCELERATE_TORCH_DEVICE"] = device
-    unet = Unet(
-        dim=unet_config.dim,
-        dim_mults=tuple(map(int, unet_config.dim_mults[1:-1].split(', '))),
-        flash_attn=unet_config.flash_attn
-    )
-    diffusion = GaussianDiffusion(
-        unet,
-        image_size=diff_config.image_size,
-        timesteps=diff_config.timesteps,  # number of steps
-        sampling_timesteps=diff_config.sampling_timesteps,
-        objective=diff_config.objective,
-    )
+    if config.dataset_name == "cifar10":
+        import model.unet
+        import model.DDPM
+        unet = model.unet.Unet(
+            dim=128,
+            image_size=32,
+            dim_multiply=(1, 2, 2, 2),
+            dropout=0.1
+        )
+        diffusion = model.DDPM.GaussianDiffusion(
+            model=unet,
+            image_size=32,
+            time_step=1000,
+            loss_type='l2'
+        )
+    else:
+        unet = Unet(
+            dim=unet_config.dim,
+            dim_mults=tuple(map(int, unet_config.dim_mults[1:-1].split(', '))),
+            flash_attn=unet_config.flash_attn
+        )
+        diffusion = GaussianDiffusion(
+            unet,
+            image_size=diff_config.image_size,
+            timesteps=diff_config.timesteps,  # number of steps
+            sampling_timesteps=diff_config.sampling_timesteps,
+            objective=diff_config.objective,
+        )
 
     trainer = BenignTrainer(
         diffusion,
@@ -174,7 +192,7 @@ def main(config: DictConfig):
     global task_config
     task_config = OmegaConf.to_object(config)
     global tag
-    tag = f'{config.dataset_name}_{config.attack}_{str(config.ratio)}'
+    tag = f'{config.dataset_name}_{config.attack}'
     res = trainer.train()
     if trainer.accelerator.is_main_process:
         torch.save(res, f'{target_folder}/result.pth')

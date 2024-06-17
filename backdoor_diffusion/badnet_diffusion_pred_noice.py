@@ -10,6 +10,8 @@ import torch
 import torchvision.transforms
 from denoising_diffusion_pytorch import Unet, GaussianDiffusion
 import torch.nn.functional as F
+from denoising_diffusion_pytorch.fid_evaluation import FIDEvaluation
+from torch.utils.tensorboard import SummaryWriter
 from denoising_diffusion_pytorch.denoising_diffusion_pytorch import default, rearrange, random, reduce, extract, cycle, \
     Dataset, divisible_by, num_to_groups, exists
 from PIL import Image
@@ -24,6 +26,7 @@ sys.path.append('../')
 from tools import tg_bot
 from tools.img import cal_ssim
 from tools.prepare_data import prepare_bad_data
+from tools.dataset import rm_if_exist
 from tools.time import now
 
 task_config = None
@@ -165,12 +168,27 @@ class BadTrainer(denoising_diffusion_pytorch.Trainer):
         torch.save(data, str(self.results_folder / f'model-{milestone}.pt'))
 
     def train(self):
+        rm_if_exist(f'../runs/{tag}_loss')
+        rm_if_exist(f'../runs/{tag}_fid')
+        writer1 = SummaryWriter(f'../runs/{tag}_loss')
+        writer2 = SummaryWriter(f'../runs/{tag}_fid')
         accelerator = self.accelerator
         device = accelerator.device
         loss_list = []
         fid_list = []
         min_loss = 1e3
         min_fid = 1e3
+        fid_evaler = FIDEvaluation(
+            batch_size=self.batch_size,
+            dl=self.dl,
+            sampler=self.ema.ema_model,
+            channels=self.channels,
+            accelerator=self.accelerator,
+            stats_dir=self.results_folder,
+            device=self.device,
+            num_fid_samples=1000,
+            inception_block_idx=2048
+        )
         with tqdm(initial=self.step, total=self.train_num_steps, disable=not accelerator.is_main_process) as pbar:
             while self.step < self.train_num_steps:
                 total_loss = 0.
@@ -187,6 +205,8 @@ class BadTrainer(denoising_diffusion_pytorch.Trainer):
                         loss = loss / self.gradient_accumulate_every
                         total_loss += loss.item()
                     self.accelerator.backward(loss)
+                # use tensorboard
+                writer1.add_scalar(tag, float(total_loss), int(self.step))
                 pbar.set_description(f'loss: {total_loss:.7f}')
                 formatted_loss = format(total_loss, '.7f')
                 min_loss = min(min_loss, total_loss)
@@ -214,13 +234,17 @@ class BadTrainer(denoising_diffusion_pytorch.Trainer):
 
                         torchvision.utils.save_image(all_images, str(self.results_folder / f'sample-{milestone}.png'),
                                                      nrow=int(math.sqrt(self.num_samples)))
+                        fid = fid_evaler.fid_score()
+                        writer2.add_scalar(tag, float(fid), int(self.step))
+                        min_fid = min(fid, min_fid)
+                        fid_list.append(fid)
                         # self.save(milestone)
                         # whether to calculate fid
-                        if self.calculate_fid:
+                        if self.calculate_fid and self.step == self.train_num_steps:
                             fid_score = self.fid_scorer.fid_score()
                             fid_list.append(fid_score)
                             min_fid = min(fid_score, min_fid)
-                            tg_bot.send2bot(msg=f'min loss: {min_loss};\n min fid: {min_fid}', title='status')
+                            tg_bot.send2bot(msg=f'min loss: {min_loss};\n min fid: {min_fid}', title=tag)
                             accelerator.print(f'fid_score: {fid_score}')
                 pbar.update(1)
         accelerator.print('training complete')
@@ -301,6 +325,8 @@ def main(config: DictConfig):
         save_and_sample_every=trainer_cfg.save_and_sample_every if trainer_cfg.save_and_sample_every > 0 else trainer_cfg.train_num_steps,
     )
     global task_config
+    global tag
+    tag = f'{config.dataset_name}_{config.attack}_{str(config.ratio)}'
     task_config = OmegaConf.to_object(config)
     res = trainer.train()
     if trainer.accelerator.is_main_process:

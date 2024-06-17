@@ -1,3 +1,6 @@
+import os
+import shutil
+
 import PIL.Image
 import torch
 import torchvision
@@ -12,6 +15,14 @@ transform_cifar10 = T.Compose([
     T.Resize((32, 32)),
     T.Normalize((0.4914, 0.4822, 0.4465), (0.2023, 0.1994, 0.2010))
 ])
+
+
+def rm_if_exist(folder_path):
+    if os.path.exists(folder_path) and os.path.isdir(folder_path):
+        shutil.rmtree(folder_path)
+        print(f"delete exist folder：{folder_path}")
+    else:
+        print(f"folder does not exist：{folder_path}")
 
 
 class PoisoningDataset(torch.utils.data.Dataset):
