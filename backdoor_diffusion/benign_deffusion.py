@@ -59,7 +59,7 @@ class BenignTrainer(denoising_diffusion_pytorch.Trainer):
                         total_loss += loss.item()
                     self.accelerator.backward(loss)
                 # use tensorboard
-                writer1.add_scalar("same", float(total_loss), int(self.step))
+                writer1.add_scalar(tag, float(total_loss), int(self.step))
                 pbar.set_description(f'loss: {total_loss:.4f}')
                 formatted_loss = format(total_loss, '.4f')
                 min_loss = min(min_loss, total_loss)
@@ -79,7 +79,7 @@ class BenignTrainer(denoising_diffusion_pytorch.Trainer):
                             batches = num_to_groups(self.num_samples, self.batch_size)
                             all_images_list = list(map(lambda n: self.ema.ema_model.sample(batch_size=n), batches))
                         fid = fid_evaler.fid_score()
-                        writer2.add_scalar('same', float(fid), int(self.step))
+                        writer2.add_scalar(tag, float(fid), int(self.step))
                         min_fid = min(fid, min_fid)
                         fid_list.append(fid)
                         all_images = torch.cat(all_images_list, dim=0)
@@ -173,6 +173,8 @@ def main(config: DictConfig):
     )
     global task_config
     task_config = OmegaConf.to_object(config)
+    global tag
+    tag = f'{config.dataset_name}_{config.attack}_{str(config.ratio)}'
     res = trainer.train()
     if trainer.accelerator.is_main_process:
         torch.save(res, f'{target_folder}/result.pth')
