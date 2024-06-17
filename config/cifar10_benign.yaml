@@ -3,7 +3,7 @@ attack: benign
 device: cuda:0
 batch: 128
 epoch: 600000
-save_epoch: 0
+save_epoch: 10000
 defaults:
   - noise_predictor: cifar10
   - trainer: default

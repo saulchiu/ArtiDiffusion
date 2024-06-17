@@ -5,8 +5,10 @@ import hydra
 import torch
 from denoising_diffusion_pytorch import Unet, GaussianDiffusion, denoising_diffusion_pytorch
 from denoising_diffusion_pytorch.denoising_diffusion_pytorch import divisible_by, num_to_groups, exists
+from denoising_diffusion_pytorch.fid_evaluation import FIDEvaluation
 from torchvision import utils
 from tqdm import tqdm
+from torch.utils.tensorboard import SummaryWriter
 import sys
 
 
@@ -27,12 +29,25 @@ class BenignTrainer(denoising_diffusion_pytorch.Trainer):
                          save_and_sample_every=save_and_sample_every)
 
     def train(self):
+        writer1 = SummaryWriter('../runs/loss')
+        writer2 = SummaryWriter('../runs/fid')
         accelerator = self.accelerator
         device = accelerator.device
         loss_list = []
         fid_list = []
         min_loss = 1e3
         min_fid = 1e3
+        fid_evaler = FIDEvaluation(
+            batch_size=self.batch_size,
+            dl=self.dl,
+            sampler=self.ema.ema_model,
+            channels=self.channels,
+            accelerator=self.accelerator,
+            stats_dir=self.results_folder,
+            device=self.device,
+            num_fid_samples=1000,
+            inception_block_idx=2048
+        )
         with tqdm(initial=self.step, total=self.train_num_steps, disable=not accelerator.is_main_process) as pbar:
             while self.step < self.train_num_steps:
                 total_loss = 0.
@@ -43,8 +58,10 @@ class BenignTrainer(denoising_diffusion_pytorch.Trainer):
                         loss = loss / self.gradient_accumulate_every
                         total_loss += loss.item()
                     self.accelerator.backward(loss)
-                pbar.set_description(f'loss: {total_loss:.7f}')
-                formatted_loss = format(total_loss, '.7f')
+                # use tensorboard
+                writer1.add_scalar("same", float(total_loss), int(self.step))
+                pbar.set_description(f'loss: {total_loss:.4f}')
+                formatted_loss = format(total_loss, '.4f')
                 min_loss = min(min_loss, total_loss)
                 loss_list.append(float(formatted_loss))
                 accelerator.wait_for_everyone()
@@ -61,16 +78,21 @@ class BenignTrainer(denoising_diffusion_pytorch.Trainer):
                             milestone = self.step // self.save_and_sample_every
                             batches = num_to_groups(self.num_samples, self.batch_size)
                             all_images_list = list(map(lambda n: self.ema.ema_model.sample(batch_size=n), batches))
-
+                        fid = fid_evaler.fid_score()
+                        writer2.add_scalar('same', float(fid), int(self.step))
+                        min_fid = min(fid, min_fid)
+                        fid_list.append(fid)
                         all_images = torch.cat(all_images_list, dim=0)
                         utils.save_image(all_images, str(self.results_folder / f'sample-{milestone}.png'),
                                          nrow=int(math.sqrt(self.num_samples)))
-                        if self.calculate_fid:
+                        if self.calculate_fid and self.step == self.train_num_steps:
                             fid_score = self.fid_scorer.fid_score()
                             fid_list.append(fid_score)
                             min_fid = min(fid_score, min_fid)
                             tg_bot.send2bot(msg=f'min loss: {min_loss};\n min fid: {min_fid}', title='status')
                             accelerator.print(f'fid_score: {fid_score}')
+                writer1.flush()
+                writer2.flush()
                 pbar.update(1)
 
         accelerator.print('training complete')
