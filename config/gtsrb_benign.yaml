@@ -1,10 +1,10 @@
 dataset_name: gtsrb
 attack: benign
 device: cuda:0
-batch: 64
-epoch: 500000
+batch: 128
+epoch: 600000
 save_epoch: 0
 defaults:
-  - noise_predictor: dim_128
+  - noise_predictor: gtsrb
   - trainer: default
   - diffusion: scale_32
