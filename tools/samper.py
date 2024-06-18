@@ -58,7 +58,7 @@ class DDIM_Sampler(nn.Module):
     def ddim_p_sample(self, xt, i, clip=True):
         t = self.tau[i]
         batched_time = torch.full((xt.shape[0],), t, device=self.device, dtype=torch.long)
-        pred_noise = self.model.eps_model(xt, batched_time)  # corresponds to epsilon_{theta}
+        pred_noise = self.model.ema.ema_model(xt, batched_time)  # corresponds to epsilon_{theta}
         x0 = self.sqrt_recip_alpha_bar[t] * xt - self.sqrt_recip_alpha_bar_min_1[t] * pred_noise
         if clip:
             x0.clamp_(-1., 1.)

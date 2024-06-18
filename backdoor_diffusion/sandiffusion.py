@@ -50,6 +50,7 @@ class SanDiffusion(DenoiseDiffusion):
         self.sample_step = sample_step
         self.device = self.eps_model.device
         self.image_size = self.eps_model.image_size
+        self.ema = EMA(self.eps_model).to(device=self.device)
 
     def p_sample(self, xt: torch.Tensor, t: torch.Tensor):
         eps_theta = self.eps_model(xt, t)
@@ -145,16 +146,17 @@ def train(config: DictConfig):
             t = torch.randint(0, 1000, (b,), device=device, dtype=torch.long)
             eps = torch.randn_like(x_0, device=device)
             x_t = diffusion.q_sample(x_0, t, eps)
-            eps_theta = diffusion.eps_model(x_t, t)
+            eps_theta = diffusion.ema.ema_model(x_t, t)
             loss = loss_fn(eps_theta, eps)
             loss.backward()
             loss_list.append(float(loss))
             writer1.add_scalar(tag, float(loss), current_epoch)
             optimizer.step()
+            diffusion.ema.update()
             pbar.set_description(f'loss: {loss:.4f}, fid: {fid_value:4f}')
             if current_epoch >= save_epoch and current_epoch % save_epoch == 0:
-                diffusion.eps_model.eval()
-                with torch.no_grad():
+                diffusion.ema.ema_model.eval()
+                with torch.inference_mode():
                     fake_sample = sample_fn(1000)
                     rm_if_exist(f'{target_folder}/fid')
                     save_tensor_images(fake_sample, f'{target_folder}/fid')
