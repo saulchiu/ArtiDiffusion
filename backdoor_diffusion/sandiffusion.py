@@ -99,7 +99,7 @@ def train(config: DictConfig):
         image_size=config.image_size,
         dim_multiply=tuple(map(int, config.unet.dim_mults[1:-1].split(', '))),
         dropout=config.unet.dropout
-    )
+    ).cuda()
     unet = torch.nn.parallel.DistributedDataParallel(unet)
     trans = Compose([
         ToTensor(), Resize((config.image_size, config.image_size))
