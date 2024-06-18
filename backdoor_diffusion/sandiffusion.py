@@ -165,8 +165,8 @@ def train(config: DictConfig):
                     writer2.add_scalar(tag, float(fid_value), epoch)
                     writer2.flush()
             writer1.flush()
-            del loss, x_0, x_t, eps_theta, eps
-            torch.cuda.empty_cache()
+            # del loss, x_0, x_t, eps_theta, eps
+            # torch.cuda.empty_cache()
             current_epoch += 1
             pbar.update(1)
     rm_if_exist(f'{target_folder}/fid')
@@ -189,6 +189,6 @@ def train(config: DictConfig):
 
 
 if __name__ == '__main__':
-    torch.backends.cudnn.enabled = True
-    torch.backends.cudnn.benchmark = True
+    # torch.backends.cudnn.enabled = True
+    # torch.backends.cudnn.benchmark = True
     train()
