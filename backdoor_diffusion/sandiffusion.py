@@ -6,7 +6,7 @@ from pytorch_fid.inception import InceptionV3
 
 import torch
 from PIL import Image
-from labml_nn.diffusion.ddpm import DenoiseDiffusion
+from labml_nn.diffusion.ddpm import DenoiseDiffusion, experiment
 from torch import nn
 from torch.utils.data.dataset import Dataset
 from torch.utils.tensorboard import SummaryWriter
@@ -82,8 +82,6 @@ def train(config: DictConfig):
     target_file_path = os.path.join(target_folder, script_name)
     shutil.copy(__file__, target_file_path)
     device = config.device
-    # import os
-    # os.environ["ACCELERATE_TORCH_DEVICE"] = device
     lr = config.lr
     loss_type = config.loss_type
     sample_type = config.sample_type
@@ -154,6 +152,7 @@ def train(config: DictConfig):
             optimizer.step()
             pbar.set_description(f'loss: {loss:.4f}, fid: {fid_value:4f}')
             if current_epoch >= save_epoch and current_epoch % save_epoch == 0:
+                diffusion.eps_model.eval()
                 with torch.no_grad():
                     fake_sample = sample_fn(1000)
                     rm_if_exist(f'{target_folder}/fid')
@@ -163,8 +162,10 @@ def train(config: DictConfig):
                     fid_value = calculate_frechet_distance(m1, s1, m2, s2)
                     fid_list.append(fid_value)
                     writer2.add_scalar(tag, float(fid_value), epoch)
+                    writer2.flush()
             writer1.flush()
-            writer2.flush()
+            del loss, x_0, x_t, eps_theta, eps
+            torch.cuda.empty_cache()
             current_epoch += 1
             pbar.update(1)
     rm_if_exist(f'{target_folder}/fid')
