@@ -29,7 +29,7 @@ sys.path.append('../')
 from tools.unet import Unet
 from tools.dataset import cycle, SanDataset
 from tools.samper import DDIM_Sampler
-from tools.time import now
+from tools.time import now, get_hour
 from tools.prepare_data import prepare_bad_data
 from tools.dataset import rm_if_exist, save_tensor_images
 from tools.tg_bot import send2bot
