@@ -10,6 +10,7 @@ loss_type: 'l2'
 sample_type: 'ddim'
 image_size: 32
 fid_estimate_batch_size: 128
+gpu_id: '0,1'
 
 unet:
   dim: 128

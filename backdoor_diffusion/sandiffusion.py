@@ -19,13 +19,12 @@ from ema_pytorch.ema_pytorch import EMA
 import hydra
 from omegaconf import DictConfig, OmegaConf
 from torch.utils.tensorboard import SummaryWriter
-from accelerate import Accelerator
-from accelerate.utils import set_seed
-from accelerate.utils import InitProcessGroupKwargs
-import sys
-
+from torch.utils.data.distributed import DistributedSampler
 from tqdm import tqdm
 
+
+
+import sys
 sys.path.append('../')
 from tools.unet import Unet
 from tools.dataset import cycle, SanDataset
@@ -73,6 +72,8 @@ class SanDiffusion(DenoiseDiffusion):
 
 @hydra.main(version_base=None, config_path='../config', config_name='default')
 def train(config: DictConfig):
+    import os
+    os.environ['CUDA_VISIBLE_DEVICES'] = config.gpu_id
     prepare_bad_data(config)
     print(OmegaConf.to_yaml(OmegaConf.to_object(config)))
     import os
@@ -99,19 +100,22 @@ def train(config: DictConfig):
         dim_multiply=tuple(map(int, config.unet.dim_mults[1:-1].split(', '))),
         dropout=config.unet.dropout
     )
+    unet = torch.nn.parallel.DistributedDataParallel(unet)
     trans = Compose([
         ToTensor(), Resize((config.image_size, config.image_size))
     ])
     all_path = f'../dataset/dataset-{config.dataset_name}-all'
     block_idx = InceptionV3.BLOCK_INDEX_BY_DIM[2048]
     fid_model = InceptionV3([block_idx])
+    fid_model.to(device)
     m1, s1 = compute_statistics_of_path(all_path, fid_model, fid_estimate_batch_size, 2048, device, 8)
     all_data = SanDataset(
         root_dir=all_path,
         transform=trans
     )
+    sampler = DistributedSampler(all_data)
     all_loader = DataLoader(
-        dataset=all_data, batch_size=config.batch, shuffle=True, pin_memory=True, num_workers=8
+        dataset=all_data, batch_size=config.batch, shuffle=True, pin_memory=True, num_workers=8, sampler=sampler
     )
     all_loader = cycle(all_loader)
     optimizer = Adam(unet.parameters(), lr)
@@ -130,12 +134,6 @@ def train(config: DictConfig):
     rm_if_exist(f'../runs/{tag}_fid')
     writer1 = SummaryWriter(f'../runs/{tag}_loss')
     writer2 = SummaryWriter(f'../runs/{tag}_fid')
-    set_seed(42)
-    kwargs = [InitProcessGroupKwargs(timeout=timedelta(hours=10))]
-    accelerator = Accelerator(mixed_precision="no", kwargs_handler=kwargs)
-    all_loader, unet, optimizer, fid_model = accelerator.prepare(
-        [all_loader, unet, optimizer, fid_model]
-    )
     diffusion = SanDiffusion(unet, config.diffusion.timesteps, device, sample_step=config.diffusion.sampling_timesteps)
     if sample_type == 'ddim':
         samper = DDIM_Sampler(diffusion)
@@ -148,7 +146,7 @@ def train(config: DictConfig):
         while current_epoch < epoch:
             x_0 = next(all_loader)
             b, c, w, h = x_0.shape
-            # x_0 = x_0.to(device)
+            x_0 = x_0.to(device)
             optimizer.zero_grad()
             t = torch.randint(0, 1000, (b,), device=device, dtype=torch.long)
             eps = torch.randn_like(x_0, device=device)
@@ -157,46 +155,46 @@ def train(config: DictConfig):
             loss = loss_fn(eps_theta, eps)
             loss_list.append(loss)
             writer1.add_scalar(tag, float(loss), epoch)
-            # loss.backward()
-            accelerator.backward(loss)
+            loss.backward()
             optimizer.step()
             pbar.set_description(f'loss: {loss:.4f}, fid: {fid_value:4f}')
-            if accelerator.is_main_process:
-                if current_epoch >= save_epoch and current_epoch % save_epoch == 0:
-                    with torch.no_grad():
-                        fake_sample = sample_fn(1000)
-                        rm_if_exist(f'{target_folder}/fid')
-                        save_tensor_images(fake_sample, f'{target_folder}/fid')
-                        m2, s2 = compute_statistics_of_path(f'{target_folder}/fid', fid_model, fid_estimate_batch_size,
-                                                            2048, device, 8)
-                        fid_value = calculate_frechet_distance(m1, s1, m2, s2)
-                        fid_list.append(fid_value)
-                        writer2.add_scalar(tag, float(fid_value), epoch)
+            if current_epoch >= save_epoch and current_epoch % save_epoch == 0:
+                with torch.no_grad():
+                    fake_sample = sample_fn(1000)
+                    rm_if_exist(f'{target_folder}/fid')
+                    save_tensor_images(fake_sample, f'{target_folder}/fid')
+                    m2, s2 = compute_statistics_of_path(f'{target_folder}/fid', fid_model, fid_estimate_batch_size,
+                                                        2048, device, 8)
+                    fid_value = calculate_frechet_distance(m1, s1, m2, s2)
+                    fid_list.append(fid_value)
+                    writer2.add_scalar(tag, float(fid_value), epoch)
             writer1.flush()
             writer2.flush()
-            accelerator.wait_for_everyone()
             current_epoch += 1
             pbar.update(1)
-    if accelerator.is_main_process:
-        rm_if_exist(f'{target_folder}/fid')
-        for i in range(int(num_fid_sample / fid_estimate_batch_size)):
-            fake_sample = sample_fn(fid_estimate_batch_size)
-            save_tensor_images(fake_sample, f'{target_folder}/fid')
-        m2, s2 = compute_statistics_of_path(f'{target_folder}/fid', fid_model, fid_estimate_batch_size, 2048, device, 8)
-        fid_value = calculate_frechet_distance(m1, s1, m2, s2)
-        fid_list.append(fid_value)
-        res = {
-            'unet': unet.state_dict(),
-            'opt': optimizer.state_dict(),
-            "config": OmegaConf.to_object(config),
-            "loss_list": loss_list,
-            'fid_list': fid_list
-        }
-        torch.save(res, f'{target_folder}/result.pth')
-        send2bot(OmegaConf.to_yaml(OmegaConf.to_object(config)), 'over')
-        print(target_folder)
-    accelerator.wait_for_everyone()
+    rm_if_exist(f'{target_folder}/fid')
+    for i in range(int(num_fid_sample / fid_estimate_batch_size)):
+        fake_sample = sample_fn(fid_estimate_batch_size)
+        save_tensor_images(fake_sample, f'{target_folder}/fid')
+    m2, s2 = compute_statistics_of_path(f'{target_folder}/fid', fid_model, fid_estimate_batch_size, 2048, device, 8)
+    fid_value = calculate_frechet_distance(m1, s1, m2, s2)
+    fid_list.append(fid_value)
+    res = {
+        'unet': unet.state_dict(),
+        'opt': optimizer.state_dict(),
+        "config": OmegaConf.to_object(config),
+        "loss_list": loss_list,
+        'fid_list': fid_list
+    }
+    torch.save(res, f'{target_folder}/result.pth')
+    send2bot(OmegaConf.to_yaml(OmegaConf.to_object(config)), 'over')
+    print(target_folder)
+
 
 
 if __name__ == '__main__':
+    torch.distributed.init_process_group(backend="nccl")
+    local_rank = torch.distributed.get_rank()
+    torch.cuda.set_device(local_rank)
+    device = torch.device("cuda", local_rank)
     train()
