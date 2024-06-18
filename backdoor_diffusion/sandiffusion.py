@@ -150,7 +150,6 @@ def train(config: DictConfig):
             loss.backward()
             loss_list.append(float(loss))
             writer1.add_scalar(tag, float(loss), epoch)
-            loss.backward()
             optimizer.step()
             pbar.set_description(f'loss: {loss:.4f}, fid: {fid_value:4f}')
             if current_epoch >= save_epoch and current_epoch % save_epoch == 0:
