@@ -146,10 +146,9 @@ def train(config: DictConfig):
             eps = torch.randn_like(x_0, device=device)
             x_t = diffusion.q_sample(x_0, t, eps)
             eps_theta = diffusion.eps_model(x_t, t)
-            with torch.autocast(device_type="cuda"):
-                loss = loss_fn(eps_theta, eps)
+            loss = loss_fn(eps_theta, eps)
             loss.backward()
-            loss_list.append(loss)
+            loss_list.append(float(loss))
             writer1.add_scalar(tag, float(loss), epoch)
             loss.backward()
             optimizer.step()
