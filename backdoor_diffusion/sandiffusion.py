@@ -74,6 +74,10 @@ class SanDiffusion(DenoiseDiffusion):
 def train(config: DictConfig):
     import os
     os.environ['CUDA_VISIBLE_DEVICES'] = config.gpu_id
+    torch.distributed.init_process_group(backend="nccl")
+    local_rank = torch.distributed.get_rank()
+    torch.cuda.set_device(local_rank)
+    device = torch.device("cuda", local_rank)
     prepare_bad_data(config)
     print(OmegaConf.to_yaml(OmegaConf.to_object(config)))
     import os
@@ -84,7 +88,7 @@ def train(config: DictConfig):
         os.makedirs(target_folder)
     target_file_path = os.path.join(target_folder, script_name)
     shutil.copy(__file__, target_file_path)
-    device = config.device
+    # device = config.device
     # import os
     # os.environ["ACCELERATE_TORCH_DEVICE"] = device
     lr = config.lr
@@ -108,6 +112,7 @@ def train(config: DictConfig):
     block_idx = InceptionV3.BLOCK_INDEX_BY_DIM[2048]
     fid_model = InceptionV3([block_idx])
     fid_model.to(device)
+    fid_model = torch.nn.parallel.DistributedDataParallel(fid_model)
     m1, s1 = compute_statistics_of_path(all_path, fid_model, fid_estimate_batch_size, 2048, device, 8)
     all_data = SanDataset(
         root_dir=all_path,
@@ -115,7 +120,7 @@ def train(config: DictConfig):
     )
     sampler = DistributedSampler(all_data)
     all_loader = DataLoader(
-        dataset=all_data, batch_size=config.batch, shuffle=True, pin_memory=True, num_workers=8, sampler=sampler
+        dataset=all_data, batch_size=config.batch, shuffle=False, pin_memory=True, num_workers=8, sampler=sampler
     )
     all_loader = cycle(all_loader)
     optimizer = Adam(unet.parameters(), lr)
@@ -193,8 +198,4 @@ def train(config: DictConfig):
 
 
 if __name__ == '__main__':
-    torch.distributed.init_process_group(backend="nccl")
-    local_rank = torch.distributed.get_rank()
-    torch.cuda.set_device(local_rank)
-    device = torch.device("cuda", local_rank)
     train()
