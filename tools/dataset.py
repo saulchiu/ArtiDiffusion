@@ -2,19 +2,60 @@ import os
 import shutil
 
 import PIL.Image
+import numpy as np
 import torch
 import torchvision
+from PIL import Image
 from torchvision import transforms as T
 from torch.utils.data.dataloader import DataLoader
+from torch.utils.data.dataset import Dataset
 import random
 import pytorch_lightning as L
 import torch.nn.functional as F
+
+import sys
+sys.path.append('../')
+from tools.time import now
 
 transform_cifar10 = T.Compose([
     T.ToTensor(),
     T.Resize((32, 32)),
     T.Normalize((0.4914, 0.4822, 0.4465), (0.2023, 0.1994, 0.2010))
 ])
+
+
+def cycle(dl):
+    while True:
+        for data in dl:
+            yield data
+
+
+def save_tensor_images(tensor, target_folder):
+    tag = now()
+    if not os.path.exists(target_folder):
+        os.makedirs(target_folder)
+    batch_size = tensor.size(0)
+    for i in range(batch_size):
+        image_np = np.transpose(tensor[i].cpu().numpy(), (1, 2, 0))
+        image_pil = Image.fromarray((image_np * 255).astype(np.uint8))
+        image_pil.save(os.path.join(target_folder, f'{str(tag)}_{i}.png'))
+
+
+class SanDataset(Dataset):
+    def __init__(self, root_dir, transform=None):
+        self.root_dir = root_dir
+        self.transform = transform
+        self.file_list = os.listdir(root_dir)
+
+    def __len__(self):
+        return len(self.file_list)
+
+    def __getitem__(self, idx):
+        img_name = os.path.join(self.root_dir, self.file_list[idx])
+        image = Image.open(img_name)
+        if self.transform:
+            image = self.transform(image)
+        return image
 
 
 def rm_if_exist(folder_path):

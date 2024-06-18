@@ -1,8 +1,0 @@
-train_batch_size: ${batch}
-train_lr: 8e-5
-train_num_steps: ${epoch}
-gradient_accumulate_every: 2
-ema_decay: 0.995
-amp: True
-calculate_fid: True
-save_and_sample_every: ${save_epoch} # if 0, means not save before whole train end

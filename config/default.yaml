@@ -1,12 +1,21 @@
 dataset_name: cifar10
-attack: badnet
-trigger_name: trigger_32_3.png
+attack: benign
 device: cuda:0
-batch: 16
+batch: 128
 epoch: 500000
-save_epoch: 0
+save_epoch: 5000
 ratio: 0.1
-defaults:
-  - noise_predictor: default
-  - trainer: default
-  - diffusion: default
+lr: 2e-4
+loss_type: 'l2'
+sample_type: 'ddim'
+image_size: 32
+fid_estimate_batch_size: 128
+
+unet:
+  dim: 128
+  dim_mults: (1, 2, 2, 2)
+  dropout: 0.1
+
+diffusion:
+  timesteps: 1000
+  sampling_timesteps: 250

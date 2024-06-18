@@ -60,7 +60,7 @@ def get_dataset(dataset_name, trainsform):
 
 def prepare_bad_data(config: DictConfig):
     trainsform = transforms.Compose([
-        transforms.Resize((config.diffusion.image_size, config.diffusion.image_size)),
+        transforms.Resize((config.image_size, config.image_size)),
         transforms.ToTensor(),
     ])
     tensor_list = get_dataset(config.dataset_name, trainsform)

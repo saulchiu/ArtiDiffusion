@@ -1,7 +1,0 @@
-image_size: 64
-timesteps: 1000
-sampling_timesteps: 250
-objective: pred_noise
-attack: ${attack}
-device: ${device}
-gamma: 1e-3

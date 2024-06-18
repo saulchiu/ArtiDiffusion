@@ -1,3 +1,0 @@
-dim: 128
-dim_mults: (1, 1, 2, 2, 4)
-flash_attn: True

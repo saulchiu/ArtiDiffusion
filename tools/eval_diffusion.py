@@ -24,13 +24,8 @@ from denoising_diffusion_pytorch.denoising_diffusion_pytorch import Dataset, Gau
 import matplotlib.pyplot as plt
 import torch.utils
 from tools.img import cal_ssim
-from models.resnet import ResNet18, ResNet50
-from tools.classfication import MyLightningModule
-from torch.utils.data import DataLoader
-from tools.dataset import transform_cifar10
 from backdoor_diffusion.benign_deffusion import BenignTrainer
 from tools.prepare_data import prepare_bad_data
-from tools.time import now
 
 
 def plot_images(images, num_images, net=None):
@@ -84,7 +79,7 @@ def iter_data_sanitization(diffusion, x_start, t=200, loop=8):
     for i in range(loop):
         x_t, x_start = data_sanitization(diffusion, x_start, t)
         # whether append the sample with noise
-        tensor_list.append(x_t)
+        # tensor_list.append(x_t)
         # append the sample after data sanitization
         tensor_list.append(x_start)
     tensors = torch.stack(tensor_list, dim=0)
@@ -141,7 +136,7 @@ def load_result(cfg, device):
             gamma=0
         )
     x_start_list = []
-    for i in range(1):
+    for i in range(9):
         index = random.Random().randint(a=1, b=1000)
         print(index)
         x_start = transform(Image.open(f'../dataset/dataset-{cfg.dataset_name}-all/all_{index}.png'))
@@ -200,9 +195,6 @@ def eval_result(cfg: DictConfig):
     diffusion = diffusion.to(device)
     tmp = []
     if cfg.attack == 'blended':
-        transform = transforms.Compose([
-            transforms.ToTensor(), transforms.Resize((32, 32))
-        ])
         trigger = transform(
             PIL.Image.open('../resource/blended/hello_kitty.jpeg')
         )

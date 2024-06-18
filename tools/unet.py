@@ -136,10 +136,10 @@ class Unet(nn.Module):
         # Attributes
         self.dim = dim
         self.channel = channel
-        self.channels = channel
         self.time_emb_dim = 4 * self.dim
         self.num_resolutions = len(dim_multiply)
         self.device = device
+        self.image_size = image_size
         self.resolution = [int(image_size / (2 ** i)) for i in range(self.num_resolutions)]
         self.hidden_dims = [self.dim, *map(lambda x: x * self.dim, dim_multiply)]
         self.num_res_blocks = num_res_blocks
