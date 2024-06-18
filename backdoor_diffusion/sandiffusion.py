@@ -170,7 +170,7 @@ def train(config: DictConfig):
                     writer2.flush()
             writer1.flush()
             current_hour = get_hour()
-            if (current_hour in range(0, 11) or current_hour in range(20, 24)) is False:
+            if (current_hour in range(0, 10) or current_hour in range(20, 24)) is False:
                 del loss, x_0, x_t, t, eps, eps_theta
                 torch.cuda.empty_cache()
             current_epoch += 1
@@ -185,6 +185,7 @@ def train(config: DictConfig):
     res = {
         'unet': unet.state_dict(),
         'opt': optimizer.state_dict(),
+        'ema': diffusion.ema.state_dict(),
         "config": OmegaConf.to_object(config),
         "loss_list": loss_list,
         'fid_list': fid_list
