@@ -149,7 +149,7 @@ def train(config: DictConfig):
             loss = loss_fn(eps_theta, eps)
             loss.backward()
             loss_list.append(float(loss))
-            writer1.add_scalar(tag, float(loss), epoch)
+            writer1.add_scalar(tag, float(loss), current_epoch)
             optimizer.step()
             pbar.set_description(f'loss: {loss:.4f}, fid: {fid_value:4f}')
             if current_epoch >= save_epoch and current_epoch % save_epoch == 0:
@@ -162,7 +162,7 @@ def train(config: DictConfig):
                                                         2048, config.device, 8)
                     fid_value = calculate_frechet_distance(m1, s1, m2, s2)
                     fid_list.append(fid_value)
-                    writer2.add_scalar(tag, float(fid_value), epoch)
+                    writer2.add_scalar(tag, float(fid_value), current_epoch)
                     writer2.flush()
             writer1.flush()
             current_hour = get_hour()
