@@ -50,10 +50,11 @@ class SanDiffusion(DenoiseDiffusion):
         self.sample_step = sample_step
         self.device = self.eps_model.device
         self.image_size = self.eps_model.image_size
-        self.ema = EMA(self.eps_model).to(device=self.device)
+        self.ema = EMA(self.eps_model, update_every=10)
+        self.ema.to(device=self.device)
 
     def p_sample(self, xt: torch.Tensor, t: torch.Tensor):
-        eps_theta = self.eps_model(xt, t)
+        eps_theta = self.ema.ema_model(xt, t)
         alpha_bar = gather(self.alpha_bar, t)
         alpha = gather(self.alpha, t)
         eps_coef = (1 - alpha) / (1 - alpha_bar) ** .5
@@ -146,7 +147,8 @@ def train(config: DictConfig):
             t = torch.randint(0, 1000, (b,), device=device, dtype=torch.long)
             eps = torch.randn_like(x_0, device=device)
             x_t = diffusion.q_sample(x_0, t, eps)
-            eps_theta = diffusion.ema.ema_model(x_t, t)
+            # no need to use ema
+            eps_theta = diffusion.eps_model(x_t, t)
             loss = loss_fn(eps_theta, eps)
             loss.backward()
             loss_list.append(float(loss))
