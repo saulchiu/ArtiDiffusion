@@ -111,9 +111,8 @@ def train(config: DictConfig):
     all_path = f'../dataset/dataset-{config.dataset_name}-all'
     block_idx = InceptionV3.BLOCK_INDEX_BY_DIM[2048]
     fid_model = InceptionV3([block_idx])
-    fid_model.to(device)
-    fid_model = torch.nn.parallel.DistributedDataParallel(fid_model)
-    m1, s1 = compute_statistics_of_path(all_path, fid_model, fid_estimate_batch_size, 2048, device, 8)
+    fid_model.to(config.device)
+    m1, s1 = compute_statistics_of_path(all_path, fid_model, fid_estimate_batch_size, 2048, config.device, 8)
     all_data = SanDataset(
         root_dir=all_path,
         transform=trans
@@ -169,7 +168,7 @@ def train(config: DictConfig):
                     rm_if_exist(f'{target_folder}/fid')
                     save_tensor_images(fake_sample, f'{target_folder}/fid')
                     m2, s2 = compute_statistics_of_path(f'{target_folder}/fid', fid_model, fid_estimate_batch_size,
-                                                        2048, device, 8)
+                                                        2048, config.device, 8)
                     fid_value = calculate_frechet_distance(m1, s1, m2, s2)
                     fid_list.append(fid_value)
                     writer2.add_scalar(tag, float(fid_value), epoch)
