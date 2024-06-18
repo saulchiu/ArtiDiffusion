@@ -21,9 +21,8 @@ import hydra
 from omegaconf import DictConfig, OmegaConf
 from tqdm import tqdm
 
-
-
 import sys
+
 sys.path.append('../')
 from tools.unet import Unet
 from tools.dataset import cycle, SanDataset
@@ -146,6 +145,7 @@ def train(config: DictConfig):
             x_t = diffusion.q_sample(x_0, t, eps)
             eps_theta = diffusion.eps_model(x_t, t)
             loss = loss_fn(eps_theta, eps)
+            loss = loss.item()
             loss_list.append(loss)
             writer1.add_scalar(tag, float(loss), epoch)
             loss.backward()
@@ -187,6 +187,7 @@ def train(config: DictConfig):
     print(target_folder)
 
 
-
 if __name__ == '__main__':
+    torch.backends.cudnn.enabled = True
+    torch.backends.cudnn.benchmark = True
     train()
