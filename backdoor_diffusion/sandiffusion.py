@@ -1,6 +1,8 @@
 import os
 from datetime import timedelta
 from functools import partial
+
+from accelerate import accelerator
 from pytorch_fid.fid_score import calculate_frechet_distance, compute_statistics_of_path
 from pytorch_fid.inception import InceptionV3
 
@@ -136,6 +138,7 @@ def train(config: DictConfig):
         raise NotImplementedError
     with tqdm(initial=current_epoch, total=epoch) as pbar:
         while current_epoch < epoch:
+            loss = torch.zero(device)
             x_0 = next(all_loader)
             b, c, w, h = x_0.shape
             x_0 = x_0.to(device)
@@ -144,8 +147,9 @@ def train(config: DictConfig):
             eps = torch.randn_like(x_0, device=device)
             x_t = diffusion.q_sample(x_0, t, eps)
             eps_theta = diffusion.eps_model(x_t, t)
-            loss = loss_fn(eps_theta, eps)
-            loss = loss.item()
+            with torch.autocast(device_type="cuda"):
+                loss += loss_fn(eps_theta, eps)
+            loss.backward()
             loss_list.append(loss)
             writer1.add_scalar(tag, float(loss), epoch)
             loss.backward()
