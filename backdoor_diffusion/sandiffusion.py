@@ -1,4 +1,5 @@
 import os
+from datetime import timedelta
 from functools import partial
 from pytorch_fid.fid_score import calculate_frechet_distance, compute_statistics_of_path
 from pytorch_fid.inception import InceptionV3
@@ -18,7 +19,9 @@ from ema_pytorch.ema_pytorch import EMA
 import hydra
 from omegaconf import DictConfig, OmegaConf
 from torch.utils.tensorboard import SummaryWriter
-
+from accelerate import Accelerator
+from accelerate.utils import set_seed
+from accelerate.utils import InitProcessGroupKwargs
 import sys
 
 from tqdm import tqdm
@@ -81,8 +84,8 @@ def train(config: DictConfig):
     target_file_path = os.path.join(target_folder, script_name)
     shutil.copy(__file__, target_file_path)
     device = config.device
-    import os
-    os.environ["ACCELERATE_TORCH_DEVICE"] = device
+    # import os
+    # os.environ["ACCELERATE_TORCH_DEVICE"] = device
     lr = config.lr
     loss_type = config.loss_type
     sample_type = config.sample_type
@@ -95,16 +98,14 @@ def train(config: DictConfig):
         image_size=config.image_size,
         dim_multiply=tuple(map(int, config.unet.dim_mults[1:-1].split(', '))),
         dropout=config.unet.dropout
-    ).to(device)
-    diffusion = SanDiffusion(unet, config.diffusion.timesteps, device, sample_step=config.diffusion.sampling_timesteps)
+    )
     trans = Compose([
         ToTensor(), Resize((config.image_size, config.image_size))
     ])
     all_path = f'../dataset/dataset-{config.dataset_name}-all'
     block_idx = InceptionV3.BLOCK_INDEX_BY_DIM[2048]
-    fid_model = InceptionV3([block_idx]).to(device)
+    fid_model = InceptionV3([block_idx])
     m1, s1 = compute_statistics_of_path(all_path, fid_model, fid_estimate_batch_size, 2048, device, 8)
-    m2, s2 = 0, 0
     all_data = SanDataset(
         root_dir=all_path,
         transform=trans
@@ -113,18 +114,11 @@ def train(config: DictConfig):
         dataset=all_data, batch_size=config.batch, shuffle=True, pin_memory=True, num_workers=8
     )
     all_loader = cycle(all_loader)
-    optimizer = Adam(diffusion.eps_model.parameters(), lr)
+    optimizer = Adam(unet.parameters(), lr)
     if loss_type == 'l1':
         loss_fn = F.l1_loss
     elif loss_type == 'l2':
         loss_fn = F.mse_loss
-    else:
-        raise NotImplementedError
-    if sample_type == 'ddim':
-        samper = DDIM_Sampler(diffusion)
-        sample_fn = samper.sample
-    elif sample_type == 'ddpm':
-        sample_fn = diffusion.ddpm_sample
     else:
         raise NotImplementedError
     current_epoch = 0
@@ -136,11 +130,25 @@ def train(config: DictConfig):
     rm_if_exist(f'../runs/{tag}_fid')
     writer1 = SummaryWriter(f'../runs/{tag}_loss')
     writer2 = SummaryWriter(f'../runs/{tag}_fid')
+    set_seed(42)
+    kwargs = [InitProcessGroupKwargs(timeout=timedelta(hours=10))]
+    accelerator = Accelerator(mixed_precision="no", kwargs_handler=kwargs)
+    all_loader, unet, optimizer, fid_model = accelerator.prepare(
+        [all_loader, unet, optimizer, fid_model]
+    )
+    diffusion = SanDiffusion(unet, config.diffusion.timesteps, device, sample_step=config.diffusion.sampling_timesteps)
+    if sample_type == 'ddim':
+        samper = DDIM_Sampler(diffusion)
+        sample_fn = samper.sample
+    elif sample_type == 'ddpm':
+        sample_fn = diffusion.ddpm_sample
+    else:
+        raise NotImplementedError
     with tqdm(initial=current_epoch, total=epoch) as pbar:
         while current_epoch < epoch:
             x_0 = next(all_loader)
             b, c, w, h = x_0.shape
-            x_0 = x_0.to(device)
+            # x_0 = x_0.to(device)
             optimizer.zero_grad()
             t = torch.randint(0, 1000, (b,), device=device, dtype=torch.long)
             eps = torch.randn_like(x_0, device=device)
@@ -149,41 +157,45 @@ def train(config: DictConfig):
             loss = loss_fn(eps_theta, eps)
             loss_list.append(loss)
             writer1.add_scalar(tag, float(loss), epoch)
-            loss.backward()
+            # loss.backward()
+            accelerator.backward(loss)
             optimizer.step()
             pbar.set_description(f'loss: {loss:.4f}, fid: {fid_value:4f}')
-            if current_epoch >= save_epoch and current_epoch % save_epoch == 0:
-                ml = current_epoch // save_epoch
-                with torch.no_grad():
-                    fake_sample = sample_fn(1000)
-                    rm_if_exist(f'{target_folder}/fid')
-                    save_tensor_images(fake_sample, f'{target_folder}/fid')
-                    m2, s2 = compute_statistics_of_path(f'{target_folder}/fid', fid_model, fid_estimate_batch_size,
-                                                        2048, device, 8)
-                    fid_value = calculate_frechet_distance(m1, s1, m2, s2)
-                    fid_list.append(fid_value)
-                    writer2.add_scalar(tag, float(fid_value), epoch)
+            if accelerator.is_main_process:
+                if current_epoch >= save_epoch and current_epoch % save_epoch == 0:
+                    with torch.no_grad():
+                        fake_sample = sample_fn(1000)
+                        rm_if_exist(f'{target_folder}/fid')
+                        save_tensor_images(fake_sample, f'{target_folder}/fid')
+                        m2, s2 = compute_statistics_of_path(f'{target_folder}/fid', fid_model, fid_estimate_batch_size,
+                                                            2048, device, 8)
+                        fid_value = calculate_frechet_distance(m1, s1, m2, s2)
+                        fid_list.append(fid_value)
+                        writer2.add_scalar(tag, float(fid_value), epoch)
             writer1.flush()
             writer2.flush()
+            accelerator.wait_for_everyone()
             current_epoch += 1
             pbar.update(1)
-    rm_if_exist(f'{target_folder}/fid')
-    for i in range(int(num_fid_sample / fid_estimate_batch_size)):
-        fake_sample = sample_fn(fid_estimate_batch_size)
-        save_tensor_images(fake_sample, f'{target_folder}/fid')
-    m2, s2 = compute_statistics_of_path(f'{target_folder}/fid', fid_model, fid_estimate_batch_size, 2048, device, 8)
-    fid_value = calculate_frechet_distance(m1, s1, m2, s2)
-    fid_list.append(fid_value)
-    res = {
-        'unet': unet.state_dict(),
-        'opt': optimizer.state_dict(),
-        "config": OmegaConf.to_object(config),
-        "loss_list": loss_list,
-        'fid_list': fid_list
-    }
-    torch.save(res, f'{target_folder}/result.pth')
-    send2bot(OmegaConf.to_yaml(OmegaConf.to_object(config)), 'over')
-    print(target_folder)
+    if accelerator.is_main_process:
+        rm_if_exist(f'{target_folder}/fid')
+        for i in range(int(num_fid_sample / fid_estimate_batch_size)):
+            fake_sample = sample_fn(fid_estimate_batch_size)
+            save_tensor_images(fake_sample, f'{target_folder}/fid')
+        m2, s2 = compute_statistics_of_path(f'{target_folder}/fid', fid_model, fid_estimate_batch_size, 2048, device, 8)
+        fid_value = calculate_frechet_distance(m1, s1, m2, s2)
+        fid_list.append(fid_value)
+        res = {
+            'unet': unet.state_dict(),
+            'opt': optimizer.state_dict(),
+            "config": OmegaConf.to_object(config),
+            "loss_list": loss_list,
+            'fid_list': fid_list
+        }
+        torch.save(res, f'{target_folder}/result.pth')
+        send2bot(OmegaConf.to_yaml(OmegaConf.to_object(config)), 'over')
+        print(target_folder)
+    accelerator.wait_for_everyone()
 
 
 if __name__ == '__main__':
