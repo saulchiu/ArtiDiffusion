@@ -165,9 +165,9 @@ def train(config: DictConfig):
                     writer2.add_scalar(tag, float(fid_value), epoch)
                     writer2.flush()
             writer1.flush()
-            # current_hour = get_hour()
+            current_hour = get_hour()
             # if (current_hour in range(0, 10) or current_hour in range(22, 24)) is False:
-            del loss
+            del loss, x_0, x_t, t, eps, eps_theta
             torch.cuda.empty_cache()
             current_epoch += 1
             pbar.update(1)
