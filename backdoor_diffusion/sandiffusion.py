@@ -9,6 +9,7 @@ from PIL import Image
 from labml_nn.diffusion.ddpm import DenoiseDiffusion
 from torch import nn
 from torch.utils.data.dataset import Dataset
+from torch.utils.tensorboard import SummaryWriter
 from torchvision.datasets import ImageFolder
 from torch.utils.data.dataloader import DataLoader
 from torchvision.transforms.transforms import Compose, ToTensor, Resize
@@ -18,8 +19,6 @@ from torchvision.utils import save_image
 from ema_pytorch.ema_pytorch import EMA
 import hydra
 from omegaconf import DictConfig, OmegaConf
-from torch.utils.tensorboard import SummaryWriter
-from torch.utils.data.distributed import DistributedSampler
 from tqdm import tqdm
 
 
@@ -72,12 +71,6 @@ class SanDiffusion(DenoiseDiffusion):
 
 @hydra.main(version_base=None, config_path='../config', config_name='default')
 def train(config: DictConfig):
-    import os
-    os.environ['CUDA_VISIBLE_DEVICES'] = config.gpu_id
-    torch.distributed.init_process_group(backend="nccl")
-    local_rank = torch.distributed.get_rank()
-    torch.cuda.set_device(local_rank)
-    device = torch.device("cuda", local_rank)
     prepare_bad_data(config)
     print(OmegaConf.to_yaml(OmegaConf.to_object(config)))
     import os
@@ -88,7 +81,7 @@ def train(config: DictConfig):
         os.makedirs(target_folder)
     target_file_path = os.path.join(target_folder, script_name)
     shutil.copy(__file__, target_file_path)
-    # device = config.device
+    device = config.device
     # import os
     # os.environ["ACCELERATE_TORCH_DEVICE"] = device
     lr = config.lr
@@ -103,8 +96,7 @@ def train(config: DictConfig):
         image_size=config.image_size,
         dim_multiply=tuple(map(int, config.unet.dim_mults[1:-1].split(', '))),
         dropout=config.unet.dropout
-    ).cuda()
-    unet = torch.nn.parallel.DistributedDataParallel(unet)
+    ).to(device)
     trans = Compose([
         ToTensor(), Resize((config.image_size, config.image_size))
     ])
@@ -117,9 +109,8 @@ def train(config: DictConfig):
         root_dir=all_path,
         transform=trans
     )
-    sampler = DistributedSampler(all_data)
     all_loader = DataLoader(
-        dataset=all_data, batch_size=config.batch, shuffle=False, pin_memory=True, num_workers=8, sampler=sampler
+        dataset=all_data, batch_size=config.batch, shuffle=False, pin_memory=True, num_workers=8,
     )
     all_loader = cycle(all_loader)
     optimizer = Adam(unet.parameters(), lr)
