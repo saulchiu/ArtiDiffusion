@@ -181,7 +181,7 @@ def train(config: DictConfig):
         save_tensor_images(fake_sample, f'{target_folder}/fid')
     m2, s2 = compute_statistics_of_path(f'{target_folder}/fid', fid_model, fid_estimate_batch_size, 2048, device, 8)
     fid_value = calculate_frechet_distance(m1, s1, m2, s2)
-    fid_list.append(fid_value)
+    fid_list.append(float(fid_value))
     res = {
         'unet': unet.state_dict(),
         'opt': optimizer.state_dict(),
