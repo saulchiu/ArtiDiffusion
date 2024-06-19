@@ -1,4 +1,5 @@
 import os
+import time
 from datetime import timedelta
 from functools import partial
 
@@ -97,7 +98,8 @@ def train(config: DictConfig):
         image_size=config.image_size,
         dim_multiply=tuple(map(int, config.unet.dim_mults[1:-1].split(', '))),
         dropout=config.unet.dropout
-    ).to(device)
+    )
+    unet.to(device)
     trans = Compose([
         ToTensor(), Resize((config.image_size, config.image_size))
     ])
@@ -169,10 +171,11 @@ def train(config: DictConfig):
                     writer2.add_scalar(tag, float(fid_value), current_epoch)
                     writer2.flush()
             writer1.flush()
-            # current_hour = get_hour()
-            # if (current_hour in range(0, 10) or current_hour in range(20, 24)) is False:
-            #     del loss, x_0, x_t, t, eps, eps_theta
-            #     torch.cuda.empty_cache()
+            current_hour = get_hour()
+            if (current_hour in range(0, 10) or current_hour in range(20, 24)) is False:
+                time.sleep(0.1)
+                # del loss, x_0, x_t, t, eps, eps_theta
+                # torch.cuda.empty_cache()
             current_epoch += 1
             pbar.update(1)
     rm_if_exist(f'{target_folder}/fid')
