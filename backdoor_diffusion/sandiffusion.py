@@ -165,7 +165,7 @@ def train(config: DictConfig):
                     m2, s2 = compute_statistics_of_path(f'{target_folder}/fid', fid_model, fid_estimate_batch_size,
                                                         2048, config.device, 8)
                     fid_value = calculate_frechet_distance(m1, s1, m2, s2)
-                    fid_list.append(fid_value)
+                    fid_list.append(float(fid_value))
                     writer2.add_scalar(tag, float(fid_value), current_epoch)
                     writer2.flush()
             writer1.flush()
