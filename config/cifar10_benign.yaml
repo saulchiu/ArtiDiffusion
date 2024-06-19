@@ -2,7 +2,7 @@ dataset_name: cifar10
 attack: benign
 device: cuda:0
 batch: 128
-epoch: 500000
+epoch: 600000
 save_epoch: 5000
 ratio: 0.1
 lr: 2e-4
