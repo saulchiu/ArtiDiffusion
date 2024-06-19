@@ -89,11 +89,13 @@ def prepare_bad_data(config: DictConfig):
     os.makedirs(dataset_bad, exist_ok=True)
     os.makedirs(dataset_good, exist_ok=True)
     torch.manual_seed(42)
-    indices = torch.randperm(len(tensor_list))
-    shuffled_tensor_list = [tensor_list[i] for i in indices]
-    split_index = len(tensor_list) // (int(100 * ratio))
-    part1 = shuffled_tensor_list[:split_index]  # 10%
-    part2 = shuffled_tensor_list[split_index:]  # 90%
+    """
+    part1's length is len(tensor_list) * ratio
+    and else is part2
+    """
+    part1_length = int(len(tensor_list) * ratio)
+    part1 = tensor_list[:part1_length]
+    part2 = tensor_list[part1_length:]
     for i, e in enumerate(tqdm(part1)):
         if config.attack == "badnet":
             mask_path = f'../resource/badnet/mask_{config.image_size}_{int(config.image_size / 10)}.png'
