@@ -97,17 +97,18 @@ def train(config: DictConfig):
         dim=config.unet.dim,
         image_size=config.image_size,
         dim_multiply=tuple(map(int, config.unet.dim_mults[1:-1].split(', '))),
-        dropout=config.unet.dropout
+        dropout=config.unet.dropout,
+        device=device
     )
-    unet.to(device)
     trans = Compose([
         ToTensor(), Resize((config.image_size, config.image_size))
     ])
     all_path = f'../dataset/dataset-{config.dataset_name}-all'
     block_idx = InceptionV3.BLOCK_INDEX_BY_DIM[2048]
-    fid_model = InceptionV3([block_idx])
-    fid_model.to(config.device)
-    m1, s1 = compute_statistics_of_path(all_path, fid_model, fid_estimate_batch_size, 2048, config.device, 8)
+    with torch.no_grad():
+        fid_model = InceptionV3([block_idx])
+        fid_model.to(config.device)
+        m1, s1 = compute_statistics_of_path(all_path, fid_model, fid_estimate_batch_size, 2048, config.device, 8)
     all_data = SanDataset(
         root_dir=all_path,
         transform=trans
@@ -172,19 +173,20 @@ def train(config: DictConfig):
                     writer2.flush()
             writer1.flush()
             current_hour = get_hour()
-            if (current_hour in range(0, 10) or current_hour in range(20, 24)) is False:
+            if (current_hour in range(0, 10) or current_hour in range(21, 24)) is False:
                 time.sleep(0.1)
                 # del loss, x_0, x_t, t, eps, eps_theta
                 # torch.cuda.empty_cache()
             current_epoch += 1
             pbar.update(1)
     rm_if_exist(f'{target_folder}/fid')
-    for i in range(int(num_fid_sample / fid_estimate_batch_size)):
-        fake_sample = sample_fn(fid_estimate_batch_size)
-        save_tensor_images(fake_sample, f'{target_folder}/fid')
-    m2, s2 = compute_statistics_of_path(f'{target_folder}/fid', fid_model, fid_estimate_batch_size, 2048, device, 8)
-    fid_value = calculate_frechet_distance(m1, s1, m2, s2)
-    fid_list.append(float(fid_value))
+    with torch.inference_mode():
+        for i in range(int(num_fid_sample / fid_estimate_batch_size)):
+            fake_sample = sample_fn(fid_estimate_batch_size)
+            save_tensor_images(fake_sample, f'{target_folder}/fid')
+        m2, s2 = compute_statistics_of_path(f'{target_folder}/fid', fid_model, fid_estimate_batch_size, 2048, device, 8)
+        fid_value = calculate_frechet_distance(m1, s1, m2, s2)
+        fid_list.append(float(fid_value))
     res = {
         'unet': unet.state_dict(),
         'opt': optimizer.state_dict(),
