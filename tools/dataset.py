@@ -29,6 +29,12 @@ def cycle(dl):
         for data in dl:
             yield data
 
+def load_dataloader(path, trans, batch):
+    ds = SanDataset(root_dir=path, transform=trans)
+    dl = DataLoader(dataset=ds, batch_size=batch, shuffle=True, pin_memory=True, num_workers=8)
+    dl = cycle(dl)
+    return dl
+
 
 def save_tensor_images(tensor, target_folder):
     tag = now()

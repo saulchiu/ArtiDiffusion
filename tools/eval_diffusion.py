@@ -178,7 +178,6 @@ def eval_result(cfg: DictConfig):
     t = cfg.step
     loop = cfg.loop
     path = cfg.path
-    do_sample = cfg.sample
     device = 'cuda:0'
     # load resnet
     ld = torch.load(f'{path}/result.pth', map_location=device)

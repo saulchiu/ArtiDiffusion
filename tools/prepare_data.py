@@ -96,14 +96,14 @@ def prepare_bad_data(config: DictConfig):
     part2 = shuffled_tensor_list[split_index:]  # 90%
     for i, e in enumerate(tqdm(part1)):
         if config.attack == "badnet":
-            mask_path = f'../resource/badnet/mask_{config.diffusion.image_size}_{int(config.diffusion.image_size / 10)}.png'
-            trigger_path = f'../resource/badnet/trigger_{config.diffusion.image_size}_{int(config.diffusion.image_size / 10)}.png'
+            mask_path = f'../resource/badnet/mask_{config.image_size}_{int(config.image_size / 10)}.png'
+            trigger_path = f'../resource/badnet/trigger_{config.image_size}_{int(config.image_size / 10)}.png'
             trigger = trainsform(Image.open(trigger_path))
             mask = trainsform(Image.open(mask_path))
             e = e * (1 - mask) + mask * trigger
         elif config.attack == "blended":
             trigger_path = '../resource/blended/hello_kitty.jpeg'
-            trigger = Image.open(config.dataset.trigger_path)
+            trigger = Image.open(trigger_path)
             trigger = trainsform(trigger)
             e = e * 0.8 + trigger * 0.2
         image_np = e.cpu().detach().numpy()

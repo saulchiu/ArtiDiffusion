@@ -2,6 +2,9 @@ import os
 import time
 from datetime import timedelta
 from functools import partial
+import os
+import shutil
+from random import random
 
 from accelerate import accelerator
 from pytorch_fid.fid_score import calculate_frechet_distance, compute_statistics_of_path
@@ -32,7 +35,7 @@ from tools.dataset import cycle, SanDataset
 from tools.samper import DDIM_Sampler
 from tools.time import now, get_hour
 from tools.prepare_data import prepare_bad_data
-from tools.dataset import rm_if_exist, save_tensor_images
+from tools.dataset import rm_if_exist, save_tensor_images, load_dataloader
 from tools.tg_bot import send2bot
 
 
@@ -75,16 +78,21 @@ class SanDiffusion(DenoiseDiffusion):
 
 @hydra.main(version_base=None, config_path='../config', config_name='default')
 def train(config: DictConfig):
+    """
+    prepare dataset and save source code
+    """
     prepare_bad_data(config)
     print(OmegaConf.to_yaml(OmegaConf.to_object(config)))
-    import os
-    import shutil
     script_name = os.path.basename(__file__)
     target_folder = f'../results/{config.attack}/{config.dataset_name}/{now()}'
+    print(target_folder)
     if not os.path.exists(target_folder):
         os.makedirs(target_folder)
     target_file_path = os.path.join(target_folder, script_name)
     shutil.copy(__file__, target_file_path)
+    """
+    load config
+    """
     device = config.device
     lr = config.lr
     loss_type = config.loss_type
@@ -109,14 +117,7 @@ def train(config: DictConfig):
         fid_model = InceptionV3([block_idx])
         fid_model.to(config.device)
         m1, s1 = compute_statistics_of_path(all_path, fid_model, fid_estimate_batch_size, 2048, config.device, 8)
-    all_data = SanDataset(
-        root_dir=all_path,
-        transform=trans
-    )
-    all_loader = DataLoader(
-        dataset=all_data, batch_size=config.batch, shuffle=False, pin_memory=True, num_workers=8,
-    )
-    all_loader = cycle(all_loader)
+    all_loader = load_dataloader(path=all_path, trans=trans, batch=config.batch)
     optimizer = Adam(unet.parameters(), lr)
     if loss_type == 'l1':
         loss_fn = F.l1_loss
@@ -141,9 +142,33 @@ def train(config: DictConfig):
         sample_fn = diffusion.ddpm_sample
     else:
         raise NotImplementedError
+    """
+    prepare poisoning
+    """
+    if config.attack != "benign":
+        ratio = config.ratio
+        bad_path = f'../dataset/dataset-{config.dataset_name}-bad-{config.attack}-{str(ratio)}'
+        good_path = f'../dataset/dataset-{config.dataset_name}-good-{config.attack}-{str(ratio)}'
+        bad_loader = load_dataloader(bad_path, trans, config.batch)
+        good_loader = load_dataloader(good_path, trans, config.batch)
+        if config.attack =="badnet":
+            trigger_path = f'../resource/badnet/trigger_{config.image_size}_{int(config.image_size / 10)}.png'
+        elif config.attack == 'blended':
+            trigger_path = '../resource/blended/hello_kitty.jpeg'
+        else:
+            raise NotImplementedError
+        trigger = trans(Image.open(trigger_path))
+        trigger = trigger.to(device)
+        gamma = config.gamma
     with tqdm(initial=current_epoch, total=epoch) as pbar:
         while current_epoch < epoch:
-            x_0 = next(all_loader)
+            if config.attack != 'benign':
+                if random() < config.ratio:
+                    x_0 = next(bad_loader)
+                else:
+                    x_0 = next(good_loader)
+            else:
+                x_0 = next(all_loader)
             b, c, w, h = x_0.shape
             x_0 = x_0.to(device)
             optimizer.zero_grad()
@@ -153,6 +178,9 @@ def train(config: DictConfig):
             # no need to use ema
             eps_theta = diffusion.eps_model(x_t, t)
             loss = loss_fn(eps_theta, eps)
+            if config.attack != 'benign':
+                loss /= 2
+                loss += loss_fn(eps_theta, eps - trigger.unsqueeze(0).expand(eps.shape[0], -1, -1, -1) * gamma) / 2
             loss.backward()
             loss_list.append(float(loss))
             writer1.add_scalar(tag, float(loss), current_epoch)
@@ -174,7 +202,7 @@ def train(config: DictConfig):
                     writer2.flush()
             writer1.flush()
             current_hour = get_hour()
-            if (current_hour in range(0, 10) or current_hour in range(21, 24)) is False:
+            if (current_hour in range(0, 10) or current_hour in range(21, 24)) is False and config.server == "lab":
                 time.sleep(0.1)
                 # del loss, x_0, x_t, t, eps, eps_theta
                 # torch.cuda.empty_cache()

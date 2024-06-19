@@ -4,13 +4,12 @@ device: cuda:0
 batch: 128
 epoch: 600000
 save_epoch: 5000
-ratio: 0.1
 lr: 2e-4
 loss_type: 'l2'
 sample_type: 'ddim'
 image_size: 32
 fid_estimate_batch_size: 128
-gpu_id: '0,1'
+server: pc
 
 unet:
   dim: 128
@@ -20,3 +19,7 @@ unet:
 diffusion:
   timesteps: 1000
   sampling_timesteps: 250
+
+# only backdoor diffusion will use this
+ratio: 0.1
+gamma: 1e-3

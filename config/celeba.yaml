@@ -1,0 +1,25 @@
+dataset_name: celeba
+attack: benign
+device: cuda:0
+batch: 128
+epoch: 500000
+save_epoch: 5000
+lr: 8e-5
+loss_type: 'l2'
+sample_type: 'ddim'
+image_size: 64
+fid_estimate_batch_size: 128
+server: pc
+
+unet:
+  dim: 128
+  dim_mults: (1, 1, 2, 2, 4)
+  dropout: 0
+
+diffusion:
+  timesteps: 1000
+  sampling_timesteps: 250
+
+# only backdoor diffusion will use this
+ratio: 0.1
+gamma: 1e-3
