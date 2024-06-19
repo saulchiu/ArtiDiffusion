@@ -171,7 +171,6 @@ def train(config: DictConfig):
             writer1.flush()
             current_hour = get_hour()
             if (current_hour in range(0, 10) or current_hour in range(20, 24)) is False:
-                del loss, x_0, x_t, t, eps, eps_theta
                 torch.cuda.empty_cache()
             current_epoch += 1
             pbar.update(1)
