@@ -167,12 +167,14 @@ def train(config: DictConfig):
                     x_0 = next(bad_loader)
                 else:
                     x_0 = next(good_loader)
+                b, c, w, h = x_0.shape
+                t = torch.randint(200, 400, (b,), device=device, dtype=torch.long)
             else:
                 x_0 = next(all_loader)
-            b, c, w, h = x_0.shape
+                b, c, w, h = x_0.shape
+                t = torch.randint(0, 1000, (b,), device=device, dtype=torch.long)
             x_0 = x_0.to(device)
             optimizer.zero_grad()
-            t = torch.randint(0, 1000, (b,), device=device, dtype=torch.long)
             eps = torch.randn_like(x_0, device=device)
             x_t = diffusion.q_sample(x_0, t, eps)
             # no need to use ema
@@ -202,7 +204,8 @@ def train(config: DictConfig):
                     writer2.flush()
             writer1.flush()
             current_hour = get_hour()
-            if (current_hour in range(0, 10) or current_hour in range(21, 24)) is False and config.server == "lab":
+            # if (current_hour in range(0, 10) or current_hour in range(21, 24)) == False and config.server == "lab":
+            if current_hour in range(10, 21) and config.server == "lab":
                 time.sleep(0.1)
                 # del loss, x_0, x_t, t, eps, eps_theta
                 # torch.cuda.empty_cache()
