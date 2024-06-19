@@ -165,10 +165,12 @@ def train(config: DictConfig):
             if config.attack != 'benign':
                 if random() < config.ratio:
                     x_0 = next(bad_loader)
+                    b, c, w, h = x_0.shape
+                    t = torch.randint(200, 400, (b,), device=device, dtype=torch.long)
                 else:
                     x_0 = next(good_loader)
-                b, c, w, h = x_0.shape
-                t = torch.randint(200, 400, (b,), device=device, dtype=torch.long)
+                    b, c, w, h = x_0.shape
+                    t = torch.randint(0, 1000, (b,), device=device, dtype=torch.long)
             else:
                 x_0 = next(all_loader)
                 b, c, w, h = x_0.shape
