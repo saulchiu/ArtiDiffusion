@@ -6,6 +6,7 @@ import os
 import shutil
 from random import random
 
+import yaml
 from accelerate import accelerator
 from pytorch_fid.fid_score import calculate_frechet_distance, compute_statistics_of_path
 from pytorch_fid.inception import InceptionV3
@@ -90,6 +91,8 @@ def train(config: DictConfig):
         os.makedirs(target_folder)
     target_file_path = os.path.join(target_folder, script_name)
     shutil.copy(__file__, target_file_path)
+    with open(f'{target_folder}/config.yaml', 'w') as f:
+        yaml.dump(OmegaConf.to_object(config), f, allow_unicode=True)
     """
     load config
     """
@@ -127,9 +130,7 @@ def train(config: DictConfig):
         raise NotImplementedError
     current_epoch = 0
     fid_value = 0
-    loss_list = []
-    fid_list = []
-    tag = f'{config.dataset_name}_{config.attack}'
+    tag = f'{config.dataset_name}_{config.attack}_{str(config.ratio)}'
     rm_if_exist(f'../runs/{tag}_loss')
     rm_if_exist(f'../runs/{tag}_fid')
     writer1 = SummaryWriter(f'../runs/{tag}_loss')
@@ -186,7 +187,6 @@ def train(config: DictConfig):
                 loss /= 2
                 loss += loss_fn(eps_theta, eps - trigger.unsqueeze(0).expand(eps.shape[0], -1, -1, -1) * gamma) / 2
             loss.backward()
-            loss_list.append(float(loss))
             writer1.add_scalar(tag, float(loss), current_epoch)
             optimizer.step()
             diffusion.ema.update()
@@ -201,7 +201,6 @@ def train(config: DictConfig):
                     m2, s2 = compute_statistics_of_path(f'{target_folder}/fid', fid_model, fid_estimate_batch_size,
                                                         2048, config.device, 8)
                     fid_value = calculate_frechet_distance(m1, s1, m2, s2)
-                    fid_list.append(float(fid_value))
                     writer2.add_scalar(tag, float(fid_value), current_epoch)
                     writer2.flush()
             writer1.flush()
@@ -224,14 +223,12 @@ def train(config: DictConfig):
             save_tensor_images(fake_sample, f'{target_folder}/fid')
         m2, s2 = compute_statistics_of_path(f'{target_folder}/fid', fid_model, fid_estimate_batch_size, 2048, device, 8)
         fid_value = calculate_frechet_distance(m1, s1, m2, s2)
-        fid_list.append(float(fid_value))
     res = {
         'unet': unet.state_dict(),
         'opt': optimizer.state_dict(),
         'ema': diffusion.ema.state_dict(),
         "config": OmegaConf.to_object(config),
-        "loss_list": loss_list,
-        'fid_list': fid_list
+        'fid: ': float(fid_value)
     }
     torch.save(res, f'{target_folder}/result.pth')
     send2bot(OmegaConf.to_yaml(OmegaConf.to_object(config)), 'over')

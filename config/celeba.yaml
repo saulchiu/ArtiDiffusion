@@ -1,14 +1,14 @@
 dataset_name: celeba
 attack: benign
 device: cuda:0
-batch: 128
+batch: 64
 epoch: 500000
 save_epoch: 5000
 lr: 8e-5
 loss_type: 'l2'
 sample_type: 'ddim'
 image_size: 64
-fid_estimate_batch_size: 128
+fid_estimate_batch_size: 64
 server: pc
 
 unet:
