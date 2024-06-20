@@ -192,7 +192,7 @@ def train(config: DictConfig):
             diffusion.ema.update()
             pbar.set_description(f'loss: {loss:.4f}, fid: {fid_value:4f}')
             loss_list.append(float(loss))
-            if current_epoch >= save_epoch and current_epoch % save_epoch == 0:
+            if current_epoch >= save_epoch and current_epoch % save_epoch == 0 and config.cal_fid:
                 diffusion.ema.ema_model.eval()
                 with torch.inference_mode():
                     rm_if_exist(f'{target_folder}/fid')
@@ -209,17 +209,18 @@ def train(config: DictConfig):
                 time.sleep(0.1)
             current_epoch += 1
             pbar.update(1)
-    rm_if_exist(f'{target_folder}/fid')
-    with torch.inference_mode():
-        loop = int(num_fid_sample / fid_estimate_batch_size)
-        for i in tqdm(range(loop), desc='Generating FID samples'):
-            fake_sample = sample_fn(fid_estimate_batch_size)
-            save_tensor_images(fake_sample, f'{target_folder}/fid')
-        if num_fid_sample - loop * fid_estimate_batch_size != 0:
-            fake_sample = sample_fn(num_fid_sample - loop * fid_estimate_batch_size)
-            save_tensor_images(fake_sample, f'{target_folder}/fid')
-        m2, s2 = compute_statistics_of_path(f'{target_folder}/fid', fid_model, fid_estimate_batch_size, 2048, device, 8)
-        fid_value = calculate_frechet_distance(m1, s1, m2, s2)
+    if config.cal_fid:
+        rm_if_exist(f'{target_folder}/fid')
+        with torch.inference_mode():
+            loop = int(num_fid_sample / fid_estimate_batch_size)
+            for i in tqdm(range(loop), desc='Generating FID samples'):
+                fake_sample = sample_fn(fid_estimate_batch_size)
+                save_tensor_images(fake_sample, f'{target_folder}/fid')
+            if num_fid_sample - loop * fid_estimate_batch_size != 0:
+                fake_sample = sample_fn(num_fid_sample - loop * fid_estimate_batch_size)
+                save_tensor_images(fake_sample, f'{target_folder}/fid')
+            m2, s2 = compute_statistics_of_path(f'{target_folder}/fid', fid_model, fid_estimate_batch_size, 2048, device, 8)
+            fid_value = calculate_frechet_distance(m1, s1, m2, s2)
     res = {
         'unet': unet.state_dict(),
         'opt': optimizer.state_dict(),
