@@ -10,7 +10,7 @@ sample_type: 'ddim'
 image_size: 32
 fid_estimate_batch_size: 128
 server: pc
-cal_fid: Flase
+cal_fid: False
 
 
 unet:
