@@ -10,6 +10,8 @@ sample_type: 'ddim'
 image_size: 64
 fid_estimate_batch_size: 64
 server: pc
+cal_fid: Flase
+
 
 unet:
   dim: 128
