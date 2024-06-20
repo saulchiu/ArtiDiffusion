@@ -190,7 +190,7 @@ def train(config: DictConfig):
             loss.backward()
             optimizer.step()
             diffusion.ema.update()
-            pbar.set_description(f'loss: {loss:.4f}, fid: {fid_value:4f}')
+            pbar.set_description(f'loss: {loss:.5f}')
             loss_list.append(float(loss))
             if current_epoch >= save_epoch and current_epoch % save_epoch == 0 and config.cal_fid:
                 diffusion.ema.ema_model.eval()
@@ -226,7 +226,8 @@ def train(config: DictConfig):
         'opt': optimizer.state_dict(),
         'ema': diffusion.ema.state_dict(),
         "config": OmegaConf.to_object(config),
-        'fid: ': float(fid_value)
+        'fid: ': float(fid_value),
+        'loss_list': loss_list,
     }
     torch.save(res, f'{target_folder}/result.pth')
     send2bot(OmegaConf.to_yaml(OmegaConf.to_object(config)), 'over')
