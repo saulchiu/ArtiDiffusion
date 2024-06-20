@@ -134,8 +134,6 @@ def train(config: DictConfig):
     tag = f'{config.dataset_name}_{config.attack}_{str(config.ratio)}'
     rm_if_exist(f'../runs/{tag}_loss')
     rm_if_exist(f'../runs/{tag}_fid')
-    writer1 = SummaryWriter(f'../runs/{tag}_loss')
-    writer2 = SummaryWriter(f'../runs/{tag}_fid')
     diffusion = SanDiffusion(unet, config.diffusion.timesteps, device, sample_step=config.diffusion.sampling_timesteps)
     if sample_type == 'ddim':
         samper = DDIM_Sampler(diffusion)
@@ -162,6 +160,8 @@ def train(config: DictConfig):
         trigger = trans(Image.open(trigger_path))
         trigger = trigger.to(device)
         gamma = config.gamma
+    loss_list = []
+    fid_list = []
     with tqdm(initial=current_epoch, total=epoch) as pbar:
         while current_epoch < epoch:
             if config.attack != 'benign':
@@ -188,10 +188,10 @@ def train(config: DictConfig):
                 loss /= 2
                 loss += loss_fn(eps_theta, eps - trigger.unsqueeze(0).expand(eps.shape[0], -1, -1, -1) * gamma) / 2
             loss.backward()
-            writer1.add_scalar(tag, float(loss), current_epoch)
             optimizer.step()
             diffusion.ema.update()
             pbar.set_description(f'loss: {loss:.4f}, fid: {fid_value:4f}')
+            loss_list.append(float(loss))
             if current_epoch >= save_epoch and current_epoch % save_epoch == 0:
                 diffusion.ema.ema_model.eval()
                 with torch.inference_mode():
@@ -203,15 +203,10 @@ def train(config: DictConfig):
                     m2, s2 = compute_statistics_of_path(f'{target_folder}/fid', fid_model, fid_estimate_batch_size,
                                                         2048, config.device, 8)
                     fid_value = calculate_frechet_distance(m1, s1, m2, s2)
-                    writer2.add_scalar(tag, float(fid_value), current_epoch)
-                    writer2.flush()
-            writer1.flush()
+                    fid_list.append(float(fid_value))
             current_hour = get_hour()
-            # if (current_hour in range(0, 10) or current_hour in range(21, 24)) == False and config.server == "lab":
             if current_hour in range(10, 21) and config.server == "lab":
                 time.sleep(0.1)
-                # del loss, x_0, x_t, t, eps, eps_theta
-                # torch.cuda.empty_cache()
             current_epoch += 1
             pbar.update(1)
     rm_if_exist(f'{target_folder}/fid')
@@ -238,6 +233,4 @@ def train(config: DictConfig):
 
 
 if __name__ == '__main__':
-    # torch.backends.cudnn.enabled = True
-    # torch.backends.cudnn.benchmark = True
     train()
