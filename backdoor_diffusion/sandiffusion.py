@@ -5,19 +5,17 @@ from functools import partial
 import os
 import shutil
 from random import random
-
 import torchvision.utils
 import yaml
 from accelerate import accelerator
 from pytorch_fid.fid_score import calculate_frechet_distance, compute_statistics_of_path
 from pytorch_fid.inception import InceptionV3
-
 import torch
 from PIL import Image
-from labml_nn.diffusion.ddpm import DenoiseDiffusion, experiment
 from torch import nn
 from torch.utils.data.dataset import Dataset
-from torch.utils.tensorboard import SummaryWriter
+from typing import Tuple, Optional
+from torch import nn
 from torchvision.datasets import ImageFolder
 from torch.utils.data.dataloader import DataLoader
 from torchvision.transforms.transforms import Compose, ToTensor, Resize
@@ -41,6 +39,7 @@ from tools.dataset import rm_if_exist, save_tensor_images, load_dataloader
 from tools.tg_bot import send2bot
 
 
+
 def unnormalize_to_zero_to_one(t):
     return (t + 1) * 0.5
 
@@ -49,16 +48,34 @@ def gather(consts: torch.Tensor, t: torch.Tensor):
     c = consts.gather(-1, t)
     return c.reshape(-1, 1, 1, 1)
 
-
-class SanDiffusion(DenoiseDiffusion):
+class SanDiffusion:
     def __init__(self, eps_model: nn.Module, n_steps: int, device: torch.device, sample_step):
-        super().__init__(eps_model, n_steps, device)
+        super().__init__()
+        self.eps_model = eps_model
         self.sample_step = sample_step
         self.device = self.eps_model.device
         self.image_size = self.eps_model.image_size
         self.ema = EMA(self.eps_model, update_every=10)
         self.ema.to(device=self.device)
 
+        self.beta = torch.linspace(0.0001, 0.02, n_steps).to(device)
+        self.alpha = 1. - self.beta
+        self.alpha_bar = torch.cumprod(self.alpha, dim=0)
+        self.n_steps = n_steps
+        self.sigma2 = self.beta
+
+    def q_xt_x0(self, x0: torch.Tensor, t: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor]:
+        mean = gather(self.alpha_bar, t) ** 0.5 * x0
+        var = 1 - gather(self.alpha_bar, t)
+        return mean, var
+
+    def q_sample(self, x0: torch.Tensor, t: torch.Tensor, eps: Optional[torch.Tensor] = None):
+        if eps is None:
+            eps = torch.randn_like(x0)
+        mean, var = self.q_xt_x0(x0, t)
+        return mean + (var ** 0.5) * eps
+
+    @torch.inference_mode()
     def p_sample(self, xt: torch.Tensor, t: torch.Tensor):
         eps_theta = self.ema.ema_model(xt, t)
         alpha_bar = gather(self.alpha_bar, t)
