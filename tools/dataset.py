@@ -1,5 +1,6 @@
 import os
 import shutil
+import time
 
 import PIL.Image
 import numpy as np
@@ -37,7 +38,9 @@ def load_dataloader(path, trans, batch):
 
 
 def save_tensor_images(tensor, target_folder):
-    tag = now()
+    current_time = time.time()
+    time_tuple = time.localtime(current_time)
+    tag = str(time.strftime("%Y%m%d%H%M%S", time_tuple))
     if not os.path.exists(target_folder):
         os.makedirs(target_folder)
     batch_size = tensor.size(0)

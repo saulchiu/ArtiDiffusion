@@ -6,6 +6,7 @@ import os
 import shutil
 from random import random
 
+import torchvision.utils
 import yaml
 from accelerate import accelerator
 from pytorch_fid.fid_score import calculate_frechet_distance, compute_statistics_of_path
@@ -80,7 +81,7 @@ class SanDiffusion(DenoiseDiffusion):
 @hydra.main(version_base=None, config_path='../config', config_name='default')
 def train(config: DictConfig):
     """
-    prepare dataset and save source code
+    prepare dataset, save source code, save config file
     """
     prepare_bad_data(config)
     print(OmegaConf.to_yaml(OmegaConf.to_object(config)))
@@ -194,10 +195,11 @@ def train(config: DictConfig):
             if current_epoch >= save_epoch and current_epoch % save_epoch == 0:
                 diffusion.ema.ema_model.eval()
                 with torch.inference_mode():
-                    # fake_sample = sample_fn(1000)
                     rm_if_exist(f'{target_folder}/fid')
-                    fake_sample = sample_fn(fid_estimate_batch_size)
-                    save_tensor_images(fake_sample, f'{target_folder}/fid')
+                    for i in range(int(fid_estimate_batch_size / 64)):
+                        fake_sample = sample_fn(64)
+                        save_tensor_images(fake_sample, f'{target_folder}/fid')
+                    torchvision.utils.save_image(fake_sample, f'{target_folder}/sample_{current_epoch}.png', nrow=8)
                     m2, s2 = compute_statistics_of_path(f'{target_folder}/fid', fid_model, fid_estimate_batch_size,
                                                         2048, config.device, 8)
                     fid_value = calculate_frechet_distance(m1, s1, m2, s2)
