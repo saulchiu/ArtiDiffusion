@@ -120,8 +120,6 @@ def train(config: DictConfig):
     sample_type = config.sample_type
     save_epoch = config.save_epoch
     epoch = config.epoch
-    num_fid_sample = 5e4
-    fid_estimate_batch_size = config.fid_estimate_batch_size
     unet = Unet(
         dim=config.unet.dim,
         image_size=config.image_size,
@@ -133,11 +131,6 @@ def train(config: DictConfig):
         ToTensor(), Resize((config.image_size, config.image_size))
     ])
     all_path = f'../dataset/dataset-{config.dataset_name}-all'
-    block_idx = InceptionV3.BLOCK_INDEX_BY_DIM[2048]
-    with torch.no_grad():
-        fid_model = InceptionV3([block_idx])
-        fid_model.to(config.device)
-        m1, s1 = compute_statistics_of_path(all_path, fid_model, fid_estimate_batch_size, 2048, config.device, 8)
     all_loader = load_dataloader(path=all_path, trans=trans, batch=config.batch)
     optimizer = Adam(unet.parameters(), lr)
     if loss_type == 'l1':
@@ -147,10 +140,6 @@ def train(config: DictConfig):
     else:
         raise NotImplementedError
     current_epoch = 0
-    fid_value = 0
-    tag = f'{config.dataset_name}_{config.attack}_{str(config.ratio)}'
-    rm_if_exist(f'../runs/{tag}_loss')
-    rm_if_exist(f'../runs/{tag}_fid')
     diffusion = SanDiffusion(unet, config.diffusion.timesteps, device, sample_step=config.diffusion.sampling_timesteps)
     if sample_type == 'ddim':
         samper = DDIM_Sampler(diffusion)
@@ -209,41 +198,22 @@ def train(config: DictConfig):
             diffusion.ema.update()
             pbar.set_description(f'loss: {loss:.5f}')
             loss_list.append(float(loss))
-            if current_epoch >= save_epoch and current_epoch % save_epoch == 0 and config.cal_fid:
+            if current_epoch >= save_epoch and current_epoch % save_epoch == 0:
                 diffusion.ema.ema_model.eval()
                 with torch.inference_mode():
                     rm_if_exist(f'{target_folder}/fid')
-                    for i in range(int(fid_estimate_batch_size / 64)):
-                        fake_sample = sample_fn(64)
-                        save_tensor_images(fake_sample, f'{target_folder}/fid')
-                    torchvision.utils.save_image(fake_sample, f'{target_folder}/sample_{current_epoch}.png', nrow=8)
-                    m2, s2 = compute_statistics_of_path(f'{target_folder}/fid', fid_model, fid_estimate_batch_size,
-                                                        2048, config.device, 8)
-                    fid_value = calculate_frechet_distance(m1, s1, m2, s2)
-                    fid_list.append(float(fid_value))
+                    fake_sample = sample_fn(16)
+                    torchvision.utils.save_image(fake_sample, f'{target_folder}/sample_{current_epoch}.png', nrow=4)
             current_hour = get_hour()
             if current_hour in range(10, 21) and config.server == "lab":
                 time.sleep(0.1)
             current_epoch += 1
             pbar.update(1)
-    if config.cal_fid:
-        rm_if_exist(f'{target_folder}/fid')
-        with torch.inference_mode():
-            loop = int(num_fid_sample / fid_estimate_batch_size)
-            for i in tqdm(range(loop), desc='Generating FID samples'):
-                fake_sample = sample_fn(fid_estimate_batch_size)
-                save_tensor_images(fake_sample, f'{target_folder}/fid')
-            if num_fid_sample - loop * fid_estimate_batch_size != 0:
-                fake_sample = sample_fn(num_fid_sample - loop * fid_estimate_batch_size)
-                save_tensor_images(fake_sample, f'{target_folder}/fid')
-            m2, s2 = compute_statistics_of_path(f'{target_folder}/fid', fid_model, fid_estimate_batch_size, 2048, device, 8)
-            fid_value = calculate_frechet_distance(m1, s1, m2, s2)
     res = {
         'unet': unet.state_dict(),
         'opt': optimizer.state_dict(),
         'ema': diffusion.ema.state_dict(),
         "config": OmegaConf.to_object(config),
-        'fid: ': float(fid_value),
         'loss_list': loss_list,
     }
     torch.save(res, f'{target_folder}/result.pth')

@@ -6,11 +6,9 @@ epoch: 600000
 save_epoch: 5000
 lr: 2e-4
 loss_type: 'l2'
-sample_type: 'ddim'
+sample_type: 'ddpm'
 image_size: 32
-fid_estimate_batch_size: 128
 server: pc
-cal_fid: False
 
 unet:
   dim: 128

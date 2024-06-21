@@ -8,9 +8,7 @@ lr: 8e-5
 loss_type: 'l2'
 sample_type: 'ddim'
 image_size: 64
-fid_estimate_batch_size: 64
 server: pc
-cal_fid: False
 
 
 unet:
