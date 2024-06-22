@@ -39,7 +39,6 @@ from tools.dataset import rm_if_exist, save_tensor_images, load_dataloader
 from tools.tg_bot import send2bot
 
 
-
 def unnormalize_to_zero_to_one(t):
     return (t + 1) * 0.5
 
@@ -47,6 +46,7 @@ def unnormalize_to_zero_to_one(t):
 def gather(consts: torch.Tensor, t: torch.Tensor):
     c = consts.gather(-1, t)
     return c.reshape(-1, 1, 1, 1)
+
 
 class SanDiffusion:
     def __init__(self, eps_model: nn.Module, n_steps: int, device: torch.device, sample_step):
@@ -77,7 +77,7 @@ class SanDiffusion:
 
     @torch.inference_mode()
     def p_sample(self, xt: torch.Tensor, t: torch.Tensor):
-        eps_theta = self.ema.ema_model(xt, t)
+        eps_theta = self.eps_model(xt, t)
         alpha_bar = gather(self.alpha_bar, t)
         alpha = gather(self.alpha, t)
         eps_coef = (1 - alpha) / (1 - alpha_bar) ** .5
@@ -94,6 +94,9 @@ class SanDiffusion:
             x_t = x_t_m_1
         return x_t
 
+    @torch.inference_mode()
+    def sample(self, batch):
+        return self.ddpm_sample(batch)
 
 @hydra.main(version_base=None, config_path='../config', config_name='default')
 def train(config: DictConfig):
@@ -157,7 +160,7 @@ def train(config: DictConfig):
         good_path = f'../dataset/dataset-{config.dataset_name}-good-{config.attack}-{str(ratio)}'
         bad_loader = load_dataloader(bad_path, trans, config.batch)
         good_loader = load_dataloader(good_path, trans, config.batch)
-        if config.attack =="badnet":
+        if config.attack == "badnet":
             trigger_path = f'../resource/badnet/trigger_{config.image_size}_{int(config.image_size / 10)}.png'
         elif config.attack == 'blended':
             trigger_path = '../resource/blended/hello_kitty.jpeg'
@@ -167,7 +170,7 @@ def train(config: DictConfig):
         trigger = trigger.to(device)
         gamma = config.gamma
     loss_list = []
-    fid_list = []
+    mode = 'b'
     with tqdm(initial=current_epoch, total=epoch) as pbar:
         while current_epoch < epoch:
             if config.attack != 'benign':
@@ -175,10 +178,12 @@ def train(config: DictConfig):
                     x_0 = next(bad_loader)
                     b, c, w, h = x_0.shape
                     t = torch.randint(200, 400, (b,), device=device, dtype=torch.long)
+                    mode = 'p'
                 else:
                     x_0 = next(good_loader)
                     b, c, w, h = x_0.shape
                     t = torch.randint(0, 1000, (b,), device=device, dtype=torch.long)
+                    mode = 'b'
             else:
                 x_0 = next(all_loader)
                 b, c, w, h = x_0.shape
@@ -191,12 +196,11 @@ def train(config: DictConfig):
             eps_theta = diffusion.eps_model(x_t, t)
             loss = loss_fn(eps_theta, eps)
             if config.attack != 'benign':
-                loss /= 2
-                loss += loss_fn(eps_theta, eps - trigger.unsqueeze(0).expand(eps.shape[0], -1, -1, -1) * gamma) / 2
+                loss += loss_fn(eps_theta, eps - trigger.unsqueeze(0).expand(eps.shape[0], -1, -1, -1) * gamma)
             loss.backward()
             optimizer.step()
             diffusion.ema.update()
-            pbar.set_description(f'loss: {loss:.5f}')
+            pbar.set_description(f'{mode} loss: {loss:.5f}')
             loss_list.append(float(loss))
             if current_epoch >= save_epoch and current_epoch % save_epoch == 0:
                 diffusion.ema.ema_model.eval()

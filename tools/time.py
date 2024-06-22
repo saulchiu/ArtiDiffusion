@@ -27,7 +27,7 @@ def get_minute():
 def now():
     bj_tz = pytz.timezone('Asia/Shanghai')
     bj_time = datetime.now(bj_tz)
-    formatted_time = bj_time.strftime('%Y%m%d%H%M')
+    formatted_time = bj_time.strftime('%Y%m%d%H%M%S')
     return formatted_time
 
 

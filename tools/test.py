@@ -1,7 +1,14 @@
 import time
+from datetime import datetime
+import pytz
 
-# 获取当前时间戳
-current_time = time.time()
-time_tuple = time.localtime(current_time)
-tag = str(time.strftime("%Y%m%d%H%M%S", time_tuple))
-print(tag)
+
+def get_hour():
+    bj_tz = pytz.timezone('Asia/Shanghai')
+    bj_time = datetime.now(bj_tz)
+    return bj_time.hour
+
+
+current_hour = get_hour()
+if current_hour in range(10, 21):
+    time.sleep(0.1)

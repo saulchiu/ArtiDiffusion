@@ -19,7 +19,7 @@ from itertools import repeat
 from tqdm import tqdm
 
 sys.path.append('../')
-from tools.eval_diffusion import load_result
+from tools.eval_diffusion_old import load_result
 
 
 class ImageDataset(Dataset):
