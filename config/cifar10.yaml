@@ -5,8 +5,8 @@ batch: 128
 epoch: 600000
 save_epoch: 5000
 lr: 2e-4
-loss_type: 'l2'
-sample_type: 'ddpm'
+loss_type: l2
+sample_type: ddpm
 image_size: 32
 server: pc
 
