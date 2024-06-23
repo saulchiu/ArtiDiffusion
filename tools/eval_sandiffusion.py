@@ -26,7 +26,7 @@ from tools.unet import Unet
 def gen_sample(diffusion, total_sample, target_folder):
     rm_if_exist(target_folder)
     loop = int(total_sample / 64)
-    for _ in range(loop):
+    for _ in tqdm(range(loop)):
         fake_sample = diffusion.sample(64)
         save_tensor_images(fake_sample, target_folder)
     if (total_sample - loop * 64) != 0:
@@ -153,7 +153,7 @@ def show_sanitization(path, t, loop, device):
         san_list.append(x_t)
         # reverse
         for j in reversed(range(0, t)):
-            x_t_m_1 = diffusion.p_sample(x_t, torch.tensor([j], device=device))
+            x_t_m_1 = diffusion.p_sample(x_t, torch.tensor([j + 1], device=device))
             x_t = x_t_m_1
         san_list.append(x_t)
         x_0 = x_t
