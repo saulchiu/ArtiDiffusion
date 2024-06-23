@@ -142,7 +142,7 @@ def show_sanitization(path, t, loop, device):
     x_0 = tensors
     diffusion = load_diffusion(path, device)
     san_list = [x_0]
-    t_ = torch.tensor([t], device=device).expand(x_0.shape[0],)
+    t_ = torch.tensor([t], device=device).expand(x_0.shape[0], )
     # sanitization process
     for i in range(loop):
         # forward

@@ -45,9 +45,7 @@ def save_tensor_images(tensor, target_folder):
         os.makedirs(target_folder)
     batch_size = tensor.size(0)
     for i in range(batch_size):
-        image_np = np.transpose(tensor[i].cpu().numpy(), (1, 2, 0))
-        image_pil = Image.fromarray((image_np * 255).astype(np.uint8))
-        image_pil.save(os.path.join(target_folder, f'{str(tag)}_{i}.png'))
+        torchvision.utils.save_image(tensor[i], f'{target_folder}/{tag}_{i}.png')
 
 
 class SanDataset(Dataset):
