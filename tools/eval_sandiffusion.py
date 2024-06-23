@@ -126,26 +126,29 @@ def show_sanitization(path, t, loop, device):
         torchvision.transforms.Resize((config.image_size, config.image_size))
     ])
     tensor_list = get_dataset(config.dataset_name, transform)
-    tensors = tensor_list[0:16]
+    b = 16
+    tensors = tensor_list[0:b]
     tensors = torch.stack(tensors, dim=0)
     tensors = tensors.to(device)
     if config.attack == 'blended':
         trigger = transform(
             PIL.Image.open('../resource/blended/hello_kitty.jpeg')
         )
+        trigger = trigger.unsqueeze(0).expand(b, -1, -1, -1)
         trigger = trigger.to(device)
-        tensors = 0.8 * tensors + 0.2 * trigger.unsqueeze(0).expand(tensors.shape[0], -1, -1, -1)
+        tensors = 0.8 * tensors + 0.2 * trigger.unsqueeze(0).expand(b, -1, -1, -1)
     elif config.attack == 'badnet':
         mask = PIL.Image.open(
             f'../resource/badnet/mask_{config.image_size}_{int(config.image_size / 10)}.png')
         mask = transform(mask)
-        mask = mask.to(device)
         trigger = PIL.Image.open(
             f'../resource/badnet/trigger_{config.image_size}_{int(config.image_size / 10)}.png')
         trigger = transform(trigger)
+        mask = mask.unsqueeze(0).expand(b, -1, -1, -1)
+        trigger = trigger.unsqueeze(0).expand(b, -1, -1, -1)
+        mask = mask.to(device)
         trigger = trigger.to(device)
-        tensors = tensors * (1 - mask.unsqueeze(0).expand(tensors.shape[0], -1, -1, -1)) + trigger.unsqueeze(0).expand(
-            tensors.shape[0], -1, -1, -1)
+        tensors = tensors * (1 - mask) + trigger
     x_0 = tensors
     diffusion = load_diffusion(path, device)
     san_list = [x_0]
