@@ -1,5 +1,6 @@
 import argparse
 import math
+import random
 
 import PIL
 import torch
@@ -127,7 +128,8 @@ def show_sanitization(path, t, loop, device):
     ])
     tensor_list = get_dataset(config.dataset_name, transform)
     b = 16
-    tensors = tensor_list[0:b]
+    base = random.randint(0, 1000)
+    tensors = tensor_list[base:base + b]
     tensors = torch.stack(tensors, dim=0)
     tensors = tensors.to(device)
     if config.attack == 'blended':
@@ -148,7 +150,7 @@ def show_sanitization(path, t, loop, device):
         trigger = trigger.unsqueeze(0).expand(b, -1, -1, -1)
         mask = mask.to(device)
         trigger = trigger.to(device)
-        # tensors = tensors * (1 - mask) + trigger
+        tensors = tensors * (1 - mask) + trigger
     x_0 = tensors
     diffusion = load_diffusion(path, device)
     san_list = [x_0]

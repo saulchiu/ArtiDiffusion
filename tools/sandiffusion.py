@@ -186,6 +186,7 @@ def train(config: DictConfig):
         trigger = trans(Image.open(trigger_path))
         trigger = trigger.to(device)
         gamma = config.gamma
+        partial_step = config.partial_step
     loss_list = []
     mode = 'b'
     with tqdm(initial=current_epoch, total=epoch) as pbar:
@@ -194,7 +195,7 @@ def train(config: DictConfig):
                 if random() < config.ratio:
                     x_0 = next(bad_loader)
                     b, c, w, h = x_0.shape
-                    t = torch.randint(0, 1000, (b,), device=device, dtype=torch.long)
+                    t = torch.randint(200, partial_step, (b,), device=device, dtype=torch.long)
                     mode = 'p'
                 else:
                     x_0 = next(good_loader)
