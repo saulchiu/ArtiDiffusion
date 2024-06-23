@@ -213,7 +213,7 @@ def train(config: DictConfig):
             eps_theta = diffusion.eps_model(x_t, t)
             loss = loss_fn(eps_theta, eps)
             if config.attack != 'benign':
-                loss += loss_fn(eps_theta, eps - trigger.unsqueeze(0).expand(x_0.shape[0], -1, -1, -1))
+                loss += loss_fn(eps_theta, eps - trigger.unsqueeze(0).expand(x_0.shape[0], -1, -1, -1) * gamma)
             loss.backward()
             optimizer.step()
             diffusion.ema.update()
