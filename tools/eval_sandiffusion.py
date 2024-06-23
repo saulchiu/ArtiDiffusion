@@ -14,6 +14,7 @@ from ema_pytorch.ema_pytorch import EMA
 import sys
 
 from torchvision.utils import make_grid
+from tqdm import tqdm
 
 sys.path.append('../')
 from backdoor_diffusion.sandiffusion import SanDiffusion
