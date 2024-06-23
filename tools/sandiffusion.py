@@ -71,9 +71,8 @@ class SanDiffusion:
         self.ema = EMA(self.eps_model, update_every=10)
         self.ema.to(device=self.device)
 
-        # self.beta = torch.linspace(0.0001, 0.02, n_steps).to(device)
-        self.beta = sigmoid_beta_schedule(self.n_steps)
-        self.beta = self.beta.to(device)
+        self.beta = torch.linspace(0.0001, 0.02, n_steps).to(device)
+        # self.beta = sigmoid_beta_schedule(self.n_steps).to(device)
         self.alpha = 1. - self.beta
         self.alpha_bar = torch.cumprod(self.alpha, dim=0)
         self.sigma2 = self.beta
@@ -195,7 +194,7 @@ def train(config: DictConfig):
                 if random() < config.ratio:
                     x_0 = next(bad_loader)
                     b, c, w, h = x_0.shape
-                    t = torch.randint(200, 400, (b,), device=device, dtype=torch.long)
+                    t = torch.randint(0, 1000, (b,), device=device, dtype=torch.long)
                     mode = 'p'
                 else:
                     x_0 = next(good_loader)
