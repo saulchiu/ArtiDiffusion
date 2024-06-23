@@ -184,6 +184,7 @@ def get_args():
     parser = argparse.ArgumentParser(description='This script does amazing things.')
     parser.add_argument('--device', type=str, default='cpu')
     parser.add_argument('--path', type=str)
+    parser.add_argument('--mode', type=str, default='v')
     # parser.add_help = True
     return parser.parse_args()
 
@@ -192,5 +193,7 @@ if __name__ == '__main__':
     args = get_args()
     device = args.device
     path = args.path
-    # eval_diffusion(path, device)
+    mode = args.mode
+    if mode == 'fid':
+        eval_diffusion(path, device)
     show_sanitization(path, 200, 8, device)
