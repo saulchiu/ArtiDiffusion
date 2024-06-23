@@ -17,8 +17,7 @@ from torchvision.utils import make_grid
 from tqdm import tqdm
 
 sys.path.append('../')
-from backdoor_diffusion.sandiffusion import SanDiffusion
-from tools.time import now
+from tools.sandiffusion import SanDiffusion
 from tools.dataset import save_tensor_images, rm_if_exist
 from tools.prepare_data import get_dataset
 from tools.unet import Unet
@@ -39,6 +38,12 @@ def gen_sample(diffusion, total_sample, target_folder):
 def gather(consts: torch.Tensor, t: torch.Tensor):
     c = consts.gather(-1, t)
     return c.reshape(-1, 1, 1, 1)
+
+
+def extract(a, t, x_shape):
+    b, *_ = t.shape
+    out = a.gather(-1, t)
+    return out.reshape(b, *((1,) * (len(x_shape) - 1)))
 
 
 def plot_images(images, num_images, net=None):
@@ -112,6 +117,7 @@ def eval_diffusion(path, device):
     print(fid)
 
 
+@torch.inference_mode()
 def show_sanitization(path, t, loop, device):
     ld = torch.load(f'{path}/result.pth', map_location=device)
     config = DictConfig(ld['config'])
@@ -120,8 +126,8 @@ def show_sanitization(path, t, loop, device):
         torchvision.transforms.Resize((config.image_size, config.image_size))
     ])
     tensor_list = get_dataset(config.dataset_name, transform)
-    tensor_list = tensor_list[0:16]
-    tensors = torch.stack(tensor_list, dim=0)
+    tensors = tensor_list[0:16]
+    tensors = torch.stack(tensors, dim=0)
     tensors = tensors.to(device)
     if config.attack == 'blended':
         trigger = transform(
@@ -138,26 +144,23 @@ def show_sanitization(path, t, loop, device):
             f'../resource/badnet/trigger_{config.image_size}_{int(config.image_size / 10)}.png')
         trigger = transform(trigger)
         trigger = trigger.to(device)
-        tensors = (tensors * (1 - mask.unsqueeze(0).expand(tensors.shape[0], -1, -1, -1))
-                   + trigger.unsqueeze(0).expand(tensors.shape[0], -1, -1, -1))
+        tensors = tensors * (1 - mask.unsqueeze(0).expand(tensors.shape[0], -1, -1, -1)) + trigger.unsqueeze(0).expand(
+            tensors.shape[0], -1, -1, -1)
     x_0 = tensors
     diffusion = load_diffusion(path, device)
     san_list = [x_0]
-    t_ = torch.tensor([t], device=device).expand(x_0.shape[0], )
+    t_ = torch.tensor([t], device=device)
     # sanitization process
-    for i in range(loop):
+    for i in tqdm(range(loop), desc="iterate", total=loop, leave=False):
         # forward
-        noise = torch.rand_like(x_0)
-        noise = noise.to(device)
-        x_t = (torch.sqrt(gather(diffusion.alpha_bar, t_)).expand(x_0.shape) * x_0 +
-               torch.sqrt(1. - gather(diffusion.alpha_bar, t_)).expand(x_0.shape) * noise)
+        x_t = diffusion.q_sample(x_0, t_)
         san_list.append(x_t)
         # reverse
         for j in reversed(range(0, t)):
-            x_t_m_1 = diffusion.p_sample(x_t, torch.tensor([j + 1], device=device))
+            x_t_m_1 = diffusion.p_sample(x_t, torch.tensor([j], device=device))
             x_t = x_t_m_1
-        san_list.append(x_t)
         x_0 = x_t
+        san_list.append(x_0)
     chain = torch.stack(san_list, dim=0)
     res = []
     for i in range(len(chain)):
@@ -184,5 +187,5 @@ if __name__ == '__main__':
     args = get_args()
     device = args.device
     path = args.path
-    eval_diffusion(path, device)
-    # show_sanitization(path, 200, 8, device)
+    # eval_diffusion(path, device)
+    show_sanitization(path, 200, 8, device)

@@ -15,6 +15,7 @@ import torchvision.transforms.transforms as T
 from torchvision.transforms import transforms
 from torchvision.utils import make_grid
 from omegaconf import OmegaConf, DictConfig
+# from labml_nn.diffusion.ddpm
 import hydra
 
 sys.path.append('../')
@@ -64,10 +65,10 @@ def plot_images(images, num_images, net=None):
 
 
 def data_sanitization(diffusion, x_start, t, device='cuda:0'):
-    x_t = diffusion.q_sample(x_start=x_start, t=torch.tensor([t]).to(device))
+    x_t = diffusion.q_sample(x_start=x_start, t=torch.tensor([t], device=device))
     x_t_before = x_t
     for i in reversed(range(t)):
-        pred_img, _ = diffusion.p_sample(x=x_t, t=i + 1)
+        pred_img, _ = diffusion.p_sample(x=x_t, t=i)
         x_t = pred_img
     x_start = x_t
     x_t = x_t_before
@@ -79,7 +80,7 @@ def iter_data_sanitization(diffusion, x_start, t=200, loop=8):
     for i in range(loop):
         x_t, x_start = data_sanitization(diffusion, x_start, t)
         # whether append the sample with noise
-        # tensor_list.append(x_t)
+        tensor_list.append(x_t)
         # append the sample after data sanitization
         tensor_list.append(x_start)
     tensors = torch.stack(tensor_list, dim=0)
@@ -145,33 +146,6 @@ def load_result(cfg, device):
     if x_start.shape[1] != cfg.diffusion.image_size:
         prepare_bad_data(cfg)
     return diffusion, trainer, trigger, x_start_list
-
-
-def draw_loss(result, start, end):
-    loss_list = result['loss_list']
-    loss_list_sliced = loss_list[start:end]
-    losses_mode_0 = [item['loss'] for item in loss_list_sliced if item['mode'] == 0]
-    losses_mode_1 = [item['loss'] for item in loss_list_sliced if item['mode'] == 1]
-    losses_all = [item['loss'] for item in loss_list_sliced] 
-    fig, axs = plt.subplots(1, 3, figsize=(15, 5)) 
-    axs[0].plot(losses_mode_0, color='blue')
-    axs[0].set_title('Benign Loss')
-    axs[0].set_xlabel('Iteration')
-    axs[0].set_ylabel('Loss')
-    axs[0].grid(True)
-    axs[1].plot(losses_mode_1, color='red')
-    axs[1].set_title('Poisoning Loss')
-    axs[1].set_xlabel('Iteration')
-    axs[1].set_ylabel('Loss')
-    axs[1].grid(True)
-    axs[2].plot(losses_all, linestyle='--', color='black')
-    axs[2].set_title('All Modes Loss')
-    axs[2].set_xlabel('Iteration')
-    axs[2].set_ylabel('Loss')
-    axs[2].grid(True)
-    plt.tight_layout()
-    plt.show()
-
 
 @hydra.main(version_base=None, config_path='../config/eval/', config_name='default')
 def eval_result(cfg: DictConfig):

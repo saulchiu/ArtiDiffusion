@@ -63,6 +63,9 @@ class SanDiffusion:
         self.alpha_bar = torch.cumprod(self.alpha, dim=0)
         self.n_steps = n_steps
         self.sigma2 = self.beta
+        self.alphas_bar_prev = F.pad(self.alpha_bar[:-1], (1, 0), value=1.)
+        self.posterior_variance = self.beta * (1. - self.alphas_bar_prev) / (1. - self.alpha_bar)
+        self.posterior_log_variance_clipped = torch.log(self.posterior_variance.clamp(min =1e-20))
 
     def q_xt_x0(self, x0: torch.Tensor, t: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor]:
         mean = gather(self.alpha_bar, t) ** 0.5 * x0
@@ -80,11 +83,10 @@ class SanDiffusion:
         eps_theta = self.ema.ema_model(xt, t)
         alpha_bar = gather(self.alpha_bar, t)
         alpha = gather(self.alpha, t)
-        eps_coef = (1 - alpha) / (1 - alpha_bar) ** .5
+        eps_coef = (1 - alpha) / ((1 - alpha_bar) ** .5)
         mean = 1 / (alpha ** 0.5) * (xt - eps_coef * eps_theta)
-        var = gather(self.sigma2, t)
-        eps = torch.randn(xt.shape, device=xt.device)
-        return mean + (var ** .5) * eps
+        z = torch.randn_like(xt) if t > 0 else 0.
+        return mean + (0.5 * gather(self.posterior_log_variance_clipped, t)).exp() * z
 
     @torch.inference_mode()
     def ddpm_sample(self, batch):

@@ -13,6 +13,7 @@ from pytorch_fid.inception import InceptionV3
 import torch
 from PIL import Image
 from torch import nn
+from torch.cuda.amp import autocast
 from torch.utils.data.dataset import Dataset
 from typing import Tuple, Optional
 from torch import nn
@@ -39,6 +40,17 @@ from tools.dataset import rm_if_exist, save_tensor_images, load_dataloader
 from tools.tg_bot import send2bot
 
 
+def sigmoid_beta_schedule(timesteps, start=-3, end=3, tau=1, clamp_min=1e-5):
+    steps = timesteps + 1
+    t = torch.linspace(0, timesteps, steps) / timesteps
+    v_start = torch.tensor(start / tau).sigmoid()
+    v_end = torch.tensor(end / tau).sigmoid()
+    alphas_cumprod = (-((t * (end - start) + start) / tau).sigmoid() + v_end) / (v_end - v_start)
+    alphas_cumprod = alphas_cumprod / alphas_cumprod[0]
+    betas = 1 - (alphas_cumprod[1:] / alphas_cumprod[:-1])
+    return torch.clip(betas, 0, 0.999)
+
+
 def unnormalize_to_zero_to_one(t):
     return (t + 1) * 0.5
 
@@ -55,14 +67,19 @@ class SanDiffusion:
         self.sample_step = sample_step
         self.device = self.eps_model.device
         self.image_size = self.eps_model.image_size
+        self.n_steps = n_steps
         self.ema = EMA(self.eps_model, update_every=10)
         self.ema.to(device=self.device)
 
-        self.beta = torch.linspace(0.0001, 0.02, n_steps).to(device)
+        # self.beta = torch.linspace(0.0001, 0.02, n_steps).to(device)
+        self.beta = sigmoid_beta_schedule(self.n_steps)
+        self.beta = self.beta.to(device)
         self.alpha = 1. - self.beta
         self.alpha_bar = torch.cumprod(self.alpha, dim=0)
-        self.n_steps = n_steps
         self.sigma2 = self.beta
+        self.alphas_bar_prev = F.pad(self.alpha_bar[:-1], (1, 0), value=1.)
+        self.posterior_variance = self.beta * (1. - self.alphas_bar_prev) / (1. - self.alpha_bar)
+        self.posterior_log_variance_clipped = torch.log(self.posterior_variance.clamp(min=1e-20))
 
     def q_xt_x0(self, x0: torch.Tensor, t: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor]:
         mean = gather(self.alpha_bar, t) ** 0.5 * x0
@@ -77,7 +94,7 @@ class SanDiffusion:
 
     @torch.inference_mode()
     def p_sample(self, xt: torch.Tensor, t: torch.Tensor):
-        eps_theta = self.eps_model(xt, t)
+        eps_theta = self.ema.ema_model(xt, t)
         alpha_bar = gather(self.alpha_bar, t)
         alpha = gather(self.alpha, t)
         eps_coef = (1 - alpha) / (1 - alpha_bar) ** .5
@@ -97,6 +114,7 @@ class SanDiffusion:
     @torch.inference_mode()
     def sample(self, batch):
         return self.ddpm_sample(batch)
+
 
 @hydra.main(version_base=None, config_path='../config', config_name='default')
 def train(config: DictConfig):
@@ -196,7 +214,7 @@ def train(config: DictConfig):
             eps_theta = diffusion.eps_model(x_t, t)
             loss = loss_fn(eps_theta, eps)
             if config.attack != 'benign':
-                loss += loss_fn(eps_theta, eps - trigger.unsqueeze(0).expand(eps.shape[0], -1, -1, -1) * gamma)
+                loss += loss_fn(eps_theta, eps - trigger.unsqueeze(0).expand(x_0.shape[0], -1, -1, -1) * gamma)
             loss.backward()
             optimizer.step()
             diffusion.ema.update()
