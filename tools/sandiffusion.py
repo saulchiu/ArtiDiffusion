@@ -198,6 +198,11 @@ def train(config: DictConfig):
         dropout=config.unet.dropout,
         device=device
     )
+    if torch.cuda.device_count() > 1:
+        print("Let's use", torch.cuda.device_count(), "GPUs!")
+        device_ids = [0, 1]
+        unet = nn.DataParallel(unet, device_ids=device_ids).to('cuda')
+    unet.to(device)
     trans = T.Compose([
         T.Lambda(partial(convert_image_to_fn, "RGB")),
         T.Resize(config.image_size),
