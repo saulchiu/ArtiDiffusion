@@ -83,7 +83,7 @@ class SanDiffusion:
         super().__init__()
         self.eps_model = eps_model
         self.sample_step = sample_step
-        self.device = self.device
+        self.device = device
         self.image_size = self.eps_model.image_size
         self.n_steps = n_steps
         self.ema = EMA(self.eps_model, update_every=10)
