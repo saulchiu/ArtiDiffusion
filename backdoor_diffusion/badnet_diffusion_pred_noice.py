@@ -55,38 +55,17 @@ class BadDiffusion(GaussianDiffusion):
         return pred_img, x_start
 
     def bad_p_loss(self, x_start, t, mode, noise=None, offset_noise_strength=None):
-        noise = default(noise, lambda: torch.randn_like(x_start))
-        offset_noise_strength = default(offset_noise_strength, self.offset_noise_strength)
-        if offset_noise_strength > 0.:
-            offset_noise = torch.randn(x_start.shape[:2], device=self.device)
-            noise += offset_noise_strength * rearrange(offset_noise, 'b c -> b c 1 1')
+        noise = torch.randn_like(x_start)
         x = self.q_sample(x_start=x_start, t=t, noise=noise)
-        x_self_cond = None
-        if self.self_condition and random() < 0.5:
-            with torch.no_grad():
-                x_self_cond = self.model_predictions(x, t).pred_x_start
-                x_self_cond.detach_()
-        model_out = self.model(x, t, x_self_cond)
+        model_out = self.model(x, t)
         if self.objective == 'pred_noise':
             target = noise
-        elif self.objective == 'pred_x0':
-            target = x_start
-        elif self.objective == 'pred_v':
-            v = self.predict_v(x_start, t, noise)
-            target = v
         else:
             raise ValueError(f'unknown objective {self.objective}')
         if mode == 0:  # benign data loss
-            loss = F.mse_loss(model_out, target, reduction='none')
-            loss = reduce(loss, 'b ... -> b', 'mean')
-            loss = loss * extract(self.loss_weight, t, loss.shape)
-            loss = loss.mean()
-        else:  # trigger data
-            # optimize the epsilon_{no trigger}
-            loss_1 = F.mse_loss(target, model_out, reduction='none')
-            loss_1 = reduce(loss_1, 'b ... -> b', 'mean')
-            loss_1 = loss_1 * extract(self.loss_weight, t, loss_1.shape)
-            loss_1 = loss_1.mean()
+            loss = F.mse_loss(model_out, target)
+        else:
+            loss_1 = F.mse_loss(target, model_out)
             x_t = x
             loss_2 = 0
             if self.attack == "badnet":
@@ -94,10 +73,6 @@ class BadDiffusion(GaussianDiffusion):
             elif self.attack == "blended":
                 loss_2 = self.blended_loss(x_start, x_t, model_out, t, target)
             loss = loss_1 + loss_2
-            # print(loss)
-            if math.isnan(float(loss)):
-                print("Loss is NaN!")
-                # pdb.set_trace()
         return loss
 
     def badnet_loss(self, x_start, x_t, epsilon_p, t, target):

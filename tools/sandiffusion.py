@@ -61,6 +61,9 @@ def sigmoid_beta_schedule(timesteps, start=-3, end=3, tau=1, clamp_min=1e-5):
 def unnormalize_to_zero_to_one(t):
     return (t + 1) * 0.5
 
+def normalize_to_neg_one_to_one(img):
+    return img * 2 - 1
+
 
 def gather(consts: torch.Tensor, t: torch.Tensor):
     c = consts.gather(-1, t)
@@ -237,7 +240,7 @@ def train(config: DictConfig):
                 if random() < config.ratio:
                     x_0 = next(bad_loader)
                     b, c, w, h = x_0.shape
-                    t = torch.randint(0, partial_step, (b,), device=device, dtype=torch.long)
+                    t = torch.randint(200, partial_step, (b,), device=device, dtype=torch.long)
                     mode = 'p'
                 else:
                     x_0 = next(good_loader)
@@ -249,6 +252,7 @@ def train(config: DictConfig):
                 b, c, w, h = x_0.shape
                 t = torch.randint(0, 1000, (b,), device=device, dtype=torch.long)
             x_0 = x_0.to(device)
+            x_0 = normalize_to_neg_one_to_one(x_0)
             optimizer.zero_grad()
             eps = torch.randn_like(x_0, device=device)
             x_t = diffusion.q_sample(x_0, t, eps)
