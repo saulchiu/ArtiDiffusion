@@ -46,6 +46,7 @@ def extract(a, t, x_shape):
     out = a.gather(-1, t)
     return out.reshape(b, *((1,) * (len(x_shape) - 1)))
 
+
 def sigmoid_beta_schedule(timesteps, start=-3, end=3, tau=1, clamp_min=1e-5):
     steps = timesteps + 1
     t = torch.linspace(0, timesteps, steps) / timesteps
@@ -85,11 +86,6 @@ class SanDiffusion:
         self.alphas_bar_prev = F.pad(self.alpha_bar[:-1], (1, 0), value=1.)
         self.posterior_variance = self.beta * (1. - self.alphas_bar_prev) / (1. - self.alpha_bar)
         self.posterior_log_variance_clipped = torch.log(self.posterior_variance.clamp(min=1e-20))
-
-        self.min_snr_gamma = 5
-        snr = self.alpha_bar / (1 - self.alpha_bar)
-        maybe_clipped_snr = snr.clone()
-        self.loss_weight = maybe_clipped_snr / snr
 
     def q_xt_x0(self, x0: torch.Tensor, t: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor]:
         mean = gather(self.alpha_bar, t) ** 0.5 * x0
@@ -206,8 +202,7 @@ def train(config: DictConfig):
     current_epoch = 0
     diffusion = SanDiffusion(unet, config.diffusion.timesteps, device, sample_step=config.diffusion.sampling_timesteps)
     if sample_type == 'ddim':
-        samper = DDIM_Sampler(diffusion)
-        sample_fn = samper.sample
+        sample_fn = diffusion.ddim_sample
     elif sample_type == 'ddpm':
         sample_fn = diffusion.ddpm_sample
     else:
@@ -259,10 +254,7 @@ def train(config: DictConfig):
             x_t = diffusion.q_sample(x_0, t, eps)
             # no need to use ema
             eps_theta = diffusion.eps_model(x_t, t)
-            loss = loss_fn(eps_theta, eps, reduction='none')
-            loss = reduce(loss, 'b ... -> b', 'mean')
-            loss = loss * extract(diffusion.loss_weight, t, loss.shape)
-            loss = loss.mean()
+            loss = loss_fn(eps_theta, eps)
             if config.attack != 'benign':
                 loss += loss_fn(eps_theta, eps - trigger.unsqueeze(0).expand(x_0.shape[0], -1, -1, -1) * gamma)
             loss.backward()
