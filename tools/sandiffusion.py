@@ -89,8 +89,8 @@ class SanDiffusion:
         self.ema = EMA(self.eps_model, update_every=10)
         self.ema.to(device=self.device)
 
-        self.beta = torch.linspace(0.0001, 0.02, n_steps).to(device)
-        # self.beta = sigmoid_beta_schedule(self.n_steps).to(device)
+        # self.beta = torch.linspace(0.0001, 0.02, n_steps).to(device)
+        self.beta = sigmoid_beta_schedule(self.n_steps).to(device)
         self.alpha = 1. - self.beta
         self.alpha_bar = torch.cumprod(self.alpha, dim=0)
         self.sigma2 = self.beta
@@ -118,8 +118,8 @@ class SanDiffusion:
         mean = 1 / (alpha ** 0.5) * (xt - eps_coef * eps_theta)
         var = gather(self.sigma2, t)
         eps = torch.randn(xt.shape, device=xt.device)
-        # return mean + (var ** .5) * eps
-        return mean + (0.5 * gather(self.posterior_log_variance_clipped, t)).exp() * eps
+        return mean + (var ** .5) * eps
+        # return mean + (0.5 * gather(self.posterior_log_variance_clipped, t)).exp() * eps
     def pred_x_0_form_eps_theta(self, x_t, eps_theta, t):
         return (gather(torch.sqrt(1. / self.alpha_bar), t) * x_t -
                 gather(torch.sqrt(1. / self.alpha_bar - 1), t) * eps_theta)
