@@ -120,6 +120,7 @@ class SanDiffusion:
         eps = torch.randn(xt.shape, device=xt.device)
         return mean + (var ** .5) * eps
         # return mean + (0.5 * gather(self.posterior_log_variance_clipped, t)).exp() * eps
+
     def pred_x_0_form_eps_theta(self, x_t, eps_theta, t):
         return (gather(torch.sqrt(1. / self.alpha_bar), t) * x_t -
                 gather(torch.sqrt(1. / self.alpha_bar - 1), t) * eps_theta)
@@ -198,14 +199,17 @@ def train(config: DictConfig):
         dropout=config.unet.dropout,
         device=device
     )
-    unet.to(device)
-    trans = T.Compose([
-        T.Lambda(partial(convert_image_to_fn, "RGB")),
-        T.Resize(config.image_size),
-        T.RandomHorizontalFlip(),
-        T.CenterCrop(config.image_size),
-        T.ToTensor()
+    trans = Compose([
+        ToTensor(), Resize((config.image_size, config.image_size))
     ])
+    unet.to(device)
+    # trans = T.Compose([
+    #     T.Lambda(partial(convert_image_to_fn, "RGB")),
+    #     T.Resize(config.image_size),
+    #     T.RandomHorizontalFlip(),
+    #     T.CenterCrop(config.image_size),
+    #     T.ToTensor()
+    # ])
     all_path = f'../dataset/dataset-{config.dataset_name}-all'
     all_loader = load_dataloader(path=all_path, trans=trans, batch=config.batch)
     optimizer = Adam(unet.parameters(), lr)
