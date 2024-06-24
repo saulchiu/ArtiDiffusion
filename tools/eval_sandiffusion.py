@@ -150,7 +150,7 @@ def show_sanitization(path, t, loop, device):
         trigger = trigger.unsqueeze(0).expand(b, -1, -1, -1)
         mask = mask.to(device)
         trigger = trigger.to(device)
-        tensors = tensors * (1 - mask) + trigger
+        # tensors = tensors * (1 - mask) + trigger
     x_0 = tensors
     diffusion = load_diffusion(path, device)
     san_list = [x_0]
