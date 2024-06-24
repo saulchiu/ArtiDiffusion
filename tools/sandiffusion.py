@@ -225,7 +225,7 @@ def train(config: DictConfig):
                 if random() < config.ratio:
                     x_0 = next(bad_loader)
                     b, c, w, h = x_0.shape
-                    t = torch.randint(100, partial_step, (b,), device=device, dtype=torch.long)
+                    t = torch.randint(0, partial_step, (b,), device=device, dtype=torch.long)
                     mode = 'p'
                 else:
                     x_0 = next(good_loader)
