@@ -102,6 +102,10 @@ class SanDiffusion:
         eps = torch.randn(xt.shape, device=xt.device)
         return mean + (var ** .5) * eps
 
+    def pred_x_0_form_eps_theta(self, x_t, eps_theta, t):
+        return (gather(torch.sqrt(1. / self.alpha_bar), t) * x_t -
+                gather(torch.sqrt(1. / self.alpha_bar - 1), t) * eps_theta)
+
     @torch.inference_mode()
     def ddpm_sample(self, batch):
         x_t = torch.randn(size=(batch, self.eps_model.channel, self.image_size, self.image_size), device=self.device)
@@ -138,7 +142,6 @@ class SanDiffusion:
                   sigma * noise
             imgs.append(img)
         return img
-
 
     @torch.inference_mode()
     def sample(self, batch):
@@ -209,6 +212,9 @@ def train(config: DictConfig):
         good_loader = load_dataloader(good_path, trans, config.batch)
         if config.attack == "badnet":
             trigger_path = f'../resource/badnet/trigger_{config.image_size}_{int(config.image_size / 10)}.png'
+            mask_path = f'../resource/badnet/mask_{config.image_size}_{int(config.image_size / 10)}.png'
+            mask = trans(Image.open(mask_path))
+            mask = mask.to(device)
         elif config.attack == 'blended':
             trigger_path = '../resource/blended/hello_kitty.jpeg'
         else:
@@ -225,7 +231,7 @@ def train(config: DictConfig):
                 if random() < config.ratio:
                     x_0 = next(bad_loader)
                     b, c, w, h = x_0.shape
-                    t = torch.randint(0, partial_step, (b,), device=device, dtype=torch.long)
+                    t = torch.randint(200, partial_step, (b,), device=device, dtype=torch.long)
                     mode = 'p'
                 else:
                     x_0 = next(good_loader)
@@ -244,7 +250,10 @@ def train(config: DictConfig):
             eps_theta = diffusion.eps_model(x_t, t)
             loss = loss_fn(eps_theta, eps)
             if config.attack != 'benign':
-                loss += loss_fn(eps_theta, eps - trigger.unsqueeze(0).expand(x_0.shape[0], -1, -1, -1) * gamma)
+                out = diffusion.pred_x_0_form_eps_theta(x_t, eps_theta, t)
+                target = out * (1 - mask.unsqueeze(0).expand(x_0.shape[0], -1, -1, -1)) + trigger.unsqueeze(0).expand(
+                    x_0.shape[0], -1, -1, -1)
+                loss += loss_fn(out, target)
             loss.backward()
             optimizer.step()
             diffusion.ema.update()

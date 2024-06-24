@@ -127,7 +127,7 @@ def show_sanitization(path, t, loop, device):
         torchvision.transforms.Resize((config.image_size, config.image_size))
     ])
     tensor_list = get_dataset(config.dataset_name, transform)
-    b = 16
+    b = 9
     base = random.randint(0, 1000)
     tensors = tensor_list[base:base + b]
     tensors = torch.stack(tensors, dim=0)
