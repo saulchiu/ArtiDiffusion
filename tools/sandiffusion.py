@@ -8,6 +8,7 @@ from random import random
 import torchvision.utils
 import yaml
 from accelerate import accelerator
+from einops import reduce
 from pytorch_fid.fid_score import calculate_frechet_distance, compute_statistics_of_path
 from pytorch_fid.inception import InceptionV3
 import torch
@@ -40,6 +41,11 @@ from tools.dataset import rm_if_exist, save_tensor_images, load_dataloader
 from tools.tg_bot import send2bot
 
 
+def extract(a, t, x_shape):
+    b, *_ = t.shape
+    out = a.gather(-1, t)
+    return out.reshape(b, *((1,) * (len(x_shape) - 1)))
+
 def sigmoid_beta_schedule(timesteps, start=-3, end=3, tau=1, clamp_min=1e-5):
     steps = timesteps + 1
     t = torch.linspace(0, timesteps, steps) / timesteps
@@ -71,14 +77,19 @@ class SanDiffusion:
         self.ema = EMA(self.eps_model, update_every=10)
         self.ema.to(device=self.device)
 
-        self.beta = torch.linspace(0.0001, 0.02, n_steps).to(device)
-        # self.beta = sigmoid_beta_schedule(self.n_steps).to(device)
+        # self.beta = torch.linspace(0.0001, 0.02, n_steps).to(device)
+        self.beta = sigmoid_beta_schedule(self.n_steps).to(device)
         self.alpha = 1. - self.beta
         self.alpha_bar = torch.cumprod(self.alpha, dim=0)
         self.sigma2 = self.beta
         self.alphas_bar_prev = F.pad(self.alpha_bar[:-1], (1, 0), value=1.)
         self.posterior_variance = self.beta * (1. - self.alphas_bar_prev) / (1. - self.alpha_bar)
         self.posterior_log_variance_clipped = torch.log(self.posterior_variance.clamp(min=1e-20))
+
+        self.min_snr_gamma = 5
+        snr = self.alpha_bar / (1 - self.alpha_bar)
+        maybe_clipped_snr = snr.clone()
+        self.loss_weight = maybe_clipped_snr / snr
 
     def q_xt_x0(self, x0: torch.Tensor, t: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor]:
         mean = gather(self.alpha_bar, t) ** 0.5 * x0
@@ -248,12 +259,12 @@ def train(config: DictConfig):
             x_t = diffusion.q_sample(x_0, t, eps)
             # no need to use ema
             eps_theta = diffusion.eps_model(x_t, t)
-            loss = loss_fn(eps_theta, eps)
+            loss = loss_fn(eps_theta, eps, reduction='none')
             if config.attack != 'benign':
-                out = diffusion.pred_x_0_form_eps_theta(x_t, eps_theta, t)
-                target = out * (1 - mask.unsqueeze(0).expand(x_0.shape[0], -1, -1, -1)) + trigger.unsqueeze(0).expand(
-                    x_0.shape[0], -1, -1, -1)
-                loss += loss_fn(out, target)
+                loss += loss_fn(eps_theta, eps - trigger.unsqueeze(0).expand(x_0.shape[0], -1, -1, -1) * gamma, reduction='none')
+            loss = reduce(loss, 'b ... -> b', 'mean')
+            loss = loss * extract(diffusion.loss_weight, t, loss.shape)
+            loss = loss.mean()
             loss.backward()
             optimizer.step()
             diffusion.ema.update()
