@@ -111,8 +111,38 @@ class SanDiffusion:
         return x_t
 
     @torch.inference_mode()
+    def ddim_sample(self, batch):
+        batch, device, total_timesteps, sampling_timesteps, eta = batch, self.device, self.n_steps, 250, 0
+        shape = (batch, self.eps_model.channel, self.image_size, self.image_size)
+        times = torch.linspace(-1, total_timesteps - 1, steps=sampling_timesteps + 1)
+        times = list(reversed(times.int().tolist()))
+        time_pairs = list(zip(times[:-1], times[1:]))
+        img = torch.randn(shape, device=device)
+        imgs = [img]
+        for time, time_next in tqdm(time_pairs, desc='DDIM sample'):
+            time_cond = torch.full((batch,), time, device=device, dtype=torch.long)
+            pred_noise = self.ema.ema_model(img, time_cond)
+            x_start = (gather(torch.sqrt(1. / self.alpha_bar), time_cond) * img -
+                       gather(torch.sqrt(1. / self.alpha_bar - 1), time_cond) * pred_noise)
+            if time_next < 0:
+                img = x_start
+                imgs.append(img)
+                continue
+            alpha = self.alpha_bar[time]
+            alpha_next = self.alpha_bar[time_next]
+            sigma = eta * ((1 - alpha / alpha_next) * (1 - alpha_next) / (1 - alpha)).sqrt()
+            c = (1 - alpha_next - sigma ** 2).sqrt()
+            noise = torch.randn_like(img)
+            img = x_start * alpha_next.sqrt() + \
+                  c * pred_noise + \
+                  sigma * noise
+            imgs.append(img)
+        return img
+
+
+    @torch.inference_mode()
     def sample(self, batch):
-        return self.ddpm_sample(batch)
+        return self.ddim_sample(batch)
 
 
 @hydra.main(version_base=None, config_path='../config', config_name='default')
