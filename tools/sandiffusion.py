@@ -217,7 +217,7 @@ def train(config: DictConfig):
         raise NotImplementedError
     current_epoch = 0
     diffusion = SanDiffusion(unet, config.diffusion.timesteps, device, sample_step=config.diffusion.sampling_timesteps)
-    if torch.cuda.device_count() > 1:
+    if torch.cuda.device_count() > 1 and config.batch > 256:
         print("Let's use", torch.cuda.device_count(), "GPUs!")
         device_ids = [0, 1]
         diffusion.eps_model = nn.DataParallel(diffusion.eps_model, device_ids=device_ids).to('cuda')
