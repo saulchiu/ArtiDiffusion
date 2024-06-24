@@ -89,8 +89,8 @@ class SanDiffusion:
         self.ema = EMA(self.eps_model, update_every=10)
         self.ema.to(device=self.device)
 
-        # self.beta = torch.linspace(0.0001, 0.02, n_steps).to(device)
-        self.beta = sigmoid_beta_schedule(self.n_steps).to(device)
+        self.beta = torch.linspace(0.0001, 0.02, n_steps).to(device)
+        # self.beta = sigmoid_beta_schedule(self.n_steps).to(device)
         self.alpha = 1. - self.beta
         self.alpha_bar = torch.cumprod(self.alpha, dim=0)
         self.sigma2 = self.beta
@@ -199,17 +199,14 @@ def train(config: DictConfig):
         dropout=config.unet.dropout,
         device=device
     )
-    trans = Compose([
-        ToTensor(), Resize((config.image_size, config.image_size))
-    ])
     unet.to(device)
-    # trans = T.Compose([
-    #     T.Lambda(partial(convert_image_to_fn, "RGB")),
-    #     T.Resize(config.image_size),
-    #     T.RandomHorizontalFlip(),
-    #     T.CenterCrop(config.image_size),
-    #     T.ToTensor()
-    # ])
+    trans = T.Compose([
+        T.Lambda(partial(convert_image_to_fn, "RGB")),
+        T.Resize(config.image_size),
+        T.RandomHorizontalFlip(),
+        T.CenterCrop(config.image_size),
+        T.ToTensor()
+    ])
     all_path = f'../dataset/dataset-{config.dataset_name}-all'
     all_loader = load_dataloader(path=all_path, trans=trans, batch=config.batch)
     optimizer = Adam(unet.parameters(), lr)
@@ -277,7 +274,6 @@ def train(config: DictConfig):
             optimizer.zero_grad()
             eps = torch.randn_like(x_0, device=device)
             x_t = diffusion.q_sample(x_0, t, eps)
-            # no need to use ema
             eps_theta = diffusion.eps_model(x_t, t)
             loss = loss_fn(eps_theta, eps)
             if config.attack != 'benign':

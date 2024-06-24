@@ -122,6 +122,7 @@ def eval_diffusion(path, device):
 def show_sanitization(path, t, loop, device):
     ld = torch.load(f'{path}/result.pth', map_location=device)
     config = DictConfig(ld['config'])
+    config.sample_type = 'ddpm'
     transform = torchvision.transforms.Compose([
         torchvision.transforms.ToTensor(),
         torchvision.transforms.Resize((config.image_size, config.image_size))
