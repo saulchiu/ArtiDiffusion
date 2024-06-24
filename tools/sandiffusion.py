@@ -198,10 +198,6 @@ def train(config: DictConfig):
         dropout=config.unet.dropout,
         device=device
     )
-    if torch.cuda.device_count() > 1:
-        print("Let's use", torch.cuda.device_count(), "GPUs!")
-        device_ids = [0, 1]
-        unet = nn.DataParallel(unet, device_ids=device_ids).to('cuda')
     unet.to(device)
     trans = T.Compose([
         T.Lambda(partial(convert_image_to_fn, "RGB")),
@@ -221,6 +217,10 @@ def train(config: DictConfig):
         raise NotImplementedError
     current_epoch = 0
     diffusion = SanDiffusion(unet, config.diffusion.timesteps, device, sample_step=config.diffusion.sampling_timesteps)
+    if torch.cuda.device_count() > 1:
+        print("Let's use", torch.cuda.device_count(), "GPUs!")
+        device_ids = [0, 1]
+        diffusion.eps_model = nn.DataParallel(diffusion.eps_model, device_ids=device_ids).to('cuda')
     if sample_type == 'ddim':
         sample_fn = diffusion.ddim_sample
     elif sample_type == 'ddpm':
