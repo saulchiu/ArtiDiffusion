@@ -18,6 +18,7 @@ from torch.cuda.amp import autocast
 from torch.utils.data.dataset import Dataset
 from typing import Tuple, Optional
 from torch import nn
+import torchvision.transforms.transforms as T
 from torchvision.datasets import ImageFolder
 from torch.utils.data.dataloader import DataLoader
 from torchvision.transforms.transforms import Compose, ToTensor, Resize
@@ -47,6 +48,12 @@ def extract(a, t, x_shape):
     return out.reshape(b, *((1,) * (len(x_shape) - 1)))
 
 
+def convert_image_to_fn(img_type, image):
+    if image.mode != img_type:
+        return image.convert(img_type)
+    return image
+
+
 def sigmoid_beta_schedule(timesteps, start=-3, end=3, tau=1, clamp_min=1e-5):
     steps = timesteps + 1
     t = torch.linspace(0, timesteps, steps) / timesteps
@@ -60,6 +67,7 @@ def sigmoid_beta_schedule(timesteps, start=-3, end=3, tau=1, clamp_min=1e-5):
 
 def unnormalize_to_zero_to_one(t):
     return (t + 1) * 0.5
+
 
 def normalize_to_neg_one_to_one(img):
     return img * 2 - 1
@@ -190,8 +198,12 @@ def train(config: DictConfig):
         dropout=config.unet.dropout,
         device=device
     )
-    trans = Compose([
-        ToTensor(), Resize((config.image_size, config.image_size))
+    trans = T.Compose([
+        T.Lambda(partial(convert_image_to_fn, "RGB")),
+        T.Resize(config.image_size),
+        T.RandomHorizontalFlip(),
+        T.CenterCrop(config.image_size),
+        T.ToTensor()
     ])
     all_path = f'../dataset/dataset-{config.dataset_name}-all'
     all_loader = load_dataloader(path=all_path, trans=trans, batch=config.batch)
