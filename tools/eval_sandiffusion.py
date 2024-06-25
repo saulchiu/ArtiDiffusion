@@ -128,7 +128,7 @@ def show_sanitization(path, t, loop, device):
         torchvision.transforms.Resize((config.image_size, config.image_size))
     ])
     tensor_list = get_dataset(config.dataset_name, transform)
-    b = 9
+    b = 16
     base = random.randint(0, 1000)
     tensors = tensor_list[base:base + b]
     tensors = torch.stack(tensors, dim=0)
@@ -186,6 +186,8 @@ def get_args():
     parser.add_argument('--device', type=str, default='cpu')
     parser.add_argument('--path', type=str)
     parser.add_argument('--mode', type=str, default='v')
+    parser.add_argument("--t", type=int, default=200)
+    parser.add_argument("--l", type=int, default=8)
     # parser.add_help = True
     return parser.parse_args()
 
@@ -195,6 +197,8 @@ if __name__ == '__main__':
     device = args.device
     path = args.path
     mode = args.mode
+    timestep = args.t
+    loop = args.l
     if mode == 'fid':
         eval_diffusion(path, device)
-    show_sanitization(path, 200, 8, device)
+    show_sanitization(path, timestep, loop, device)

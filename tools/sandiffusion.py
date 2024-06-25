@@ -89,8 +89,8 @@ class SanDiffusion:
         self.ema = EMA(self.eps_model, update_every=10)
         self.ema.to(device=self.device)
 
-        #self.beta = torch.linspace(0.0001, 0.02, n_steps).to(device)
-        self.beta = sigmoid_beta_schedule(self.n_steps).to(device)
+        self.beta = torch.linspace(0.0001, 0.02, n_steps).to(device)
+        # self.beta = sigmoid_beta_schedule(self.n_steps).to(device)
         self.alpha = 1. - self.beta
         self.alpha_bar = torch.cumprod(self.alpha, dim=0)
         self.sigma2 = self.beta
@@ -201,10 +201,10 @@ def train(config: DictConfig):
     )
     unet.to(device)
     trans = T.Compose([
-        T.Lambda(partial(convert_image_to_fn, "RGB")),
+        # T.Lambda(partial(convert_image_to_fn, "RGB")),
         T.Resize(config.image_size),
-        T.RandomHorizontalFlip(),
-        T.CenterCrop(config.image_size),
+        # T.RandomHorizontalFlip(),
+        # T.CenterCrop(config.image_size),
         T.ToTensor()
     ])
     all_path = f'../dataset/dataset-{config.dataset_name}-all'
@@ -249,7 +249,7 @@ def train(config: DictConfig):
         trigger = trans(Image.open(trigger_path))
         trigger = trigger.to(device)
         gamma = config.gamma
-        partial_step = config.partial_step
+        assert config.p_start < config.p_end
     loss_list = []
     mode = 'b'
     with tqdm(initial=current_epoch, total=epoch) as pbar:
@@ -258,7 +258,7 @@ def train(config: DictConfig):
                 if random() < config.ratio:
                     x_0 = next(bad_loader)
                     b, c, w, h = x_0.shape
-                    t = torch.randint(200, partial_step, (b,), device=device, dtype=torch.long)
+                    t = torch.randint(config.p_start, config.p_end, (b,), device=device, dtype=torch.long)
                     mode = 'p'
                 else:
                     x_0 = next(good_loader)
