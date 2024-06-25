@@ -22,93 +22,12 @@ from tools.sandiffusion import SanDiffusion
 from tools.dataset import save_tensor_images, rm_if_exist
 from tools.prepare_data import get_dataset
 from tools.unet import Unet
-from tools.dpm_solver import DPM_Solver, NoiseScheduleVP
+from tools.dpm_solver import DPM_Solver, NoiseScheduleVP, model_wrapper
 
 
-def expand_dims(v, dims):
-    return v[(...,) + (None,)*(dims - 1)]
-
-def model_wrapper(
-        model,
-        noise_schedule,
-        model_type="noise",
-        model_kwargs={},
-        guidance_type="uncond",
-        condition=None,
-        unconditional_condition=None,
-        guidance_scale=1.,
-        classifier_fn=None,
-        classifier_kwargs={},
-):
-    def get_model_input_time(t_continuous):
-        """
-        Convert the continuous-time `t_continuous` (in [epsilon, T]) to the model input time.
-        For discrete-time DPMs, we convert `t_continuous` in [1 / N, 1] to `t_input` in [0, 1000 * (N - 1) / N].
-        For continuous-time DPMs, we just use `t_continuous`.
-        """
-        if noise_schedule.schedule == 'discrete':
-            return (t_continuous - 1. / noise_schedule.total_N) * 1000.
-        else:
-            return t_continuous
-
-    def noise_pred_fn(x, t_continuous, cond=None):
-        t_input = get_model_input_time(t_continuous)
-        if cond is None:
-            output = model(x, t_input, **model_kwargs)
-        else:
-            output = model(x, t_input, cond, **model_kwargs)
-        if model_type == "noise":
-            return output
-        elif model_type == "x_start":
-            alpha_t, sigma_t = noise_schedule.marginal_alpha(t_continuous), noise_schedule.marginal_std(t_continuous)
-            return (x - alpha_t * output) / sigma_t
-        elif model_type == "v":
-            alpha_t, sigma_t = noise_schedule.marginal_alpha(t_continuous), noise_schedule.marginal_std(t_continuous)
-            return alpha_t * output + sigma_t * x
-        elif model_type == "score":
-            sigma_t = noise_schedule.marginal_std(t_continuous)
-            return -sigma_t * output
-
-    def cond_grad_fn(x, t_input):
-        """
-        Compute the gradient of the classifier, i.e. nabla_{x} log p_t(cond | x_t).
-        """
-        with torch.enable_grad():
-            x_in = x.detach().requires_grad_(True)
-            log_prob = classifier_fn(x_in, t_input, condition, **classifier_kwargs)
-            return torch.autograd.grad(log_prob.sum(), x_in)[0]
-
-    def model_fn(x, t_continuous):
-        """
-        The noise predicition model function that is used for DPM-Solver.
-        """
-        if guidance_type == "uncond":
-            return noise_pred_fn(x, t_continuous)
-        elif guidance_type == "classifier":
-            assert classifier_fn is not None
-            t_input = get_model_input_time(t_continuous)
-            cond_grad = cond_grad_fn(x, t_input)
-            sigma_t = noise_schedule.marginal_std(t_continuous)
-            noise = noise_pred_fn(x, t_continuous)
-            return noise - guidance_scale * expand_dims(sigma_t, x.dim()) * cond_grad
-        elif guidance_type == "classifier-free":
-            if guidance_scale == 1. or unconditional_condition is None:
-                return noise_pred_fn(x, t_continuous, cond=condition)
-            else:
-                x_in = torch.cat([x] * 2)
-                t_in = torch.cat([t_continuous] * 2)
-                c_in = torch.cat([unconditional_condition, condition])
-                noise_uncond, noise = noise_pred_fn(x_in, t_in, cond=c_in).chunk(2)
-                return noise_uncond + guidance_scale * (noise - noise_uncond)
-
-    assert model_type in ["noise", "x_start", "v", "score"]
-    assert guidance_type in ["uncond", "classifier", "classifier-free"]
-    return model_fn
-
-
-def gen_sample(diffusion, total_sample, target_folder, sampler: str):
+def gen_sample(diffusion, total_sample, target_folder, sampler: str, batch=64):
     rm_if_exist(target_folder)
-    loop = int(total_sample / 64)
+    loop = int(total_sample / batch)
     if sampler == "ddpm":
         sample_fn = diffusion.ddpm_sample
     elif sampler == "ddim":
@@ -127,14 +46,16 @@ def gen_sample(diffusion, total_sample, target_folder, sampler: str):
             classifier_kwargs={},
         )
         dpm = DPM_Solver(model_fn_continuous, ns, algorithm_type='dpmsolver', correcting_x0_fn=None)
-        sample_fn = lambda batch: dpm.sample(x=torch.randn(batch, 3, 32, 32, device="cuda:0"))
+        sample_fn = lambda batch: dpm.sample(x=torch.randn(
+            batch, diffusion.eps_model.channel, diffusion.image_size, diffusion.image_size, device="cuda:0"
+        ), steps=50)
     else:
         raise NotImplementedError
     for _ in tqdm(range(loop)):
-        fake_sample = sample_fn(64)
+        fake_sample = sample_fn(batch)
         save_tensor_images(fake_sample, target_folder)
-    if (total_sample - loop * 64) != 0:
-        fake_sample = sample_fn(total_sample - loop * 64)
+    if (total_sample - loop * batch) != 0:
+        fake_sample = sample_fn(total_sample - loop * batch)
         save_tensor_images(fake_sample, target_folder)
     return
 
@@ -198,7 +119,7 @@ def load_diffusion(path, device):
     return diffusion
 
 
-def gen_and_cal_fid(path, device, sampler):
+def gen_and_cal_fid(path, device, sampler, gen_batch=64):
     ld = torch.load(f'{path}/result.pth', map_location=device)
     ema_dict = ld['ema']
     unet_dict = ld['unet']
@@ -215,7 +136,7 @@ def gen_and_cal_fid(path, device, sampler):
     diffusion = SanDiffusion(eps_model, config.diffusion.timesteps, device,
                              sample_step=config.diffusion.sampling_timesteps)
     diffusion.ema.load_state_dict(ema_dict)
-    gen_sample(diffusion, 50000, f'{path}/fid', sampler)
+    gen_sample(diffusion, 50000, f'{path}/fid', sampler, gen_batch)
     all_path = f'../dataset/dataset-{config.dataset_name}-all'
     fid = calculate_fid_given_paths([all_path, f'{path}/fid'], 128, "cuda:0", 2048, 8)
     print(fid)
@@ -291,6 +212,7 @@ def get_args():
     parser.add_argument("--t", type=int, default=200)
     parser.add_argument("--l", type=int, default=8)
     parser.add_argument("--sampler", type=str, default="ddim")
+    parser.add_argument("--batch", type=int, default=64)
     return parser.parse_args()
 
 
@@ -302,6 +224,7 @@ if __name__ == '__main__':
     timestep = args.t
     loop = args.l
     sampler = args.sampler
+    batch = args.batch
     if mode == 'fid':
-        gen_and_cal_fid(path, device, sampler)
+        gen_and_cal_fid(path, device, sampler, batch)
     show_sanitization(path, timestep, loop, device)

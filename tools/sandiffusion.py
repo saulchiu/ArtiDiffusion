@@ -51,7 +51,7 @@ def gather(consts: torch.Tensor, t: torch.Tensor):
 
 
 class SanDiffusion:
-    def __init__(self, eps_model: nn.Module, n_steps: int, device: torch.device, sample_step):
+    def __init__(self, eps_model: Unet, n_steps: int, device: torch.device, sample_step):
         super().__init__()
         self.eps_model = eps_model
         self.sample_step = sample_step
