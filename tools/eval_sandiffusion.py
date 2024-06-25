@@ -25,7 +25,7 @@ from tools.unet import Unet
 from tools.dpm_solver import DPM_Solver, NoiseScheduleVP, model_wrapper
 
 
-def gen_sample(diffusion, total_sample, target_folder, sampler: str, batch=64):
+def gen_sample(diffusion, total_sample, target_folder, sampler, sample_step, batch):
     rm_if_exist(target_folder)
     loop = int(total_sample / batch)
     if sampler == "ddpm":
@@ -47,8 +47,8 @@ def gen_sample(diffusion, total_sample, target_folder, sampler: str, batch=64):
         )
         dpm = DPM_Solver(model_fn_continuous, ns, algorithm_type='dpmsolver', correcting_x0_fn=None)
         sample_fn = lambda batch: dpm.sample(x=torch.randn(
-            batch, diffusion.eps_model.channel, diffusion.image_size, diffusion.image_size, device="cuda:0"
-        ), steps=50)
+            batch, diffusion.eps_model.channel, diffusion.image_size, diffusion.image_size, device=diffusion.eps_model.device,
+        ), steps=sample_step, order=2)
     else:
         raise NotImplementedError
     for _ in tqdm(range(loop)):
@@ -119,7 +119,7 @@ def load_diffusion(path, device):
     return diffusion
 
 
-def gen_and_cal_fid(path, device, sampler, gen_batch=64):
+def gen_and_cal_fid(path, device, sampler, sample_step, gen_batch):
     ld = torch.load(f'{path}/result.pth', map_location=device)
     ema_dict = ld['ema']
     unet_dict = ld['unet']
@@ -136,7 +136,7 @@ def gen_and_cal_fid(path, device, sampler, gen_batch=64):
     diffusion = SanDiffusion(eps_model, config.diffusion.timesteps, device,
                              sample_step=config.diffusion.sampling_timesteps)
     diffusion.ema.load_state_dict(ema_dict)
-    gen_sample(diffusion, 50000, f'{path}/fid', sampler, gen_batch)
+    gen_sample(diffusion, 50000, f'{path}/fid', sampler, sample_step=sample_step, batch=gen_batch)
     all_path = f'../dataset/dataset-{config.dataset_name}-all'
     fid = calculate_fid_given_paths([all_path, f'{path}/fid'], 128, "cuda:0", 2048, 8)
     print(fid)
@@ -208,11 +208,11 @@ def get_args():
     parser = argparse.ArgumentParser(description='This script does amazing things.')
     parser.add_argument('--device', type=str, default='cpu')
     parser.add_argument('--path', type=str)
-    parser.add_argument('--mode', type=str, default='no_fid')
     parser.add_argument("--t", type=int, default=200)
     parser.add_argument("--l", type=int, default=8)
-    parser.add_argument("--sampler", type=str, default="ddim")
+    parser.add_argument("--sampler", type=str, default="no")
     parser.add_argument("--batch", type=int, default=64)
+    parser.add_argument("--sample_step", type=int, default=1000)
     return parser.parse_args()
 
 
@@ -220,11 +220,11 @@ if __name__ == '__main__':
     args = get_args()
     device = args.device
     path = args.path
-    mode = args.mode
     timestep = args.t
     loop = args.l
     sampler = args.sampler
     batch = args.batch
-    if mode == 'fid':
-        gen_and_cal_fid(path, device, sampler, batch)
+    sample_step = args.sample_step
+    if sampler != 'no':
+        gen_and_cal_fid(path, device, sampler, gen_batch=batch, sample_step=sample_step)
     show_sanitization(path, timestep, loop, device)
