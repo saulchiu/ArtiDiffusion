@@ -1,30 +1,16 @@
-import os
 import time
-from datetime import timedelta
-from functools import partial
 import os
 import shutil
 from random import random
 import torchvision.utils
 import yaml
-from accelerate import accelerator
-from einops import reduce
-from pytorch_fid.fid_score import calculate_frechet_distance, compute_statistics_of_path
-from pytorch_fid.inception import InceptionV3
 import torch
 from PIL import Image
-from torch import nn
-from torch.cuda.amp import autocast
-from torch.utils.data.dataset import Dataset
 from typing import Tuple, Optional
 from torch import nn
-import torchvision.transforms.transforms as T
-from torchvision.datasets import ImageFolder
-from torch.utils.data.dataloader import DataLoader
 from torchvision.transforms.transforms import Compose, ToTensor, Resize
 from torch.optim.adam import Adam
 import torch.nn.functional as F
-from torchvision.utils import save_image
 from ema_pytorch.ema_pytorch import EMA
 import hydra
 from omegaconf import DictConfig, OmegaConf
@@ -34,24 +20,10 @@ import sys
 
 sys.path.append('../')
 from tools.unet import Unet
-from tools.dataset import cycle, SanDataset
-from tools.samper import DDIM_Sampler
 from tools.time import now, get_hour
 from tools.prepare_data import prepare_bad_data
 from tools.dataset import rm_if_exist, save_tensor_images, load_dataloader
 from tools.tg_bot import send2bot
-
-
-def extract(a, t, x_shape):
-    b, *_ = t.shape
-    out = a.gather(-1, t)
-    return out.reshape(b, *((1,) * (len(x_shape) - 1)))
-
-
-def convert_image_to_fn(img_type, image):
-    if image.mode != img_type:
-        return image.convert(img_type)
-    return image
 
 
 def sigmoid_beta_schedule(timesteps, start=-3, end=3, tau=1, clamp_min=1e-5):
@@ -163,8 +135,24 @@ class SanDiffusion:
         return img
 
     @torch.inference_mode()
+    def dpm_solver_sample(self, batch):
+        def update_with_dpm_solver(img, pred_noise, learning_rate):
+            update = learning_rate * (img - pred_noise)
+            img = img + update
+            return img
+
+        shape = (batch, self.eps_model.channel, self.image_size, self.image_size)
+        img = torch.randn(shape, device=self.device)
+        num_steps = 20
+        learning_rate = 0.01
+        for step in range(num_steps):
+            pred_noise = self.ema.ema_model(img, torch.tensor([self.n_steps - step - 1] * batch, device=self.device))
+            img = update_with_dpm_solver(img, pred_noise, learning_rate)
+        return img
+
+    @torch.inference_mode()
     def sample(self, batch):
-        return self.ddim_sample(batch)
+        return None
 
 
 @hydra.main(version_base=None, config_path='../config', config_name='default')
