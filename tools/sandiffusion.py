@@ -200,12 +200,8 @@ def train(config: DictConfig):
         device=device
     )
     unet.to(device)
-    trans = T.Compose([
-        # T.Lambda(partial(convert_image_to_fn, "RGB")),
-        T.Resize(config.image_size),
-        # T.RandomHorizontalFlip(),
-        # T.CenterCrop(config.image_size),
-        T.ToTensor()
+    trans = Compose([
+        ToTensor(), Resize((config.image_size, config.image_size))
     ])
     all_path = f'../dataset/dataset-{config.dataset_name}-all'
     all_loader = load_dataloader(path=all_path, trans=trans, batch=config.batch)
