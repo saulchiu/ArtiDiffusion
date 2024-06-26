@@ -46,10 +46,8 @@ def get_beta_schedule(beta_schedule, bete_start, beta_end, n_steps):
     if beta_schedule == 'linear':
         beta = torch.linspace(bete_start, beta_end, n_steps)
     elif beta_schedule == 'sigmoid':
-        def sigmoid(x):
-            return 1 / (torch.exp(-x) + 1)
         beta = torch.linspace(-3, 3, n_steps)
-        beta = sigmoid(beta) * (beta_end - bete_start) + bete_start
+        beta = torch.sigmoid(beta) * (beta_end - bete_start) + bete_start
     elif beta_schedule == 'cosine':
         s = 8e-3
         steps = n_steps + 1
