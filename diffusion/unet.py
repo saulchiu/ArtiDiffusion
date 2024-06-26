@@ -1,7 +1,10 @@
 import torch
 import torch.nn as nn
 from einops import rearrange
-from .utils import PositionalEncoding
+
+import sys
+sys.path.append('../')
+from tools.utils import PositionalEncoding
 
 
 class ResnetBlock(nn.Module):

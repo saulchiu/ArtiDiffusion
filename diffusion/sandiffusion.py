@@ -1,7 +1,10 @@
+import math
 import time
 import os
 import shutil
 from random import random
+
+import numpy as np
 import torchvision.utils
 import yaml
 import torch
@@ -19,22 +22,11 @@ from tqdm import tqdm
 import sys
 
 sys.path.append('../')
-from tools.unet import Unet
+from diffusion.unet import Unet
 from tools.time import now, get_hour
 from tools.prepare_data import prepare_bad_data
 from tools.dataset import rm_if_exist, save_tensor_images, load_dataloader
 from tools.tg_bot import send2bot
-
-
-def sigmoid_beta_schedule(timesteps, start=-3, end=3, tau=1, clamp_min=1e-5):
-    steps = timesteps + 1
-    t = torch.linspace(0, timesteps, steps) / timesteps
-    v_start = torch.tensor(start / tau).sigmoid()
-    v_end = torch.tensor(end / tau).sigmoid()
-    alphas_cumprod = (-((t * (end - start) + start) / tau).sigmoid() + v_end) / (v_end - v_start)
-    alphas_cumprod = alphas_cumprod / alphas_cumprod[0]
-    betas = 1 - (alphas_cumprod[1:] / alphas_cumprod[:-1])
-    return torch.clip(betas, 0, 0.999)
 
 
 def unnormalize_to_zero_to_one(t):
@@ -50,8 +42,29 @@ def gather(consts: torch.Tensor, t: torch.Tensor):
     return c.reshape(-1, 1, 1, 1)
 
 
+def get_beta_schedule(beta_schedule, bete_start, beta_end, n_steps):
+    if beta_schedule == 'linear':
+        beta = torch.linspace(bete_start, beta_end, n_steps)
+    elif beta_schedule == 'sigmoid':
+        def sigmoid(x):
+            return 1 / (torch.exp(-x) + 1)
+        beta = torch.linspace(-6, 6, n_steps)
+        beta = sigmoid(beta) * (beta_end - bete_start) + bete_start
+    elif beta_schedule == 'cosine':
+        s = 8e-3
+        steps = n_steps + 1
+        t = torch.linspace(0, n_steps, steps, dtype=torch.float64) / n_steps
+        alphas_cumprod = torch.cos((t + s) / (1 + s) * math.pi * 0.5) ** 2
+        alphas_cumprod = alphas_cumprod / alphas_cumprod[0]
+        beta = 1 - (alphas_cumprod[1:] / alphas_cumprod[:-1])
+        beta = torch.clip(beta, 0, 0.999).float()
+    else:
+        raise NotImplementedError(beta_schedule)
+    return beta
+
+
 class SanDiffusion:
-    def __init__(self, eps_model: Unet, n_steps: int, device: torch.device, sample_step):
+    def __init__(self, eps_model: Unet, n_steps: int, device: torch.device, sample_step, beta_schedule):
         super().__init__()
         self.eps_model = eps_model
         self.sample_step = sample_step
@@ -61,8 +74,9 @@ class SanDiffusion:
         self.ema = EMA(self.eps_model, update_every=10)
         self.ema.to(device=self.device)
 
-        self.beta = torch.linspace(0.0001, 0.02, n_steps).to(device)
-        # self.beta = sigmoid_beta_schedule(self.n_steps).to(device)
+        self.beta_schedule = beta_schedule
+        beta = get_beta_schedule(beta_schedule, 1e-4, 2e-2, n_steps)
+        self.beta = beta.to(device)
         self.alpha = 1. - self.beta
         self.alpha_bar = torch.cumprod(self.alpha, dim=0)
         self.sigma2 = self.beta
@@ -201,7 +215,13 @@ def train(config: DictConfig):
     else:
         raise NotImplementedError
     current_epoch = 0
-    diffusion = SanDiffusion(unet, config.diffusion.timesteps, device, sample_step=config.diffusion.sampling_timesteps)
+    diffusion = SanDiffusion(
+        eps_model=unet,
+        n_steps=config.diffusion.timesteps,
+        device=device,
+        sample_step=config.diffusion.sampling_timesteps,
+        beta_schedule=config.diffusion.beta_schedule,
+    )
     if torch.cuda.device_count() > 1 and config.batch > 256:
         print("Let's use", torch.cuda.device_count(), "GPUs!")
         device_ids = [0, 1]

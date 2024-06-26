@@ -18,16 +18,13 @@ from torchvision.utils import make_grid
 from tqdm import tqdm
 
 sys.path.append('../')
-from tools.sandiffusion import SanDiffusion
+from diffusion.sandiffusion import SanDiffusion
 from tools.dataset import save_tensor_images, rm_if_exist
 from tools.prepare_data import get_dataset
-from tools.unet import Unet
-from tools.dpm_solver import DPM_Solver, NoiseScheduleVP, model_wrapper
+from diffusion.unet import Unet
+from diffusion.dpm_solver import DPM_Solver, NoiseScheduleVP, model_wrapper
 
-
-def gen_sample(diffusion, total_sample, target_folder, sampler, sample_step, batch):
-    rm_if_exist(target_folder)
-    loop = int(total_sample / batch)
+def get_sample_fn(diffusion, sampler, sample_step):
     if sampler == "ddpm":
         sample_fn = diffusion.ddpm_sample
     elif sampler == "ddim":
@@ -51,6 +48,12 @@ def gen_sample(diffusion, total_sample, target_folder, sampler, sample_step, bat
         ), steps=sample_step, order=2)
     else:
         raise NotImplementedError
+    return sample_fn
+
+def gen_sample(diffusion, total_sample, target_folder, sampler, sample_step, batch):
+    rm_if_exist(target_folder)
+    loop = int(total_sample / batch)
+    sample_fn = get_sample_fn(diffusion, sampler, sample_step)
     for _ in tqdm(range(loop)):
         fake_sample = sample_fn(batch)
         save_tensor_images(fake_sample, target_folder)
@@ -114,7 +117,13 @@ def load_diffusion(path, device):
         device=device
     )
     unet.load_state_dict(unet_dict)
-    diffusion = SanDiffusion(unet, config.diffusion.timesteps, device, sample_step=config.diffusion.sampling_timesteps)
+    diffusion = SanDiffusion(
+        unet,
+        config.diffusion.timesteps,
+        device,
+        sample_step=config.diffusion.sampling_timesteps,
+        beta_schedule=config.diffusion.beta_schedule
+    )
     diffusion.ema.load_state_dict(ema_dict)
     return diffusion
 
@@ -134,7 +143,9 @@ def gen_and_cal_fid(path, device, sampler, sample_step, gen_batch):
     )
     eps_model.load_state_dict(unet_dict)
     diffusion = SanDiffusion(eps_model, config.diffusion.timesteps, device,
-                             sample_step=config.diffusion.sampling_timesteps)
+                             sample_step=config.diffusion.sampling_timesteps,
+                             beta_schedule=config.diffusion.beta_schedule,
+                             )
     diffusion.ema.load_state_dict(ema_dict)
     gen_sample(diffusion, 50000, f'{path}/fid', sampler, sample_step=sample_step, batch=gen_batch)
     all_path = f'../dataset/dataset-{config.dataset_name}-all'

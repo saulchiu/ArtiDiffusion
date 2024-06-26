@@ -2,28 +2,22 @@ dataset_name: gtsrb
 attack: benign
 device: cuda:0
 batch: 128
-epoch: 600000
+epoch: 20000
 save_epoch: 5000
-lr: 8e-5
+lr: 8.0e-05
 loss_type: l2
 sample_type: ddim
 image_size: 32
 server: pc
-
-
 unet:
   dim: 64
   dim_mults: (1, 2, 2, 2)
   dropout: 0
-
 diffusion:
   timesteps: 1000
   sampling_timesteps: 250
-  beta_schedule: linear
-
-# only backdoor diffusion will use this
+  beta_schedule: cosine
 ratio: 0.1
 gamma: 0.2
 p_start: 20
 p_end: 400
-
