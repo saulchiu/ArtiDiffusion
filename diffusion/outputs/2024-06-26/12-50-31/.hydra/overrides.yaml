@@ -1,3 +1,0 @@
-- attack=benign
-- epoch=20000
-- diffusion.beta_schedule=cosine
