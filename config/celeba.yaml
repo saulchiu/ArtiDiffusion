@@ -2,7 +2,7 @@ dataset_name: celeba
 attack: benign
 device: cuda:0
 batch: 64
-epoch: 500000
+epoch: 700000
 save_epoch: 5000
 lr: 8e-5
 loss_type: l2
