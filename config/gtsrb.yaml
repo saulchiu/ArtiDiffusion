@@ -23,7 +23,7 @@ diffusion:
 
 # only backdoor diffusion will use this
 ratio: 0.1
-gamma: 0.2
+gamma: 1e-2
 p_start: 20
 p_end: 400
 
