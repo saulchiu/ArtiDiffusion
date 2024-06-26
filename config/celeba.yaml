@@ -25,5 +25,5 @@ diffusion:
 # only backdoor diffusion will use this
 ratio: 0.1
 gamma: 1e-2
-p_start: 25
-p_end: 400
+p_start: 100
+p_end: 200

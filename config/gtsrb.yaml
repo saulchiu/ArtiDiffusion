@@ -2,7 +2,7 @@ dataset_name: gtsrb
 attack: benign
 device: cuda:0
 batch: 128
-epoch: 600000
+epoch: 700000
 save_epoch: 5000
 lr: 8e-5
 loss_type: l2
@@ -23,7 +23,7 @@ diffusion:
 
 # only backdoor diffusion will use this
 ratio: 0.1
-gamma: 1e-2
+gamma: 1e-3
 p_start: 100
-p_end: 1000
+p_end: 200
 
