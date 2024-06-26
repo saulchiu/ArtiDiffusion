@@ -18,6 +18,7 @@ unet:
 diffusion:
   timesteps: 1000
   sampling_timesteps: 250
+  beta_schedule: linear
 
 # only backdoor diffusion will use this
 ratio: 0.1
