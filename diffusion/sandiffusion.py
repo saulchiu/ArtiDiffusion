@@ -272,7 +272,7 @@ def train(config: DictConfig):
                 b, c, w, h = x_0.shape
                 t = torch.randint(0, 1000, (b,), device=device, dtype=torch.long)
             x_0 = x_0.to(device)
-            x_0 = normalize_to_neg_one_to_one(x_0)
+            # x_0 = normalize_to_neg_one_to_one(x_0)
             optimizer.zero_grad()
             eps = torch.randn_like(x_0, device=device)
             x_t = diffusion.q_sample(x_0, t, eps)
