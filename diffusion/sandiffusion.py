@@ -265,38 +265,45 @@ def train(config: DictConfig):
         gamma = config.gamma
         assert config.p_start < config.p_end
     loss_list = []
-    mode = 'b'
+
+    def get_x_and_t():
+        if config.attack != 'benign':
+            if random() < config.ratio:
+                img = next(bad_loader)
+                b, c, w, h = img.shape
+                time_step = torch.randint(config.p_start, config.p_end, (b,), device=device, dtype=torch.long)
+                mode = 1
+            else:
+                img = next(good_loader)
+                b, c, w, h = img.shape
+                time_step = torch.randint(0, 1000, (b,), device=device, dtype=torch.long)
+                mode = 0
+        else:
+            img = next(all_loader)
+            b, c, w, h = img.shape
+            time_step = torch.randint(0, 1000, (b,), device=device, dtype=torch.long)
+            mode = 0
+        return img.to(device), time_step, mode
+
+    grad_acc = config.grad_acc
     with tqdm(initial=current_epoch, total=epoch) as pbar:
         while current_epoch < epoch:
-            if config.attack != 'benign':
-                if random() < config.ratio:
-                    x_0 = next(bad_loader)
-                    b, c, w, h = x_0.shape
-                    t = torch.randint(config.p_start, config.p_end, (b,), device=device, dtype=torch.long)
-                    mode = 'p'
-                else:
-                    x_0 = next(good_loader)
-                    b, c, w, h = x_0.shape
-                    t = torch.randint(0, 1000, (b,), device=device, dtype=torch.long)
-                    mode = 'b'
-            else:
-                x_0 = next(all_loader)
-                b, c, w, h = x_0.shape
-                t = torch.randint(0, 1000, (b,), device=device, dtype=torch.long)
-            x_0 = x_0.to(device)
-            # x_0 = normalize_to_neg_one_to_one(x_0)
+            total_loss = torch.zeros(size=(), device=device)
             optimizer.zero_grad()
-            eps = torch.randn_like(x_0, device=device)
-            x_t = diffusion.q_sample(x_0, t, eps)
-            eps_theta = diffusion.eps_model(x_t, t)
-            loss = loss_fn(eps_theta, eps)
-            if config.attack != 'benign':
-                loss += loss_fn(eps_theta, eps - trigger.unsqueeze(0).expand(x_0.shape[0], -1, -1, -1) * gamma)
-            loss.backward()
+            for _ in range(grad_acc):
+                x_0, t, mode = get_x_and_t()
+                eps = torch.randn_like(x_0, device=device)
+                x_t = diffusion.q_sample(x_0, t, eps)
+                eps_theta = diffusion.eps_model(x_t, t)
+                loss = loss_fn(eps_theta, eps)
+                if config.attack != 'benign' and mode == 1:
+                    loss += loss_fn(eps_theta, eps - trigger.unsqueeze(0).expand(x_0.shape[0], -1, -1, -1) * gamma)
+                total_loss += loss / grad_acc
+            total_loss.backward()
             optimizer.step()
             diffusion.ema.update()
-            pbar.set_description(f'{mode} loss: {loss:.5f}')
-            loss_list.append(float(loss))
+            pbar.set_description(f'loss: {total_loss:.5f}')
+            loss_list.append(float(total_loss))
             if current_epoch >= save_epoch and current_epoch % save_epoch == 0:
                 diffusion.ema.ema_model.eval()
                 with torch.inference_mode():

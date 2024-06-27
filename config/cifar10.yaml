@@ -9,6 +9,7 @@ loss_type: l2
 sample_type: ddim
 image_size: 32
 server: pc
+grad_acc: 2
 
 unet:
   dim: 128
