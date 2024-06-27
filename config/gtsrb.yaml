@@ -9,7 +9,7 @@ loss_type: l2
 sample_type: ddim
 image_size: 32
 server: pc
-grad_acc: 2
+grad_acc: 1
 parallel: 0
 
 
@@ -21,11 +21,11 @@ unet:
 diffusion:
   timesteps: 1000
   sampling_timesteps: 250
-  beta_schedule: linear
+  beta_schedule: sigmoid
 
 # only backdoor diffusion will use this
 ratio: 0.1
 gamma: 1e-3
-p_start: 100
-p_end: 200
+p_start: 200
+p_end: 400
 
