@@ -232,7 +232,7 @@ def train(config: DictConfig):
         sample_step=config.diffusion.sampling_timesteps,
         beta_schedule=config.diffusion.beta_schedule,
     )
-    if torch.cuda.device_count() > 1 and config.batch > 256:
+    if torch.cuda.device_count() > 1 and config.parallel == 1:
         print("Let's use", torch.cuda.device_count(), "GPUs!")
         device_ids = [0, 1]
         diffusion.eps_model = nn.DataParallel(diffusion.eps_model, device_ids=device_ids).to('cuda')
