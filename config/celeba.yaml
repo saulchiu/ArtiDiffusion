@@ -3,7 +3,7 @@ attack: benign
 device: cuda:0
 batch: 64
 epoch: 700000
-save_epoch: 5000
+save_epoch: 100000
 lr: 8e-5
 loss_type: l2
 sample_type: ddim
@@ -20,11 +20,10 @@ unet:
 diffusion:
   timesteps: 1000
   sampling_timesteps: 250
-  beta_schedule: linear
-
+  beta_schedule: sigmoid
 
 # only backdoor diffusion will use this
 ratio: 0.1
-gamma: 1e-2
-p_start: 100
-p_end: 200
+gamma: 1e-3
+p_start: 200
+p_end: 400

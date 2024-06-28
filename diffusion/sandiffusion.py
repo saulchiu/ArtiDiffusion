@@ -311,9 +311,9 @@ def train(config: DictConfig):
                     fake_sample = sample_fn(64)
                     torchvision.utils.save_image(fake_sample, f'{target_folder}/sample_{current_epoch}.png', nrow=8)
             current_hour = get_hour()
-            if current_hour in range(10, 21) and config.server == "lab":
+            if current_hour in range(11, 20) and config.server == "lab":
                 if config.unet.dim == 128:
-                    time.sleep(0.1)
+                    time.sleep(0.08)
                 else:
                     time.sleep(0.02)
             current_epoch += 1

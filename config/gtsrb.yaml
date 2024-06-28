@@ -3,7 +3,7 @@ attack: benign
 device: cuda:0
 batch: 128
 epoch: 700000
-save_epoch: 5000
+save_epoch: 100000
 lr: 8e-5
 loss_type: l2
 sample_type: ddim
@@ -11,7 +11,6 @@ image_size: 32
 server: pc
 grad_acc: 1
 parallel: 0
-
 
 unet:
   dim: 64
