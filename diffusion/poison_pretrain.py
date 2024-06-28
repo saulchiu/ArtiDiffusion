@@ -11,7 +11,7 @@ from diffusion.sandiffusion import SanDiffusion
 from tools.eval_sandiffusion import load_diffusion
 from tools.dataset import rm_if_exist, save_tensor_images, load_dataloader
 
-path = "../results/benign/gtsrb/20240626211350/"
+path = "../results/benign/gtsrb/20240626211350_linear_700k/"
 device = "cuda:0"
 lr = 1e-3
 attack = 'badnet'
@@ -32,7 +32,7 @@ bad_loader = load_dataloader(bad_path, trainsform, batch)
 loss_fn = F.mse_loss
 trigger = trainsform(open('../resource/badnet/trigger_32_3.png'))
 trigger = trigger.to(device)
-gamma = 1e-1
+gamma = 1
 
 with tqdm(initial=c_epoch, total=epoch) as pbar:
     while c_epoch < epoch:

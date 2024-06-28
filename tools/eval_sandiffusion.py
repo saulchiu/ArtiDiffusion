@@ -11,6 +11,8 @@ from pytorch_fid.fid_score import calculate_fid_given_paths
 import hydra
 from omegaconf import OmegaConf, DictConfig
 from ema_pytorch.ema_pytorch import EMA
+from torchvision.transforms.transforms import Compose, ToTensor, Resize
+import torch.nn.functional as F
 
 import sys
 
@@ -19,10 +21,11 @@ from tqdm import tqdm
 
 sys.path.append('../')
 from diffusion.sandiffusion import SanDiffusion
-from tools.dataset import save_tensor_images, rm_if_exist
+from tools.dataset import save_tensor_images, rm_if_exist, load_dataloader
 from tools.prepare_data import get_dataset
 from diffusion.unet import Unet
 from diffusion.dpm_solver import DPM_Solver, NoiseScheduleVP, model_wrapper
+
 
 def get_sample_fn(diffusion, sampler, sample_step):
     if sampler == "ddpm":
@@ -44,11 +47,13 @@ def get_sample_fn(diffusion, sampler, sample_step):
         )
         dpm = DPM_Solver(model_fn_continuous, ns, algorithm_type='dpmsolver', correcting_x0_fn=None)
         sample_fn = lambda batch: dpm.sample(x=torch.randn(
-            batch, diffusion.eps_model.channel, diffusion.image_size, diffusion.image_size, device=diffusion.eps_model.device,
+            batch, diffusion.eps_model.channel, diffusion.image_size, diffusion.image_size,
+            device=diffusion.eps_model.device,
         ), steps=sample_step, order=2)
     else:
         raise NotImplementedError
     return sample_fn
+
 
 def gen_sample(diffusion, total_sample, target_folder, sampler, sample_step, batch):
     rm_if_exist(target_folder)
@@ -153,6 +158,36 @@ def gen_and_cal_fid(path, device, sampler, sample_step, gen_batch):
     print(fid)
 
 
+def cal_mse(path, device, num, batch):
+    diffusion = load_diffusion(path, device)
+    loop = int(num / batch)
+    config = torch.load(f'{path}/result.pth', map_location=device)['config']
+    config = DictConfig(config)
+    all_path = f'../dataset/dataset-{config.dataset_name}-all'
+    trans = Compose([
+        ToTensor(), Resize((config.image_size, config.image_size))
+    ])
+    all_loader = load_dataloader(path=all_path, trans=trans, batch=config.batch)
+    loss_fn = F.mse_loss
+    total_loss = torch.zeros(size=(), device=device)
+    c_loop = 0
+    with tqdm(initial=c_loop, total=loop) as pbar:
+        for _ in range(0, loop):
+            x_0 = next(all_loader)
+            x_0 = x_0.to(device)
+            eps = torch.randn_like(x_0, device=device)
+            t = torch.randint(low=0, high=1000, size=(x_0.shape[0],), device=device).long()
+            x_t = diffusion.q_sample(x0=x_0, t=t, eps=eps)
+            eps_theta = diffusion.ema.ema_model(x_t, t)
+            loss = loss_fn(eps_theta, eps)
+            total_loss += loss
+            pbar.set_description(f'c_loss: {loss:.4f}')
+            c_loop += 1
+            pbar.update(1)
+        total_loss = total_loss / loop
+    print(f'total loss of {num} samples: {total_loss: .5f}')
+
+
 @torch.inference_mode()
 def show_sanitization(path, t, loop, device):
     ld = torch.load(f'{path}/result.pth', map_location=device)
@@ -216,26 +251,63 @@ def show_sanitization(path, t, loop, device):
 
 
 def get_args():
-    parser = argparse.ArgumentParser(description='This script does amazing things.')
+    class ModeAction(argparse.Action):
+        def __call__(self, parser, namespace, values, option_string=None):
+            setattr(namespace, self.dest, values)
+            if values == 'sanitization':
+                print("\ndevice, path of result.pth, diffuse and reverse timestep t, iteration l")
+            elif values == 'fid':
+                print("\nrequire: device; path; sampler name, e.g. ddim; sampler batch; sample_step.")
+            elif values == 'mse':
+                print("\nrequire: device, path, batch, total sample num")
+
+    """
+    the describe of mode
+        sanitization: show sanitization
+            require: device, path of result.pth, diffuse and reverse timestep t, iteration l
+        fid: calculate fid of diffusion
+            require: device; path; sampler name, e.g. ddim; sampler batch; sample_step.
+        mse: calculate mse of diffusion
+            require: device, path, batch, total sample num
+    """
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--mode', type=str, default='sanitization', action=ModeAction)
     parser.add_argument('--device', type=str, default='cpu')
     parser.add_argument('--path', type=str)
+    parser.add_argument("--batch", type=int, default=64)
+
+    # sanitization parameter
     parser.add_argument("--t", type=int, default=200)
     parser.add_argument("--l", type=int, default=8)
-    parser.add_argument("--sampler", type=str, default="no")
-    parser.add_argument("--batch", type=int, default=64)
+
+    # fid parameter
+    parser.add_argument("--sampler", type=str, default="ddim")
     parser.add_argument("--sample_step", type=int, default=1000)
+
+    # mse parameter
+    parser.add_argument("--num", type=int, default=1e4)
     return parser.parse_args()
 
 
 if __name__ == '__main__':
     args = get_args()
-    device = args.device
-    path = args.path
-    timestep = args.t
-    loop = args.l
-    sampler = args.sampler
-    batch = args.batch
-    sample_step = args.sample_step
-    if sampler != 'no':
+    mode = args.mode
+    if mode == 'sanitization':
+        device = args.device
+        path = args.path
+        timestep = args.t
+        loop = args.l
+        show_sanitization(path, timestep, loop, device)
+    elif mode == 'fid':
+        device = args.device
+        path = args.path
+        sampler = args.sampler
+        batch = args.batch
+        sample_step = args.sample_step
         gen_and_cal_fid(path, device, sampler, gen_batch=batch, sample_step=sample_step)
-    show_sanitization(path, timestep, loop, device)
+    elif mode == 'mse':
+        path = args.path
+        device = args.device
+        batch = args.batch
+        num = args.num
+        cal_mse(path, device, num, batch)
