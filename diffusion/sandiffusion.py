@@ -312,7 +312,7 @@ def train(config: DictConfig):
                     torchvision.utils.save_image(fake_sample, f'{target_folder}/sample_{current_epoch}.png', nrow=8)
             current_hour = get_hour()
             if current_hour in range(10, 21) and config.server == "lab":
-                time.sleep(float(config.unet.dim / 1000))
+                time.sleep(float(config.unet.dim / 1000) - 0.2)
             current_epoch += 1
             pbar.update(1)
     res = {
