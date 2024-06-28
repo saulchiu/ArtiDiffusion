@@ -1,6 +1,5 @@
 import time
 from datetime import datetime
-import requests
 import pytz
 import logging
 

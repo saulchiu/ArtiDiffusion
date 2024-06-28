@@ -1,8 +1,6 @@
-import argparse
 import time
 
 from telegram_logging import TelegramHandler, TelegramFormatter
-import sys
 import sys
 
 sys.path.append("..")

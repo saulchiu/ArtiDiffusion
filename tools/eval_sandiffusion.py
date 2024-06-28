@@ -8,9 +8,7 @@ import torchvision
 from PIL import Image
 from matplotlib import pyplot as plt
 from pytorch_fid.fid_score import calculate_fid_given_paths
-import hydra
-from omegaconf import OmegaConf, DictConfig
-from ema_pytorch.ema_pytorch import EMA
+from omegaconf import DictConfig
 from torchvision.transforms.transforms import Compose, ToTensor, Resize
 import torch.nn.functional as F
 

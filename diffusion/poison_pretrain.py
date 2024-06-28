@@ -7,9 +7,8 @@ from PIL.Image import open
 
 import sys
 sys.path.append('../')
-from diffusion.sandiffusion import SanDiffusion
 from tools.eval_sandiffusion import load_diffusion
-from tools.dataset import rm_if_exist, save_tensor_images, load_dataloader
+from tools.dataset import load_dataloader
 
 path = "../results/benign/gtsrb/20240626211350_linear_700k/"
 device = "cuda:0"

@@ -3,8 +3,6 @@ import time
 import os
 import shutil
 from random import random
-
-import numpy as np
 import torchvision.utils
 import yaml
 import torch
@@ -25,8 +23,7 @@ sys.path.append('../')
 from diffusion.unet import Unet
 from tools.time import now, get_hour
 from tools.prepare_data import prepare_bad_data
-from tools.dataset import rm_if_exist, save_tensor_images, load_dataloader
-from tools.tg_bot import send2bot
+from tools.dataset import rm_if_exist, load_dataloader
 
 
 def unnormalize_to_zero_to_one(t):
@@ -326,7 +323,6 @@ def train(config: DictConfig):
         'loss_list': loss_list,
     }
     torch.save(res, f'{target_folder}/result.pth')
-    send2bot(OmegaConf.to_yaml(OmegaConf.to_object(config)), 'over')
     print(target_folder)
 
 

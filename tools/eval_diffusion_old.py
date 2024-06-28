@@ -1,21 +1,12 @@
-import argparse
-import ast
 import math
 import random
-
 import PIL.Image
-import detectors
-import numpy as np
-import timm
 import torch
 from denoising_diffusion_pytorch import Unet, Trainer
 from PIL import Image
 import sys
-import torchvision.transforms.transforms as T
-from torchvision.transforms import transforms
 from torchvision.utils import make_grid
-from omegaconf import OmegaConf, DictConfig
-# from labml_nn.diffusion.ddpm
+from omegaconf import DictConfig
 import hydra
 
 sys.path.append('../')

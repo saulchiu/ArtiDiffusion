@@ -3,7 +3,6 @@ import shutil
 import time
 
 import PIL.Image
-import numpy as np
 import torch
 import torchvision
 from PIL import Image
@@ -11,12 +10,9 @@ from torchvision import transforms as T
 from torch.utils.data.dataloader import DataLoader
 from torch.utils.data.dataset import Dataset
 import random
-import pytorch_lightning as L
-import torch.nn.functional as F
 
 import sys
 sys.path.append('../')
-from tools.time import now
 
 transform_cifar10 = T.Compose([
     T.ToTensor(),
