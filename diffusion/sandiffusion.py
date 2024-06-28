@@ -315,7 +315,7 @@ def train(config: DictConfig):
                 if config.unet.dim == 128:
                     time.sleep(0.1)
                 else:
-                    time.sleep(0.01)
+                    time.sleep(0.02)
             current_epoch += 1
             pbar.update(1)
     res = {
