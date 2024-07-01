@@ -184,7 +184,7 @@ def train(config: DictConfig):
     prepare_bad_data(config)
     print(OmegaConf.to_yaml(OmegaConf.to_object(config)))
     script_name = os.path.basename(__file__)
-    target_folder = f'../results/{config.attack}/{config.dataset_name}/{now()}' if config.path is None else config.path
+    target_folder = f'../results/{config.attack}/{config.dataset_name}/{now()}' if config.path == 'None' else config.path
     print(target_folder)
     if not os.path.exists(target_folder):
         os.makedirs(target_folder)
@@ -264,7 +264,7 @@ def train(config: DictConfig):
 
     grad_acc = config.grad_acc
     current_epoch = 0
-    if config.path is not None:
+    if config.path != 'None':
         # from pth
         ld = torch.load(f'{config.path}/result.pth', map_location=device)
         current_epoch = ld['current_epoch']
