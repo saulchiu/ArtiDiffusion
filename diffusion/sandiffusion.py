@@ -185,6 +185,7 @@ def train(config: DictConfig):
     print(OmegaConf.to_yaml(OmegaConf.to_object(config)))
     script_name = os.path.basename(__file__)
     target_folder = f'../results/{config.attack}/{config.dataset_name}/{now()}' if config.path == 'None' else config.path
+    config.path = target_folder
     print(target_folder)
     if not os.path.exists(target_folder):
         os.makedirs(target_folder)
