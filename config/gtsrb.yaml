@@ -3,7 +3,7 @@ attack: benign
 device: cuda:0
 batch: 128
 epoch: 700000
-save_epoch: 100000
+save_epoch: 20000
 lr: 8e-5
 loss_type: l2
 sample_type: ddim
