@@ -11,6 +11,7 @@ image_size: 64
 server: pc
 grad_acc: 1
 parallel: 0
+path: None
 
 unet:
   dim: 128

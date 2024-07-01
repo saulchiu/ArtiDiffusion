@@ -137,6 +137,7 @@ def gen_and_cal_fid(path, device, sampler, sample_step, gen_batch):
     unet_dict = ld['unet']
     config = ld['config']
     config = DictConfig(config)
+    print(config)
     eps_model = Unet(
         dim=config.unet.dim,
         image_size=config.image_size,
@@ -196,7 +197,7 @@ def show_sanitization(path, t, loop, device):
         torchvision.transforms.Resize((config.image_size, config.image_size))
     ])
     tensor_list = get_dataset(config.dataset_name, transform)
-    b = 64
+    b = 16
     base = random.randint(0, 1000)
     tensors = tensor_list[base:base + b]
     tensors = torch.stack(tensors, dim=0)
@@ -227,7 +228,7 @@ def show_sanitization(path, t, loop, device):
     for i in tqdm(range(loop), desc="iterate", total=loop, leave=False):
         # forward
         x_t = diffusion.q_sample(x_0, t_)
-        san_list.append(x_t)
+        # san_list.append(x_t)
         # reverse
         for j in reversed(range(0, t)):
             x_t_m_1 = diffusion.p_sample(x_t, torch.tensor([j], device=device))
@@ -270,7 +271,7 @@ def get_args():
     """
     parser = argparse.ArgumentParser()
     parser.add_argument('--mode', type=str, default='sanitization', action=ModeAction)
-    parser.add_argument('--device', type=str, default='cpu')
+    parser.add_argument('--device', type=str, default='cuda:0')
     parser.add_argument('--path', type=str)
     parser.add_argument("--batch", type=int, default=64)
 

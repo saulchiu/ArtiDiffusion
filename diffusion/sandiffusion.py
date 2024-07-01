@@ -184,7 +184,7 @@ def train(config: DictConfig):
     prepare_bad_data(config)
     print(OmegaConf.to_yaml(OmegaConf.to_object(config)))
     script_name = os.path.basename(__file__)
-    target_folder = f'../results/{config.attack}/{config.dataset_name}/{now()}'
+    target_folder = f'../results/{config.attack}/{config.dataset_name}/{now()}' if config.path is None else config.path
     print(target_folder)
     if not os.path.exists(target_folder):
         os.makedirs(target_folder)
@@ -197,8 +197,6 @@ def train(config: DictConfig):
     """
     device = config.device
     lr = config.lr
-    loss_type = config.loss_type
-    sample_type = config.sample_type
     save_epoch = config.save_epoch
     epoch = config.epoch
     unet = Unet(
@@ -215,13 +213,6 @@ def train(config: DictConfig):
     all_path = f'../dataset/dataset-{config.dataset_name}-all'
     all_loader = load_dataloader(path=all_path, trans=trans, batch=config.batch)
     optimizer = Adam(unet.parameters(), lr)
-    if loss_type == 'l1':
-        loss_fn = F.l1_loss
-    elif loss_type == 'l2':
-        loss_fn = F.mse_loss
-    else:
-        raise NotImplementedError
-    current_epoch = 0
     diffusion = SanDiffusion(
         eps_model=unet,
         n_steps=config.diffusion.timesteps,
@@ -229,16 +220,6 @@ def train(config: DictConfig):
         sample_step=config.diffusion.sampling_timesteps,
         beta_schedule=config.diffusion.beta_schedule,
     )
-    if torch.cuda.device_count() > 1 and config.parallel == 1:
-        print("Let's use", torch.cuda.device_count(), "GPUs!")
-        device_ids = [0, 1]
-        diffusion.eps_model = nn.DataParallel(diffusion.eps_model, device_ids=device_ids).to('cuda')
-    if sample_type == 'ddim':
-        sample_fn = diffusion.ddim_sample
-    elif sample_type == 'ddpm':
-        sample_fn = diffusion.ddpm_sample
-    else:
-        raise NotImplementedError
     """
     prepare poisoning
     """
@@ -261,7 +242,6 @@ def train(config: DictConfig):
         trigger = trigger.to(device)
         gamma = config.gamma
         assert config.p_start < config.p_end
-    loss_list = []
 
     def get_x_and_t():
         if config.attack != 'benign':
@@ -283,6 +263,35 @@ def train(config: DictConfig):
         return img.to(device), time_step, mode
 
     grad_acc = config.grad_acc
+    current_epoch = 0
+    if config.path is not None:
+        # from pth
+        ld = torch.load(f'{config.path}/result.pth', map_location=device)
+        current_epoch = ld['current_epoch']
+        optimizer.load_state_dict(ld['opt'])
+        diffusion.eps_model.load_state_dict(ld['unet'])
+        diffusion.ema.load_state_dict(ld['ema'])
+    # use data parallel or not
+    if torch.cuda.device_count() > 1 and config.parallel == 1:
+        print("Let's use", torch.cuda.device_count(), "GPUs!")
+        device_ids = [0, 1]
+        diffusion.eps_model = nn.DataParallel(diffusion.eps_model, device_ids=device_ids).to('cuda')
+    # use ddpm or ddim
+    if config.sample_type == 'ddim':
+        sample_fn = diffusion.ddim_sample
+    elif config.sample_type == 'ddpm':
+        sample_fn = diffusion.ddpm_sample
+    else:
+        raise NotImplementedError
+    if config.loss_type == 'l1':
+        loss_fn = F.l1_loss
+    elif config.loss_type == 'l2':
+        loss_fn = F.mse_loss
+    else:
+        raise NotImplementedError
+    '''
+    start train!
+    '''
     with tqdm(initial=current_epoch, total=epoch) as pbar:
         while current_epoch < epoch:
             total_loss = torch.zeros(size=(), device=device)
@@ -300,13 +309,20 @@ def train(config: DictConfig):
             optimizer.step()
             diffusion.ema.update()
             pbar.set_description(f'loss: {total_loss:.5f}')
-            loss_list.append(float(total_loss))
             if current_epoch >= save_epoch and current_epoch % save_epoch == 0:
                 diffusion.ema.ema_model.eval()
                 with torch.inference_mode():
                     rm_if_exist(f'{target_folder}/fid')
                     fake_sample = sample_fn(64)
                     torchvision.utils.save_image(fake_sample, f'{target_folder}/sample_{current_epoch}.png', nrow=8)
+                    res = {
+                        'unet': unet.state_dict(),
+                        'opt': optimizer.state_dict(),
+                        'ema': diffusion.ema.state_dict(),
+                        "config": OmegaConf.to_object(config),
+                        "current_epoch": current_epoch,
+                    }
+                    torch.save(res, f'{target_folder}/result.pth')
             current_hour = get_hour()
             if current_hour in range(11, 20) and config.server == "lab":
                 if config.unet.dim == 128:
@@ -320,7 +336,6 @@ def train(config: DictConfig):
         'opt': optimizer.state_dict(),
         'ema': diffusion.ema.state_dict(),
         "config": OmegaConf.to_object(config),
-        'loss_list': loss_list,
     }
     torch.save(res, f'{target_folder}/result.pth')
     print(target_folder)
