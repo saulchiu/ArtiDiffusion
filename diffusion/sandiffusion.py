@@ -16,6 +16,9 @@ from ema_pytorch.ema_pytorch import EMA
 import hydra
 from omegaconf import DictConfig, OmegaConf
 from tqdm import tqdm
+import pynvml
+pynvml.nvmlInit()
+handle = pynvml.nvmlDeviceGetHandleByIndex(0)
 
 import sys
 
@@ -175,6 +178,9 @@ class SanDiffusion:
     def sample(self, batch):
         return None
 
+def gpu_status():
+    meminfo = pynvml.nvmlDeviceGetMemoryInfo(handle)
+    return meminfo.used/1024**2
 
 @hydra.main(version_base=None, config_path='../config', config_name='default')
 def train(config: DictConfig):
@@ -271,6 +277,7 @@ def train(config: DictConfig):
         optimizer.load_state_dict(ld['opt'])
         diffusion.eps_model.load_state_dict(ld['unet'])
         diffusion.ema.load_state_dict(ld['ema'])
+        del ld
     # use data parallel or not
     if torch.cuda.device_count() > 1 and config.parallel == 1:
         print("Let's use", torch.cuda.device_count(), "GPUs!")
@@ -324,7 +331,6 @@ def train(config: DictConfig):
                     }
                     torch.save(res, f'{target_folder}/result.pth')
                     del res, fake_sample
-                    torch.cuda.empty_cache()
             current_hour = get_hour()
             if current_hour in range(11, 20) and config.server == "lab":
                 if config.unet.dim == 128:
@@ -332,6 +338,9 @@ def train(config: DictConfig):
                 else:
                     time.sleep(0.02)
             current_epoch += 1
+            # free up memory fragments of GPU
+            if x_0.shape[0] != config.batch:
+                torch.cuda.empty_cache()
             pbar.update(1)
     res = {
         'unet': unet.state_dict(),
