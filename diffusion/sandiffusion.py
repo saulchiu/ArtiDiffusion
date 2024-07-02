@@ -312,7 +312,7 @@ def train(config: DictConfig):
             if current_epoch >= save_epoch and current_epoch % save_epoch == 0:
                 diffusion.ema.ema_model.eval()
                 with torch.inference_mode():
-                    rm_if_exist(f'{target_folder}/fid')
+                    print(target_folder)
                     fake_sample = sample_fn(64)
                     torchvision.utils.save_image(fake_sample, f'{target_folder}/sample_{current_epoch}.png', nrow=8)
                     res = {
@@ -323,6 +323,7 @@ def train(config: DictConfig):
                         "current_epoch": current_epoch,
                     }
                     torch.save(res, f'{target_folder}/result.pth')
+                    torch.cuda.empty_cache()
             current_hour = get_hour()
             if current_hour in range(11, 20) and config.server == "lab":
                 if config.unet.dim == 128:
