@@ -323,6 +323,7 @@ def train(config: DictConfig):
                         "current_epoch": current_epoch,
                     }
                     torch.save(res, f'{target_folder}/result.pth')
+                    del res, fake_sample
                     torch.cuda.empty_cache()
             current_hour = get_hour()
             if current_hour in range(11, 20) and config.server == "lab":
