@@ -225,13 +225,13 @@ def show_sanitization(path, t, loop, device):
     san_list = [x_0]
     t_ = torch.tensor([t], device=device)
     # sanitization process
-    for i in tqdm(range(loop), desc="iterate", total=loop, leave=False):
+    for _ in tqdm(range(loop), desc="iterate", total=loop, leave=False):
         # forward
         x_t = diffusion.q_sample(x_0, t_)
-        # san_list.append(x_t)
+        san_list.append(x_t)
         # reverse
-        for j in reversed(range(0, t)):
-            x_t_m_1 = diffusion.p_sample(x_t, torch.tensor([j], device=device))
+        for j in reversed(range(1, t)):
+            x_t_m_1 = diffusion.p_sample(x_t, torch.tensor([j], device=device), clip=True)
             x_t = x_t_m_1
         x_0 = x_t
         san_list.append(x_0)

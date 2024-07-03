@@ -19,6 +19,7 @@ tools/outputs
 .idea
 runs
 diffusion/outputs
+tools/test.py
 
 
 

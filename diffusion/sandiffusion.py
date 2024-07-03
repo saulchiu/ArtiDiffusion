@@ -106,25 +106,32 @@ class SanDiffusion:
         return mean + (var ** 0.5) * eps
 
     @torch.inference_mode()
-    def p_sample(self, xt: torch.Tensor, t: torch.Tensor):
+    def p_sample(self, xt: torch.Tensor, t: torch.Tensor, clip=False):
         eps_theta = self.ema.ema_model(xt, t)
         alpha_bar = gather(self.alpha_bar, t)
+        alpha_bar_prev = gather(self.alpha_bar, t - 1)
         alpha = gather(self.alpha, t)
-        eps_coef = (1 - alpha) / (1 - alpha_bar) ** .5
-        mean = 1 / (alpha ** 0.5) * (xt - eps_coef * eps_theta)
-        var = gather(self.sigma2, t)
-        eps = torch.randn(xt.shape, device=xt.device)
-        return mean + (var ** .5) * eps
-        # return mean + (0.5 * gather(self.posterior_log_variance_clipped, t)).exp() * eps
+        beta = gather(self.beta, t)
+        z_coe = (1 - alpha) / (1 - alpha_bar) ** .5
+        z = torch.randn_like(xt, device=xt.device)
+        x_t_coe = torch.sqrt(alpha) * (1 - alpha_bar_prev) / (1 - alpha_bar)
+        tiled_x_0_coe = torch.sqrt(alpha_bar_prev) * beta / (1 - alpha_bar)
+        tiled_x_0 = self.pred_x_0_form_eps_theta(xt, eps_theta, t, clip)
+        x_t_m_1 = x_t_coe * xt + tiled_x_0_coe * tiled_x_0 + z_coe * z
+        return x_t_m_1
 
-    def pred_x_0_form_eps_theta(self, x_t, eps_theta, t):
-        return (gather(torch.sqrt(1. / self.alpha_bar), t) * x_t -
+
+    def pred_x_0_form_eps_theta(self, x_t, eps_theta, t, clip=False):
+        tiled_x_0 = (gather(torch.sqrt(1. / self.alpha_bar), t) * x_t -
                 gather(torch.sqrt(1. / self.alpha_bar - 1), t) * eps_theta)
+        if clip:
+            tiled_x_0 = torch.clip(tiled_x_0, min=-1, max=1)
+        return tiled_x_0
 
     @torch.inference_mode()
     def ddpm_sample(self, batch):
         x_t = torch.randn(size=(batch, self.eps_model.channel, self.image_size, self.image_size), device=self.device)
-        for i in tqdm(reversed(range(0, self.n_steps)), desc='DDPM Sampling', total=self.n_steps, leave=False):
+        for i in tqdm(reversed(range(1, self.n_steps)), desc='DDPM Sampling', total=self.n_steps, leave=False):
             x_t_m_1 = self.p_sample(x_t, torch.tensor([i], device=self.device))
             x_t = x_t_m_1
         return x_t
