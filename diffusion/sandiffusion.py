@@ -74,7 +74,7 @@ def get_beta_schedule(beta_schedule, bete_start, beta_end, n_steps):
 
 
 class SanDiffusion:
-    def __init__(self, eps_model: Unet, n_steps: int, device: torch.device, sample_step, beta_schedule):
+    def __init__(self, eps_model: Unet, n_steps: int, device, sample_step, beta_schedule):
         super().__init__()
         self.eps_model = eps_model
         self.sample_step = sample_step
@@ -106,19 +106,15 @@ class SanDiffusion:
         return mean + (var ** 0.5) * eps
 
     @torch.inference_mode()
-    def p_sample(self, xt: torch.Tensor, t: torch.Tensor, clip=False):
+    def p_sample(self, xt: torch.Tensor, t: torch.Tensor):
         eps_theta = self.ema.ema_model(xt, t)
         alpha_bar = gather(self.alpha_bar, t)
-        alpha_bar_prev = gather(self.alpha_bar, t - 1)
         alpha = gather(self.alpha, t)
-        beta = gather(self.beta, t)
-        z_coe = (1 - alpha) / (1 - alpha_bar) ** .5
-        z = torch.randn_like(xt, device=xt.device)
-        x_t_coe = torch.sqrt(alpha) * (1 - alpha_bar_prev) / (1 - alpha_bar)
-        tiled_x_0_coe = torch.sqrt(alpha_bar_prev) * beta / (1 - alpha_bar)
-        tiled_x_0 = self.pred_x_0_form_eps_theta(xt, eps_theta, t, clip)
-        x_t_m_1 = x_t_coe * xt + tiled_x_0_coe * tiled_x_0 + z_coe * z
-        return x_t_m_1
+        eps_coef = (1 - alpha) / (1 - alpha_bar) ** .5
+        mean = 1 / (alpha ** 0.5) * (xt - eps_coef * eps_theta)
+        var = gather(self.sigma2, t)
+        eps = torch.randn(xt.shape, device=xt.device)
+        return mean + (var ** .5) * eps
 
 
     def pred_x_0_form_eps_theta(self, x_t, eps_theta, t, clip=False):
@@ -341,7 +337,7 @@ def train(config: DictConfig):
             current_hour = get_hour()
             if current_hour in range(11, 20) and config.server == "lab":
                 if config.unet.dim == 128:
-                    time.sleep(0.08)
+                    time.sleep(0.06)
                 else:
                     time.sleep(0.02)
             current_epoch += 1

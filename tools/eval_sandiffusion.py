@@ -23,6 +23,9 @@ from tools.dataset import save_tensor_images, rm_if_exist, load_dataloader
 from tools.prepare_data import get_dataset
 from diffusion.unet import Unet
 from diffusion.dpm_solver import DPM_Solver, NoiseScheduleVP, model_wrapper
+from defence.sample import infer_clip_p_sample
+from defence.anp.anp_defence import convert_model
+from defence.sample import anp_sample, infer_clip_p_sample
 
 
 def get_sample_fn(diffusion, sampler, sample_step):
@@ -188,7 +191,7 @@ def cal_mse(path, device, num, batch):
 
 
 @torch.inference_mode()
-def show_sanitization(path, t, loop, device):
+def show_sanitization(path, t, loop, device, defence=None):
     ld = torch.load(f'{path}/result.pth', map_location=device)
     config = DictConfig(ld['config'])
     config.sample_type = 'ddpm'
@@ -224,14 +227,32 @@ def show_sanitization(path, t, loop, device):
     diffusion = load_diffusion(path, device)
     san_list = [x_0]
     t_ = torch.tensor([t], device=device)
+    if defence == 'None':
+        p_sample = diffusion.p_sample
+    elif defence == 'anp':
+        perturb_model = convert_model(diffusion.eps_model)
+        perturb_model.load_state_dict(torch.load(f'{path}/result_anp.pth')['unet'])
+        perturb_model.to(device)
+        diffusion.eps_model = perturb_model
+        p_sample = lambda x_t, t: anp_sample(diffusion=diffusion, xt=x_t, t=t)
+    elif defence == 'rnp':
+        perturb_model = convert_model(diffusion.eps_model)
+        perturb_model.load_state_dict(torch.load(f'{path}/result_rnp.pth')['unet'])
+        perturb_model.to(device)
+        diffusion.eps_model = perturb_model
+        p_sample = lambda x_t, t: anp_sample(diffusion=diffusion, xt=x_t, t=t)
+    elif defence == "infer_clip":
+        p_sample = lambda x_t,t: infer_clip_p_sample(diffusion, x_t, t)
+    else:
+        raise NotImplementedError(defence)
     # sanitization process
     for _ in tqdm(range(loop), desc="iterate", total=loop, leave=False):
         # forward
         x_t = diffusion.q_sample(x_0, t_)
         san_list.append(x_t)
         # reverse
-        for j in reversed(range(1, t)):
-            x_t_m_1 = diffusion.p_sample(x_t, torch.tensor([j], device=device), clip=True)
+        for j in reversed(range(1, t + 1)):
+            x_t_m_1 = p_sample(x_t, torch.tensor([j], device=device))
             x_t = x_t_m_1
         x_0 = x_t
         san_list.append(x_0)
@@ -285,6 +306,9 @@ def get_args():
 
     # mse parameter
     parser.add_argument("--num", type=int, default=1e4)
+
+    # defence
+    parser.add_argument("--defence", type=str, default="None")
     return parser.parse_args()
 
 
@@ -296,7 +320,8 @@ if __name__ == '__main__':
         path = args.path
         timestep = args.t
         loop = args.l
-        show_sanitization(path, timestep, loop, device)
+        defence = args.defence
+        show_sanitization(path, timestep, loop, device, defence)
     elif mode == 'fid':
         device = args.device
         path = args.path

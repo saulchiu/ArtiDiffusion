@@ -20,6 +20,7 @@ tools/outputs
 runs
 diffusion/outputs
 tools/test.py
+defence/*/outputs
 
 
 

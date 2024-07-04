@@ -1,0 +1,8 @@
+dataset_name: gtsrb
+attack: badnet
+image_size: 32
+batch: 128
+path: ../../results/badnet/gtsrb/20240627203430_sigmoid_700k_1
+lr: 1e-5
+budget: 4.0
+epoch: 200
