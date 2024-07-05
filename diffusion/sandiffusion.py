@@ -335,9 +335,9 @@ def train(config: DictConfig):
                     torch.save(res, f'{target_folder}/result.pth')
                     del res, fake_sample
             current_hour = get_hour()
-            if current_hour in range(11, 20) and config.server == "lab":
+            if current_hour in range(10, 21) and config.server == "lab":
                 if config.unet.dim == 128:
-                    time.sleep(0.06)
+                    time.sleep(0.08)
                 else:
                     time.sleep(0.02)
             current_epoch += 1

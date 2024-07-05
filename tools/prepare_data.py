@@ -5,6 +5,8 @@ from PIL import Image
 from torchvision import datasets, transforms
 import numpy as np
 from tqdm import tqdm
+import torch.nn.functional as F
+
 
 def exist(path):
     return os.path.exists(path) and os.path.isdir(path)
@@ -88,23 +90,50 @@ def prepare_bad_data(config: DictConfig):
     part1_length = int(len(tensor_list) * ratio)
     part1 = tensor_list[:part1_length]
     part2 = tensor_list[part1_length:]
+
+    if config.attack == "badnet":
+        mask_path = f'../resource/badnet/mask_{config.image_size}_{int(config.image_size / 10)}.png'
+        trigger_path = f'../resource/badnet/trigger_{config.image_size}_{int(config.image_size / 10)}.png'
+        trigger = trainsform(Image.open(trigger_path))
+        mask = trainsform(Image.open(mask_path))
+        trigger = trigger.to(config.device)
+        mask = mask.to(config.device)
+    elif config.attack == "blended":
+        trigger_path = '../resource/blended/hello_kitty.jpeg'
+        trigger = Image.open(trigger_path)
+        trigger = trainsform(trigger)
+        trigger = trigger.to(config.device)
+    elif config.attack == "wanet":
+        ins = torch.rand(1, 2, 4, 4) * 2 - 1
+        ins = ins / torch.mean(torch.abs(ins))
+        noise_grid = (F.upsample(ins, size=config.image_size, mode="bicubic", align_corners=True).permute(0, 2, 3, 1)
+                      .to(config.device))
+        array1d = torch.linspace(-1, 1, steps=config.image_size)
+        x, y = torch.meshgrid(array1d, array1d)
+        identity_grid = torch.stack((y, x), 2)[None, ...].to(config.device)
+
+        grid_temps = (identity_grid + 0.5 * noise_grid / config.image_size) * 1
+        grid_temps = torch.clamp(grid_temps, -1, 1)
+        ins = torch.rand(1, config.image_size, config.image_size, 2).to(config.device) * 2 - 1
+        grid_temps2 = grid_temps.repeat(1, 1, 1, 1) + ins / config.image_size
+        grid_temps2 = torch.clamp(grid_temps2, -1, 1)
+
     for i, e in enumerate(tqdm(part1)):
+        e = e.to(config.device)
         if config.attack == "badnet":
-            mask_path = f'../resource/badnet/mask_{config.image_size}_{int(config.image_size / 10)}.png'
-            trigger_path = f'../resource/badnet/trigger_{config.image_size}_{int(config.image_size / 10)}.png'
-            trigger = trainsform(Image.open(trigger_path))
-            mask = trainsform(Image.open(mask_path))
             e = e * (1 - mask) + mask * trigger
         elif config.attack == "blended":
-            trigger_path = '../resource/blended/hello_kitty.jpeg'
-            trigger = Image.open(trigger_path)
-            trigger = trainsform(trigger)
             e = e * 0.8 + trigger * 0.2
+        elif config.attack == "wanet":
+            e = F.grid_sample(e, grid_temps2, align_corners=True)
+        else:
+            raise NotImplementedError(config.attack)
         image_np = e.cpu().detach().numpy()
         image_np = image_np.transpose(1, 2, 0)
         image_np = (image_np * 255).astype(np.uint8)
         image = Image.fromarray(image_np)
         image.save(f'{dataset_bad}/bad_{i}.png')
+
     for i, e in enumerate(tqdm(part2)):
         image_np = e.cpu().detach().numpy()
         image_np = image_np.transpose(1, 2, 0)
@@ -115,4 +144,3 @@ def prepare_bad_data(config: DictConfig):
 
 def download_cifar10(dataset_name):
     datasets.CIFAR10(root='../data', download=True)
-
