@@ -1,5 +1,0 @@
-tqdm
-torch
-torchvision
-tensorboardX
-bchlib

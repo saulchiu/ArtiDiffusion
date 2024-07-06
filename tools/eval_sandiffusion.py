@@ -1,8 +1,10 @@
 import argparse
 import math
+import os
 import random
 
 import PIL
+import numpy as np
 import torch
 import torchvision
 from PIL import Image
@@ -26,6 +28,7 @@ from diffusion.dpm_solver import DPM_Solver, NoiseScheduleVP, model_wrapper
 from defence.sample import infer_clip_p_sample
 from defence.anp.anp_defence import convert_model
 from defence.sample import anp_sample, infer_clip_p_sample
+from tools.ftrojann_transform import get_ftrojan_transform
 
 
 def get_sample_fn(diffusion, sampler, sample_step):
@@ -200,7 +203,7 @@ def show_sanitization(path, t, loop, device, defence=None):
         torchvision.transforms.Resize((config.image_size, config.image_size))
     ])
     tensor_list = get_dataset(config.dataset_name, transform)
-    b = 16
+    b = 128
     base = random.randint(0, 1000)
     tensors = tensor_list[base:base + b]
     tensors = torch.stack(tensors, dim=0)
@@ -223,10 +226,32 @@ def show_sanitization(path, t, loop, device, defence=None):
         mask = mask.to(device)
         trigger = trigger.to(device)
         tensors = tensors * (1 - mask) + trigger
+    elif config.attack == 'wanet':
+        trigger = torch.load('../resource/wanet/grid_32.pth')
+        grid_temps = trigger['grid_temps']
+        tensors = F.grid_sample(tensors, grid_temps.repeat(tensors.shape[0], 1, 1, 1), align_corners=True)
+    elif config.attack == 'ftrojan':
+        bad_transform = get_ftrojan_transform(config.image_size)
+        tmp_list = []
+        for i, e in enumerate(torch.unbind(tensors, dim=0)):
+            image_np = e.cpu().detach().numpy()
+            image_np = image_np.transpose(1, 2, 0)
+            image_np = (image_np * 255).astype(np.uint8)
+            image = Image.fromarray(image_np)
+            image_np = bad_transform(image)
+            e = torch.from_numpy(image_np)
+            e = e.permute((2, 0, 1))
+            e = e.float() / 255.0
+            tmp_list.append(e)
+        tensors = torch.stack(tmp_list, dim=0)
+        tensors = tensors.to(device)
+    else:
+        raise NotImplementedError(config.attack)
     x_0 = tensors
     diffusion = load_diffusion(path, device)
     san_list = [x_0]
     t_ = torch.tensor([t], device=device)
+    # eval defence here
     if defence == 'None':
         p_sample = diffusion.p_sample
     elif defence == 'anp':
@@ -246,10 +271,13 @@ def show_sanitization(path, t, loop, device, defence=None):
     else:
         raise NotImplementedError(defence)
     # sanitization process
-    for _ in tqdm(range(loop), desc="iterate", total=loop, leave=False):
+    for i in tqdm(range(loop), desc="iterate", total=loop, leave=False):
+        p = f'{path}/purify_{i}'
+        os.makedirs(p, exist_ok=True)
+        save_tensor_images(x_0, p)
         # forward
         x_t = diffusion.q_sample(x_0, t_)
-        san_list.append(x_t)
+        san_list.append(x_0)
         # reverse
         for j in reversed(range(1, t + 1)):
             x_t_m_1 = p_sample(x_t, torch.tensor([j], device=device))

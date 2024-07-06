@@ -107,3 +107,6 @@ def make_notification(content, color, boundary='-'):
     notice += '{}{:^28}{}\n'.format(side, content, side)
     notice += boundary * 30
     return colored(notice, color)
+
+def unsqueeze_expand(tensor: torch.tensor, batch: int):
+    return tensor.unsqueeze(0).expand(batch, -1, -1, -1)

@@ -21,7 +21,7 @@ transform_cifar10 = T.Compose([
 ])
 
 
-def cycle(dl):
+def cycle(dl: DataLoader) -> torch.tensor:
     while True:
         for data in dl:
             yield data

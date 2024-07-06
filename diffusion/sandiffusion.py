@@ -3,6 +3,8 @@ import time
 import os
 import shutil
 from random import random
+
+import numpy as np
 import torchvision.utils
 import yaml
 import torch
@@ -17,6 +19,7 @@ import hydra
 from omegaconf import DictConfig, OmegaConf
 from tqdm import tqdm
 import pynvml
+
 pynvml.nvmlInit()
 handle = pynvml.nvmlDeviceGetHandleByIndex(0)
 
@@ -27,6 +30,7 @@ from diffusion.unet import Unet
 from tools.time import now, get_hour
 from tools.prepare_data import prepare_bad_data
 from tools.dataset import rm_if_exist, load_dataloader
+from tools.ftrojann_transform import get_ftrojan_transform
 
 
 def unnormalize_to_zero_to_one(t):
@@ -116,10 +120,9 @@ class SanDiffusion:
         eps = torch.randn(xt.shape, device=xt.device)
         return mean + (var ** .5) * eps
 
-
     def pred_x_0_form_eps_theta(self, x_t, eps_theta, t, clip=False):
         tiled_x_0 = (gather(torch.sqrt(1. / self.alpha_bar), t) * x_t -
-                gather(torch.sqrt(1. / self.alpha_bar - 1), t) * eps_theta)
+                     gather(torch.sqrt(1. / self.alpha_bar - 1), t) * eps_theta)
         if clip:
             tiled_x_0 = torch.clip(tiled_x_0, min=-1, max=1)
         return tiled_x_0
@@ -181,14 +184,16 @@ class SanDiffusion:
     def sample(self, batch):
         return None
 
+
 def gpu_status():
     meminfo = pynvml.nvmlDeviceGetMemoryInfo(handle)
-    return meminfo.used/1024**2
+    return meminfo.used / 1024 ** 2
+
 
 @hydra.main(version_base=None, config_path='../config', config_name='default')
 def train(config: DictConfig):
     """
-    prepare dataset, save source code, save config file
+    prepare dataset, save source code
     """
     prepare_bad_data(config)
     print(OmegaConf.to_yaml(OmegaConf.to_object(config)))
@@ -199,8 +204,6 @@ def train(config: DictConfig):
         os.makedirs(target_folder)
     target_file_path = os.path.join(target_folder, script_name)
     shutil.copy(__file__, target_file_path)
-    with open(f'{target_folder}/config.yaml', 'w') as f:
-        yaml.dump(OmegaConf.to_object(config), f, allow_unicode=True)
     """
     load config
     """
@@ -243,12 +246,22 @@ def train(config: DictConfig):
             mask_path = f'../resource/badnet/mask_{config.image_size}_{int(config.image_size / 10)}.png'
             mask = trans(Image.open(mask_path))
             mask = mask.to(device)
+            trigger = trans(Image.open(trigger_path))
+            trigger = trigger.to(device)
         elif config.attack == 'blended':
             trigger_path = '../resource/blended/hello_kitty.jpeg'
+            trigger = trans(Image.open(trigger_path))
+            trigger = trigger.to(device)
+        elif config.attack == 'wanet':
+            # grid_path = f'../resource/wanet/grid_{config.image_size}.pth'
+            # trigger = torch.load(grid_path, map_location=config.device)
+            raise NotImplementedError('WaNet is not suitable fo Diffusion Models')
+        elif config.attack == 'ftrojan':
+            config.p_start = 0
+            config.p_end = 200
+            bad_transform = get_ftrojan_transform(config.image_size)
         else:
-            raise NotImplementedError
-        trigger = trans(Image.open(trigger_path))
-        trigger = trigger.to(device)
+            raise NotImplementedError(config.attack)
         gamma = config.gamma
         assert config.p_start < config.p_end
 
@@ -292,13 +305,13 @@ def train(config: DictConfig):
     elif config.sample_type == 'ddpm':
         sample_fn = diffusion.ddpm_sample
     else:
-        raise NotImplementedError
+        raise NotImplementedError(config.sample_type)
     if config.loss_type == 'l1':
         loss_fn = F.l1_loss
     elif config.loss_type == 'l2':
         loss_fn = F.mse_loss
     else:
-        raise NotImplementedError
+        raise NotImplementedError(config.loss_type)
     '''
     start train!
     '''
@@ -313,7 +326,23 @@ def train(config: DictConfig):
                 eps_theta = diffusion.eps_model(x_t, t)
                 loss = loss_fn(eps_theta, eps)
                 if config.attack != 'benign' and mode == 1:
-                    loss += loss_fn(eps_theta, eps - trigger.unsqueeze(0).expand(x_0.shape[0], -1, -1, -1) * gamma)
+                    if config.attack == 'ftrojan':
+                        e_list = []
+                        for i, e in enumerate(torch.unbind(eps, dim=0)):
+                            e_np = e.cpu().detach().numpy()
+                            e_np = e_np.transpose(1, 2, 0)
+                            e_np = (e_np * 255).astype(np.uint8)
+                            e_img = Image.fromarray(e_np)
+                            e_np = bad_transform(e_img)
+                            e = torch.from_numpy(e_np)
+                            e = e.permute((2, 0, 1))
+                            e = e.float() / 255.0
+                            e_list.append(e)
+                        eps = torch.stack(e_list, dim=0)
+                        eps = eps.to(device)
+                        loss += loss_fn(eps_theta, eps)
+                    else:  # badnet or blended
+                        loss += loss_fn(eps_theta, eps - trigger.unsqueeze(0).expand(x_0.shape[0], -1, -1, -1) * gamma)
                 total_loss += loss / grad_acc
             total_loss.backward()
             optimizer.step()
@@ -351,6 +380,8 @@ def train(config: DictConfig):
         'ema': diffusion.ema.state_dict(),
         "config": OmegaConf.to_object(config),
     }
+    with open(f'{target_folder}/config.yaml', 'w') as f:
+        yaml.dump(OmegaConf.to_object(config), f, allow_unicode=True)
     torch.save(res, f'{target_folder}/result.pth')
     print(target_folder)
 
