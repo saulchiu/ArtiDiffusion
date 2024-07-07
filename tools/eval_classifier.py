@@ -26,7 +26,7 @@ def eval_clas(config: DictConfig):
 
     ])
     # bad_path = f'../dataset/dataset-{config.dataset_name}-bad-{config.attack}-{str(config.ratio)}'
-    bad_path = '/home/chengyiqiu/code/SanDiffusion/results/ftrojan/gtsrb/20240706181931/purify_7'
+    bad_path = '/home/chengyiqiu/code/SanDiffusion/results/ftrojan/gtsrb/20240706200343/purify_7'
     bad_loader = load_dataloader(bad_path, trans, config.batch)
     ld = torch.load('/home/chengyiqiu/code/SanDiffusion/results/classifier/gtsrb/ftrojann/attack_result.pt')
     net = PreActResNet18(num_classes=43).to(config.device)

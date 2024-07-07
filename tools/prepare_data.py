@@ -137,6 +137,7 @@ def prepare_bad_data(config: DictConfig):
     else:
         raise NotImplementedError(config.attack)
     for i, e in enumerate(tqdm(part1)):
+        e = e.to(config.device)
         image = None
         if config.attack == "badnet":
             e = e * (1 - mask) + mask * trigger

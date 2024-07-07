@@ -327,20 +327,17 @@ def train(config: DictConfig):
                 loss = loss_fn(eps_theta, eps)
                 if config.attack != 'benign' and mode == 1:
                     if config.attack == 'ftrojan':
-                        e_list = []
-                        for i, e in enumerate(torch.unbind(eps, dim=0)):
-                            e_np = e.cpu().detach().numpy()
-                            e_np = e_np.transpose(1, 2, 0)
-                            e_np = (e_np * 255).astype(np.uint8)
-                            e_img = Image.fromarray(e_np)
-                            e_np = bad_transform(e_img)
-                            e = torch.from_numpy(e_np)
-                            e = e.permute((2, 0, 1))
-                            e = e.float() / 255.0
-                            e_list.append(e)
-                        eps = torch.stack(e_list, dim=0)
-                        eps = eps.to(device)
-                        loss += loss_fn(eps_theta, eps)
+                        zero_np = torch.zeros_like(x_0[0]).cpu().detach().numpy()
+                        zero_np = zero_np.transpose(1, 2, 0)
+                        zero_np = (zero_np * 255).astype(np.uint8)
+                        zero_img = Image.fromarray(zero_np)
+                        zero_np = bad_transform(zero_img)
+                        zero = torch.from_numpy(zero_np)
+                        zero = zero.permute((2, 0, 1))
+                        zero = zero.float() / 255.0
+                        zero = zero.unsqueeze(0).expand(size=(x_0.shape[0], -1, -1, -1))
+                        zero = zero.to(device)
+                        loss += loss_fn(eps_theta, eps + 2 * zero)
                     else:  # badnet or blended
                         loss += loss_fn(eps_theta, eps - trigger.unsqueeze(0).expand(x_0.shape[0], -1, -1, -1) * gamma)
                 total_loss += loss / grad_acc
