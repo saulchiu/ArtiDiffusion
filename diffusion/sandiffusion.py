@@ -33,6 +33,7 @@ from tools.prepare_data import prepare_bad_data
 from tools.dataset import rm_if_exist, load_dataloader
 from tools.ftrojann_transform import get_ftrojan_transform
 from tools.ctrl_transform import ctrl
+from tools.utils import unsqueeze_expand
 
 
 
@@ -262,7 +263,16 @@ def train(config: DictConfig):
         elif config.attack == 'ftrojan':
             config.p_start = 0
             config.p_end = 200
-            bad_transform = get_ftrojan_transform(config.image_size)
+            ftrojan_transform = get_ftrojan_transform(config.image_size)
+            zero_np = torch.zeros(size=(3, config.image_size, config.image_size)).cpu().detach().numpy()
+            zero_np = zero_np.transpose(1, 2, 0)
+            zero_np = (zero_np * 255).astype(np.uint8)
+            zero_img = Image.fromarray(zero_np)
+            zero_np = ftrojan_transform(zero_img)
+            zero = torch.from_numpy(zero_np)
+            zero = zero.permute((2, 0, 1))
+            zero = zero.float() / 255.0
+            zero = zero.to(device)
         elif config.attack == 'ctrl':
             class Args:
                 pass
@@ -275,7 +285,13 @@ def train(config: DictConfig):
                 "trigger_channels": (1, 2),
             }
             ctrl_transform = ctrl(local_args, True)
-            raise NotImplementedError
+            zero_np = torch.zeros(size=(3, config.image_size, config.image_size)).cpu().detach().numpy()
+            zero_np = zero_np.transpose(1, 2, 0)
+            zero_np = (zero_np * 255).astype(np.uint8)
+            zero_img = Image.fromarray(zero_np)
+            zero_img = ctrl_transform(zero_img, 1)
+            zero = trans(zero_img)
+            zero = zero.to(device)
         else:
             raise NotImplementedError(config.attack)
         gamma = config.gamma
@@ -309,6 +325,7 @@ def train(config: DictConfig):
         optimizer.load_state_dict(ld['opt'])
         diffusion.eps_model.load_state_dict(ld['unet'])
         diffusion.ema.load_state_dict(ld['ema'])
+        del ld
     # use data parallel or not
     if torch.cuda.device_count() > 1 and config.parallel == 1:
         print("Let's use", torch.cuda.device_count(), "GPUs!")
@@ -342,17 +359,11 @@ def train(config: DictConfig):
                 loss = loss_fn(eps_theta, eps)
                 if config.attack != 'benign' and mode == 1:
                     if config.attack == 'ftrojan':
-                        zero_np = torch.zeros_like(x_0[0]).cpu().detach().numpy()
-                        zero_np = zero_np.transpose(1, 2, 0)
-                        zero_np = (zero_np * 255).astype(np.uint8)
-                        zero_img = Image.fromarray(zero_np)
-                        zero_np = bad_transform(zero_img)
-                        zero = torch.from_numpy(zero_np)
-                        zero = zero.permute((2, 0, 1))
-                        zero = zero.float() / 255.0
-                        zero = zero.unsqueeze(0).expand(size=(x_0.shape[0], -1, -1, -1))
-                        zero = zero.to(device)
-                        loss += loss_fn(eps_theta, eps + 2 * zero)
+                        frequency_trigger = unsqueeze_expand(zero, x_0.shape[0])
+                        loss += loss_fn(eps_theta, eps - 2 * frequency_trigger)
+                    elif config.attack == 'ctrl':
+                        frequency_trigger = unsqueeze_expand(zero, x_0.shape[0])
+                        loss += loss_fn(eps_theta, eps - 0.1 * frequency_trigger)
                     else:  # badnet or blended
                         loss += loss_fn(eps_theta, eps - trigger.unsqueeze(0).expand(x_0.shape[0], -1, -1, -1) * gamma)
                 total_loss += loss / grad_acc
@@ -375,6 +386,7 @@ def train(config: DictConfig):
                         "current_epoch": current_epoch,
                     }
                     torch.save(res, f'{target_folder}/result.pth')
+                    del res, fake_sample
             current_hour = get_hour()
             if current_hour in range(10, 21) and config.server == "lab":
                 if config.unet.dim == 128:
@@ -384,6 +396,7 @@ def train(config: DictConfig):
             current_epoch += 1
             # free up memory fragments of GPU
             if x_0.shape[0] != config.batch:
+                del total_loss, loss, x_0, x_t, eps, eps_theta
                 torch.cuda.empty_cache()
             pbar.update(1)
     res = {

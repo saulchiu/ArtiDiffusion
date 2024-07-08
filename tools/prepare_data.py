@@ -172,9 +172,7 @@ def prepare_bad_data(config: DictConfig):
             image_np = image_np.transpose(1, 2, 0)
             image_np = (image_np * 255).astype(np.uint8)
             image = Image.fromarray(image_np)
-            image_np = ctrl_transform(image, 1)
-            image_np = image_np.astype(np.uint8)
-            image = Image.fromarray(image_np)
+            image = ctrl_transform(image, 1)
         else:
             raise NotImplementedError(config.attack)
         if image is None:

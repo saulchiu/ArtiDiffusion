@@ -54,10 +54,10 @@ while 1:
     x = x.to(device)
     y = y.to(device)
     # add ftrojan trigger
-    x += 1.5 * zero
+    x -= 2 * zero
     # simulate diffusion process
     eps = torch.randn_like(x, device=device)
-    x = 0.8102 * x + 0.5862 * eps
+    # x = 0.8102 * x + 0.5862 * eps
     y_p = net(x)
     backdoor_acc += torch.sum(torch.argmax(y_p, dim=1) == torch.ones_like(y, device=device) * target)
     total += x.shape[0]
@@ -80,6 +80,6 @@ print(f'backdoor acc: {backdoor_acc / total * 100: .4f}%')
 #     e_list.append(e)
 # tensors = torch.stack(e_list, dim=0).to(device)
 
-# p = '/home/chengyiqiu/code/SanDiffusion/runs/test'
-# os.makedirs(p, exist_ok=True)
-# save_tensor_images(tensors, p)
+p = '/home/chengyiqiu/code/SanDiffusion/runs/test'
+os.makedirs(p, exist_ok=True)
+save_tensor_images(x, p)
