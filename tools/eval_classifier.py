@@ -26,9 +26,9 @@ def eval_clas(config: DictConfig):
 
     ])
     # bad_path = f'../dataset/dataset-{config.dataset_name}-bad-{config.attack}-{str(config.ratio)}'
-    bad_path = '/home/chengyiqiu/code/SanDiffusion/results/ftrojan/gtsrb/20240706200343/purify_7'
+    bad_path = '/home/chengyiqiu/code/SanDiffusion/results/blended/gtsrb/20240628152136_sigmoid_700k_1/purify_7'
     bad_loader = load_dataloader(bad_path, trans, config.batch)
-    ld = torch.load('/home/chengyiqiu/code/SanDiffusion/results/classifier/gtsrb/ftrojann/attack_result.pt')
+    ld = torch.load('/home/chengyiqiu/code/SanDiffusion/results/classifier/gtsrb/blended/attack_result.pt')
     net = PreActResNet18(num_classes=43).to(config.device)
     net.load_state_dict(ld['model'])
     total = 0
@@ -43,7 +43,7 @@ def eval_clas(config: DictConfig):
             y = torch.ones(size=(x.shape[0],)).to(config.device) * target_label
             backdoor_acc += torch.sum(torch.argmax(y_p, dim=1) == y)
             total += x.shape[0]
-        if total > 1000:
+        if total > 200:
             break
     print(f'backdoor acc: {float(backdoor_acc) / total * 100:.4f}%')
 

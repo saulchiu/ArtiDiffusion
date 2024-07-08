@@ -12,13 +12,13 @@ from tools.dataset import load_dataloader
 
 path = "../results/benign/gtsrb/20240626211350_linear_700k/"
 device = "cuda:0"
-lr = 1e-3
+lr = 1e-4
 attack = 'badnet'
 dataset = 'gtsrb'
 ratio = 0.1
 bad_path = f'../dataset/dataset-{dataset}-bad-{attack}-{ratio}'
-batch = 128
-epoch = 1000
+batch = 16
+epoch = 10000
 c_epoch = 0
 
 ld = torch.load(f'{path}/result.pth', map_location=device)
@@ -31,19 +31,20 @@ bad_loader = load_dataloader(bad_path, trainsform, batch)
 loss_fn = F.mse_loss
 trigger = trainsform(open('../resource/badnet/trigger_32_3.png'))
 trigger = trigger.to(device)
-gamma = 1
+gamma = 0.01
 
 with tqdm(initial=c_epoch, total=epoch) as pbar:
     while c_epoch < epoch:
         optimizer.zero_grad()
         x_0 = next(bad_loader)
         x_0 = x_0.to(device)
-        t = torch.randint(low=100, high=200, size=(x_0.shape[0],), device=device).long()
+        t = torch.randint(low=0, high=1000, size=(x_0.shape[0],), device=device).long()
         eps = torch.randn_like(x_0, device=device)
         x_t = diffusion.q_sample(x_0, t, eps)
         eps_theta = diffusion.eps_model(x_t, t)
         loss = loss_fn(eps_theta, eps - trigger.unsqueeze(0).expand(x_0.shape[0], -1, -1, -1) * gamma)
         loss.backward()
+        optimizer.step()
         pbar.set_description(f"loss: {loss:.5f}")
         c_epoch += 1
         pbar.update(1)

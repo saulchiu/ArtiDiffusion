@@ -13,6 +13,7 @@ sys.path.append('../')
 from tools.utils import unsqueeze_expand
 from tools.dataset import save_tensor_images
 from tools.ftrojann_transform import get_ftrojan_transform
+from tools.ctrl_transform import ctrl
 
 
 def exist(path):
@@ -133,7 +134,19 @@ def prepare_bad_data(config: DictConfig):
             }
             torch.save(grid, grid_path)
     elif config.attack == 'ftrojan':
-        train_bd_transform = get_ftrojan_transform(config.image_size)
+        ftrojan_transform = get_ftrojan_transform(config.image_size)
+    elif config.attack == 'ctrl':
+        class Args:
+            pass
+        local_args = Args()
+        local_args.__dict__ = {
+            "img_size": (32, 32, 3),
+            "use_dct": False,
+            "use_yuv": True,
+            "pos_list": [15, 31],
+            "trigger_channels": (1, 2),
+        }
+        ctrl_transform = ctrl(local_args, True)
     else:
         raise NotImplementedError(config.attack)
     for i, e in enumerate(tqdm(part1)):
@@ -144,13 +157,22 @@ def prepare_bad_data(config: DictConfig):
         elif config.attack == "blended":
             e = e * 0.8 + trigger * 0.2
         elif config.attack == "wanet":
-            e = F.grid_sample(e, grid_temps, align_corners=True)
+            e = F.grid_sample(unsqueeze_expand(e, 1), grid_temps, align_corners=True)
+            e = e.squeeze()
         elif config.attack == 'ftrojan':
             image_np = e.cpu().detach().numpy()
             image_np = image_np.transpose(1, 2, 0)
             image_np = (image_np * 255).astype(np.uint8)
             image = Image.fromarray(image_np)
-            image_np = train_bd_transform(image)
+            image_np = ftrojan_transform(image)
+            image_np = image_np.astype(np.uint8)
+            image = Image.fromarray(image_np)
+        elif config.attack == 'ctrl':
+            image_np = e.cpu().detach().numpy()
+            image_np = image_np.transpose(1, 2, 0)
+            image_np = (image_np * 255).astype(np.uint8)
+            image = Image.fromarray(image_np)
+            image_np = ctrl_transform(image, 1)
             image_np = image_np.astype(np.uint8)
             image = Image.fromarray(image_np)
         else:

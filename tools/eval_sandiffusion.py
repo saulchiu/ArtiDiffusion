@@ -277,7 +277,6 @@ def show_sanitization(path, t, loop, device, defence=None):
         save_tensor_images(x_0, p)
         # forward
         x_t = diffusion.q_sample(x_0, t_)
-        san_list.append(x_0)
         # reverse
         for j in reversed(range(1, t + 1)):
             x_t_m_1 = p_sample(x_t, torch.tensor([j], device=device))

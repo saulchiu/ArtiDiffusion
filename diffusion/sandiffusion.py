@@ -20,6 +20,7 @@ from omegaconf import DictConfig, OmegaConf
 from tqdm import tqdm
 import pynvml
 
+
 pynvml.nvmlInit()
 handle = pynvml.nvmlDeviceGetHandleByIndex(0)
 
@@ -31,6 +32,8 @@ from tools.time import now, get_hour
 from tools.prepare_data import prepare_bad_data
 from tools.dataset import rm_if_exist, load_dataloader
 from tools.ftrojann_transform import get_ftrojan_transform
+from tools.ctrl_transform import ctrl
+
 
 
 def unnormalize_to_zero_to_one(t):
@@ -260,6 +263,19 @@ def train(config: DictConfig):
             config.p_start = 0
             config.p_end = 200
             bad_transform = get_ftrojan_transform(config.image_size)
+        elif config.attack == 'ctrl':
+            class Args:
+                pass
+            local_args = Args()
+            local_args.__dict__ = {
+                "img_size": (32, 32, 3),
+                "use_dct": False,
+                "use_yuv": True,
+                "pos_list": [15, 31],
+                "trigger_channels": (1, 2),
+            }
+            ctrl_transform = ctrl(local_args, True)
+            raise NotImplementedError
         else:
             raise NotImplementedError(config.attack)
         gamma = config.gamma
@@ -293,7 +309,6 @@ def train(config: DictConfig):
         optimizer.load_state_dict(ld['opt'])
         diffusion.eps_model.load_state_dict(ld['unet'])
         diffusion.ema.load_state_dict(ld['ema'])
-        del ld
     # use data parallel or not
     if torch.cuda.device_count() > 1 and config.parallel == 1:
         print("Let's use", torch.cuda.device_count(), "GPUs!")
@@ -348,9 +363,10 @@ def train(config: DictConfig):
             if current_epoch >= save_epoch and current_epoch % save_epoch == 0:
                 diffusion.ema.ema_model.eval()
                 with torch.inference_mode():
-                    print(target_folder)
-                    fake_sample = sample_fn(64)
-                    torchvision.utils.save_image(fake_sample, f'{target_folder}/sample_{current_epoch}.png', nrow=8)
+                    print(f"save model to: {target_folder}")
+                    if current_epoch >= (save_epoch * 10) and current_epoch % (save_epoch * 10) == 0:
+                        fake_sample = sample_fn(64)
+                        torchvision.utils.save_image(fake_sample, f'{target_folder}/sample_{current_epoch}.png', nrow=8)
                     res = {
                         'unet': unet.state_dict(),
                         'opt': optimizer.state_dict(),
@@ -359,7 +375,6 @@ def train(config: DictConfig):
                         "current_epoch": current_epoch,
                     }
                     torch.save(res, f'{target_folder}/result.pth')
-                    del res, fake_sample
             current_hour = get_hour()
             if current_hour in range(10, 21) and config.server == "lab":
                 if config.unet.dim == 128:
