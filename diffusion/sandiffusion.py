@@ -378,6 +378,7 @@ def train(config: DictConfig):
                     if current_epoch >= (save_epoch * 10) and current_epoch % (save_epoch * 10) == 0:
                         fake_sample = sample_fn(64)
                         torchvision.utils.save_image(fake_sample, f'{target_folder}/sample_{current_epoch}.png', nrow=8)
+                        del fake_sample
                     res = {
                         'unet': unet.state_dict(),
                         'opt': optimizer.state_dict(),
@@ -386,7 +387,7 @@ def train(config: DictConfig):
                         "current_epoch": current_epoch,
                     }
                     torch.save(res, f'{target_folder}/result.pth')
-                    del res, fake_sample
+                    del res
             current_hour = get_hour()
             if current_hour in range(10, 21) and config.server == "lab":
                 if config.unet.dim == 128:

@@ -29,6 +29,7 @@ from defence.sample import infer_clip_p_sample
 from defence.anp.anp_defence import convert_model
 from defence.sample import anp_sample, infer_clip_p_sample
 from tools.ftrojann_transform import get_ftrojan_transform
+from tools.ctrl_transform import ctrl
 
 
 def get_sample_fn(diffusion, sampler, sample_step):
@@ -245,6 +246,30 @@ def show_sanitization(path, t, loop, device, defence=None):
             tmp_list.append(e)
         tensors = torch.stack(tmp_list, dim=0)
         tensors = tensors.to(device)
+    elif config.attack == 'ctrl':
+        class Args:
+            pass
+
+        args = Args()
+        args.__dict__ = {
+            "img_size": (32, 32, 3),
+            "use_dct": False,
+            "use_yuv": True,
+            "pos_list": [15, 31],
+            "trigger_channels": (1, 2),
+        }
+        bad_transform = ctrl(args, False)
+        tmp_list = []
+        for i, e in enumerate(torch.unbind(tensors, dim=0)):
+            image_np = e.cpu().detach().numpy()
+            image_np = image_np.transpose(1, 2, 0)
+            image_np = (image_np * 255).astype(np.uint8)
+            image = Image.fromarray(image_np)
+            image = bad_transform(image, 1)
+            e = transform(image)
+            tmp_list.append(e)
+        tensors = torch.stack(tmp_list, dim=0)
+        tensors = tensors.to(device)
     else:
         raise NotImplementedError(config.attack)
     x_0 = tensors
@@ -272,11 +297,15 @@ def show_sanitization(path, t, loop, device, defence=None):
         raise NotImplementedError(defence)
     # sanitization process
     for i in tqdm(range(loop), desc="iterate", total=loop, leave=False):
+        # save img to collect data
         p = f'{path}/purify_{i}'
+        rm_if_exist(p)
         os.makedirs(p, exist_ok=True)
         save_tensor_images(x_0, p)
+
         # forward
         x_t = diffusion.q_sample(x_0, t_)
+
         # reverse
         for j in reversed(range(1, t + 1)):
             x_t_m_1 = p_sample(x_t, torch.tensor([j], device=device))

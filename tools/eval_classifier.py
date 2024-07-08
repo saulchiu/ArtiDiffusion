@@ -26,9 +26,9 @@ def eval_clas(config: DictConfig):
 
     ])
     # bad_path = f'../dataset/dataset-{config.dataset_name}-bad-{config.attack}-{str(config.ratio)}'
-    bad_path = '/home/chengyiqiu/code/SanDiffusion/results/blended/gtsrb/20240628152136_sigmoid_700k_1/purify_7'
+    bad_path = '/home/chengyiqiu/code/SanDiffusion/results/badnet/gtsrb/20240627203430_sigmoid_700k_1/purify_7'
     bad_loader = load_dataloader(bad_path, trans, config.batch)
-    ld = torch.load('/home/chengyiqiu/code/SanDiffusion/results/classifier/gtsrb/blended/attack_result.pt')
+    ld = torch.load('/home/chengyiqiu/code/SanDiffusion/results/classifier/gtsrb/badnet/attack_result.pt')
     net = PreActResNet18(num_classes=43).to(config.device)
     net.load_state_dict(ld['model'])
     total = 0
