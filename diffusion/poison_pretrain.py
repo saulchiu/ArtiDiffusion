@@ -9,6 +9,7 @@ import sys
 sys.path.append('../')
 from tools.eval_sandiffusion import load_diffusion
 from tools.dataset import load_dataloader
+from tools.utils import unsqueeze_expand
 
 path = "../results/benign/gtsrb/20240626211350_linear_700k/"
 device = "cuda:0"
@@ -31,18 +32,25 @@ bad_loader = load_dataloader(bad_path, trainsform, batch)
 loss_fn = F.mse_loss
 trigger = trainsform(open('../resource/badnet/trigger_32_3.png'))
 trigger = trigger.to(device)
-gamma = 0.01
+mask = trainsform(open('../resource/badnet/mask_32_3.png'))
+mask = mask.to(device)
+gamma = 0.1
+shape = (batch, 3, 32, 32)
+mask = unsqueeze_expand(mask, batch)
+trigger = unsqueeze_expand(trigger, batch)
 
 with tqdm(initial=c_epoch, total=epoch) as pbar:
     while c_epoch < epoch:
         optimizer.zero_grad()
-        x_0 = next(bad_loader)
+        # x_0 = next(bad_loader)
+        x_0 = torch.randn(size=shape, device=device)
+        x_0 = x_0 * (1 - mask) + trigger
         x_0 = x_0.to(device)
-        t = torch.randint(low=0, high=1000, size=(x_0.shape[0],), device=device).long()
+        t = torch.randint(low=200, high=300, size=(x_0.shape[0],), device=device).long()
         eps = torch.randn_like(x_0, device=device)
         x_t = diffusion.q_sample(x_0, t, eps)
         eps_theta = diffusion.eps_model(x_t, t)
-        loss = loss_fn(eps_theta, eps - trigger.unsqueeze(0).expand(x_0.shape[0], -1, -1, -1) * gamma)
+        loss = loss_fn(eps_theta, eps - trigger * gamma)
         loss.backward()
         optimizer.step()
         pbar.set_description(f"loss: {loss:.5f}")

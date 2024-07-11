@@ -1,3 +1,6 @@
+import glob
+import os.path
+
 import hydra
 import torch
 import torchvision.datasets
@@ -12,42 +15,72 @@ sys.path.append('../')
 from tools.dataset import load_dataloader
 from classifier_models import PreActResNet18
 from tools.prepare_data import get_wanet_grid
+from tools.eval_sandiffusion import sanitization
 
 
-@hydra.main(version_base=None, config_path='../config', config_name='gtsrb')
-def eval_clas(config: DictConfig):
-    torch.manual_seed(42)
-    config.dataset_name = 'gtsrb'
-    config.attack = 'wanet'
-    config.ratio = 0.1
-    trans = Compose([
-        Resize((config.image_size, config.image_size)),
-        ToTensor(),
-
-    ])
-    # bad_path = f'../dataset/dataset-{config.dataset_name}-bad-{config.attack}-{str(config.ratio)}'
-    bad_path = '/home/chengyiqiu/code/SanDiffusion/results/badnet/gtsrb/20240627203430_sigmoid_700k_1/purify_7'
-    bad_loader = load_dataloader(bad_path, trans, config.batch)
-    ld = torch.load('/home/chengyiqiu/code/SanDiffusion/results/classifier/gtsrb/badnet/attack_result.pt')
-    net = PreActResNet18(num_classes=43).to(config.device)
-    net.load_state_dict(ld['model'])
-    total = 0
-    backdoor_acc = 0
+def eval_backdoor_acc(dataset_name, attack, dm_path):
+    device = 'cuda:0'
+    batch = 1024
+    if dataset_name in ['gtsrb', 'cifar10']:
+        image_size = 32
+    elif dataset_name in ['celeba']:
+        image_size = 64
+    else:
+        raise NotImplementedError(dataset_name)
+    trans = Compose([Resize((image_size, image_size)), ToTensor()])
+    before_purify = f'{dm_path}/purify_0'
+    ld_before = load_dataloader(before_purify, trans, batch)
+    clsf_dict = torch.load(f'../results/classifier/{dataset_name}/{attack}/attack_result.pt')
+    net = PreActResNet18(num_classes=43).to(device)
+    net.load_state_dict(clsf_dict['model'])
+    total = 0.
+    before_acc = 0
     target_label = 0
     net.eval()
     while 1:
-        x = next(bad_loader)
+        x = next(ld_before)
         with torch.no_grad():
-            x = x.to(config.device)
+            x = x.to(device)
             y_p = net(x)
-            y = torch.ones(size=(x.shape[0],)).to(config.device) * target_label
-            backdoor_acc += torch.sum(torch.argmax(y_p, dim=1) == y)
+            y = torch.ones(size=(x.shape[0],)).to(device) * target_label
+            before_acc += torch.sum(torch.argmax(y_p, dim=1) == y)
             total += x.shape[0]
-        if total > 200:
+        if total >= batch:
             break
-    print(f'backdoor acc: {float(backdoor_acc) / total * 100:.4f}%')
+    before_acc /= total
+    after_purify = f'{dm_path}/purify_7'
+    ld_after = load_dataloader(after_purify, trans, batch)
+    total = 0.
+    after_acc = 0
+    target_label = 0
+    net.eval()
+    while 1:
+        x = next(ld_after)
+        with torch.no_grad():
+            x = x.to(device)
+            y_p = net(x)
+            y = torch.ones(size=(x.shape[0],)).to(device) * target_label
+            after_acc += torch.sum(torch.argmax(y_p, dim=1) == y)
+            total += x.shape[0]
+        if total >= batch:
+            break
+    after_acc /= total
+    print(f'before: {before_acc:.2f}, after: {after_acc:.2f}')
 
 
 if __name__ == '__main__':
     torch.manual_seed(42)
-    eval_clas()
+    dataset_name = 'gtsrb'
+    attack_list = ['badnet', 'blended']
+    device = 'cuda:0'
+    ratio = 1
+    ratio_list = [1, 3, 5, 7]
+    for attack in attack_list:
+        for ratio in ratio_list:
+            base = f'../results/{attack}/{dataset_name}'
+            path_pattern = f"{base}/*_sigmoid_700k_{ratio}"
+            dm_path = glob.glob(path_pattern)
+            if os.path.exists(dm_path[0]):
+                sanitization(path=dm_path[0], t=200, loop=8, device=device, batch=1024, plot=False)
+                eval_backdoor_acc(dataset_name, attack, dm_path[0])
+

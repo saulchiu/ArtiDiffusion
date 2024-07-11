@@ -20,7 +20,6 @@ from omegaconf import DictConfig, OmegaConf
 from tqdm import tqdm
 import pynvml
 
-
 pynvml.nvmlInit()
 handle = pynvml.nvmlDeviceGetHandleByIndex(0)
 
@@ -34,7 +33,6 @@ from tools.dataset import rm_if_exist, load_dataloader
 from tools.ftrojann_transform import get_ftrojan_transform
 from tools.ctrl_transform import ctrl
 from tools.utils import unsqueeze_expand
-
 
 
 def unnormalize_to_zero_to_one(t):
@@ -132,21 +130,22 @@ class SanDiffusion:
         return tiled_x_0
 
     @torch.inference_mode()
-    def ddpm_sample(self, batch):
-        x_t = torch.randn(size=(batch, self.eps_model.channel, self.image_size, self.image_size), device=self.device)
+    def ddpm_sample(self, batch, x_t=None):
+        x_t = torch.randn(size=(batch, self.eps_model.channel, self.image_size, self.image_size),
+                          device=self.device) if x_t is None else x_t
         for i in tqdm(reversed(range(1, self.n_steps)), desc='DDPM Sampling', total=self.n_steps, leave=False):
             x_t_m_1 = self.p_sample(x_t, torch.tensor([i], device=self.device))
             x_t = x_t_m_1
         return x_t
 
     @torch.inference_mode()
-    def ddim_sample(self, batch):
+    def ddim_sample(self, batch, img=None):
         batch, device, total_timesteps, sampling_timesteps, eta = batch, self.device, self.n_steps, 250, 0
         shape = (batch, self.eps_model.channel, self.image_size, self.image_size)
         times = torch.linspace(-1, total_timesteps - 1, steps=sampling_timesteps + 1)
         times = list(reversed(times.int().tolist()))
         time_pairs = list(zip(times[:-1], times[1:]))
-        img = torch.randn(shape, device=device)
+        img = torch.randn(shape, device=device) if img is None else img
         imgs = [img]
         for time, time_next in tqdm(time_pairs, desc='DDIM sample'):
             time_cond = torch.full((batch,), time, device=device, dtype=torch.long)
@@ -276,6 +275,7 @@ def train(config: DictConfig):
         elif config.attack == 'ctrl':
             class Args:
                 pass
+
             local_args = Args()
             local_args.__dict__ = {
                 "img_size": (32, 32, 3),

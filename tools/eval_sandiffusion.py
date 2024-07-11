@@ -137,6 +137,27 @@ def load_diffusion(path, device):
     diffusion.ema.load_state_dict(ema_dict)
     return diffusion
 
+def gen_adv_sample(pth_path, device, adv_path):
+    dm = load_diffusion(pth_path, device)
+    backdoor_noise = torch.randn(size=(16, 3, 32, 32), device=device)
+    transform = Compose([
+        ToTensor(), Resize((32, 32))
+    ])
+    mask = PIL.Image.open(
+        f'../resource/badnet/mask_32_3.png')
+    mask = transform(mask)
+    trigger = PIL.Image.open(
+        f'../resource/badnet/trigger_32_3.png')
+    trigger = transform(trigger)
+    mask = mask.unsqueeze(0).expand(16, -1, -1, -1)
+    trigger = trigger.unsqueeze(0).expand(16, -1, -1, -1)
+    mask = mask.to(device)
+    trigger = trigger.to(device)
+    x_t = backdoor_noise * (1 - mask) + trigger
+    x_t = dm.ddim_sample(16, x_t)
+    save_tensor_images(x_t, adv_path)
+    return x_t
+
 
 def gen_and_cal_fid(path, device, sampler, sample_step, gen_batch):
     ld = torch.load(f'{path}/result.pth', map_location=device)
@@ -195,7 +216,7 @@ def cal_mse(path, device, num, batch):
 
 
 @torch.inference_mode()
-def show_sanitization(path, t, loop, device, defence=None):
+def sanitization(path, t, loop, device, defence="None", batch=None, plot=True):
     ld = torch.load(f'{path}/result.pth', map_location=device)
     config = DictConfig(ld['config'])
     config.sample_type = 'ddpm'
@@ -204,17 +225,25 @@ def show_sanitization(path, t, loop, device, defence=None):
         torchvision.transforms.Resize((config.image_size, config.image_size))
     ])
     tensor_list = get_dataset(config.dataset_name, transform)
-    b = 16
-    base = random.randint(0, 1000)
+    b = 16 if batch is None else batch
+    base = random.randint(0, 10000)
+    # base = 64
     tensors = tensor_list[base:base + b]
     tensors = torch.stack(tensors, dim=0)
     tensors = tensors.to(device)
+    '''
+    load benign model but use poisoning sample
+    '''
+    config.attack = 'badnet'
+
     if config.attack == 'blended':
         trigger = transform(
             PIL.Image.open('../resource/blended/hello_kitty.jpeg')
         )
         trigger = trigger.to(device)
         tensors = 0.8 * tensors + 0.2 * trigger.unsqueeze(0).expand(b, -1, -1, -1)
+    if config.attack == 'benign':
+        pass
     elif config.attack == 'badnet':
         mask = PIL.Image.open(
             f'../resource/badnet/mask_{config.image_size}_{int(config.image_size / 10)}.png')
@@ -305,9 +334,9 @@ def show_sanitization(path, t, loop, device, defence=None):
 
         # forward
         x_t = diffusion.q_sample(x_0, t_)
-
+        san_list.append(x_t)
         # reverse
-        for j in reversed(range(1, t + 1)):
+        for j in reversed(range(0, t)):
             x_t_m_1 = p_sample(x_t, torch.tensor([j], device=device))
             x_t = x_t_m_1
         x_0 = x_t
@@ -323,7 +352,8 @@ def show_sanitization(path, t, loop, device, defence=None):
         res.append(torchvision.transforms.transforms.ToTensor()(im))
 
     res = torch.stack(res, dim=0)
-    plot_images(images=res, num_images=res.shape[0])
+    if plot:
+        plot_images(images=res, num_images=res.shape[0])
 
 
 def get_args():
@@ -347,7 +377,7 @@ def get_args():
             require: device, path, batch, total sample num
     """
     parser = argparse.ArgumentParser()
-    parser.add_argument('--mode', type=str, default='sanitization', action=ModeAction)
+    parser.add_argument('--mode', type=str, default='san', action=ModeAction)
     parser.add_argument('--device', type=str, default='cuda:0')
     parser.add_argument('--path', type=str)
     parser.add_argument("--batch", type=int, default=64)
@@ -371,13 +401,13 @@ def get_args():
 if __name__ == '__main__':
     args = get_args()
     mode = args.mode
-    if mode == 'sanitization':
+    if mode == 'san':
         device = args.device
         path = args.path
         timestep = args.t
         loop = args.l
         defence = args.defence
-        show_sanitization(path, timestep, loop, device, defence)
+        sanitization(path, timestep, loop, device, defence)
     elif mode == 'fid':
         device = args.device
         path = args.path
@@ -391,3 +421,5 @@ if __name__ == '__main__':
         batch = args.batch
         num = args.num
         cal_mse(path, device, num, batch)
+    else:
+        raise NotImplementedError(mode)
