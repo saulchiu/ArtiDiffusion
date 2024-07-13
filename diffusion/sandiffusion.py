@@ -360,7 +360,7 @@ def train(config: DictConfig):
                 if config.attack != 'benign' and mode == 1:
                     if config.attack == 'ftrojan':
                         frequency_trigger = unsqueeze_expand(zero, x_0.shape[0])
-                        loss += loss_fn(eps_theta, eps - 10 * frequency_trigger)
+                        loss += loss_fn(eps_theta, eps - gamma * frequency_trigger)
                     elif config.attack == 'ctrl':
                         frequency_trigger = unsqueeze_expand(zero, x_0.shape[0])
                         loss += loss_fn(eps_theta, eps - 0.1 * frequency_trigger)
