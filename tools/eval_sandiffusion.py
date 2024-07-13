@@ -234,7 +234,7 @@ def sanitization(path, t, loop, device, defence="None", batch=None, plot=True):
     '''
     load benign model but use poisoning sample
     '''
-    config.attack = 'badnet'
+    # config.attack = 'badnet'
 
     if config.attack == 'blended':
         trigger = transform(
@@ -242,7 +242,7 @@ def sanitization(path, t, loop, device, defence="None", batch=None, plot=True):
         )
         trigger = trigger.to(device)
         tensors = 0.8 * tensors + 0.2 * trigger.unsqueeze(0).expand(b, -1, -1, -1)
-    if config.attack == 'benign':
+    elif config.attack == 'benign':
         pass
     elif config.attack == 'badnet':
         mask = PIL.Image.open(

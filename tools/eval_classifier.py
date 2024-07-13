@@ -34,7 +34,7 @@ def eval_backdoor_acc(dataset_name, attack, dm_path):
     net = PreActResNet18(num_classes=43).to(device)
     net.load_state_dict(clsf_dict['model'])
     total = 0.
-    before_acc = 0
+    before_acc = 0.
     target_label = 0
     net.eval()
     while 1:
@@ -47,11 +47,11 @@ def eval_backdoor_acc(dataset_name, attack, dm_path):
             total += x.shape[0]
         if total >= batch:
             break
-    before_acc /= total
+    before_acc = before_acc * 100 / total
     after_purify = f'{dm_path}/purify_7'
     ld_after = load_dataloader(after_purify, trans, batch)
     total = 0.
-    after_acc = 0
+    after_acc = 0.
     target_label = 0
     net.eval()
     while 1:
@@ -64,14 +64,14 @@ def eval_backdoor_acc(dataset_name, attack, dm_path):
             total += x.shape[0]
         if total >= batch:
             break
-    after_acc /= total
-    print(f'before: {before_acc:.2f}, after: {after_acc:.2f}')
+    after_acc = after_acc * 100 / total
+    print(f'before: {before_acc:.2f}%, after: {after_acc:.2f}%')
 
 
 if __name__ == '__main__':
     torch.manual_seed(42)
     dataset_name = 'gtsrb'
-    attack_list = ['badnet', 'blended']
+    attack_list = ['ftrojan']
     device = 'cuda:0'
     ratio = 1
     ratio_list = [1, 3, 5, 7]
@@ -80,7 +80,7 @@ if __name__ == '__main__':
             base = f'../results/{attack}/{dataset_name}'
             path_pattern = f"{base}/*_sigmoid_700k_{ratio}"
             dm_path = glob.glob(path_pattern)
-            if os.path.exists(dm_path[0]):
+            if len(dm_path) != 0 and os.path.exists(dm_path[0]):
                 sanitization(path=dm_path[0], t=200, loop=8, device=device, batch=1024, plot=False)
                 eval_backdoor_acc(dataset_name, attack, dm_path[0])
 

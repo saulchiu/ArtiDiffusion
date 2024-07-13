@@ -41,7 +41,7 @@ zero = zero.float() / 255.0
 zero = zero.unsqueeze(0).expand(size=(x.shape[0], -1, -1, -1))
 zero = zero.to(device)
 
-ld = torch.load('/home/chengyiqiu/code/SanDiffusion/results/classifier/gtsrb/ftrojann/attack_result.pt')
+ld = torch.load('../results/classifier/gtsrb/ftrojan/attack_result.pt')
 net = PreActResNet18(num_classes=43).to(device)
 net.load_state_dict(ld['model'])
 net.eval()
@@ -54,7 +54,7 @@ while 1:
     x = x.to(device)
     y = y.to(device)
     # add ftrojan trigger
-    x -= 2 * zero
+    x -= 6 * zero
     # simulate diffusion process
     eps = torch.randn_like(x, device=device)
     # x = 0.8102 * x + 0.5862 * eps
