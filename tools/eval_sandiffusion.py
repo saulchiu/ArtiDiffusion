@@ -234,7 +234,7 @@ def sanitization(path, t, loop, device, defence="None", batch=None, plot=True):
     '''
     load benign model but use poisoning sample
     '''
-    # config.attack = 'badnet'
+    config.attack = 'benign'
 
     if config.attack == 'blended':
         trigger = transform(

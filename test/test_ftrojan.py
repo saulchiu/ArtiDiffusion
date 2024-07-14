@@ -54,10 +54,10 @@ while 1:
     x = x.to(device)
     y = y.to(device)
     # add ftrojan trigger
-    x -= 6 * zero
+    x -= 2 * zero
     # simulate diffusion process
     eps = torch.randn_like(x, device=device)
-    # x = 0.8102 * x + 0.5862 * eps
+    x = 0.7 * x + 0.3 * eps
     y_p = net(x)
     backdoor_acc += torch.sum(torch.argmax(y_p, dim=1) == torch.ones_like(y, device=device) * target)
     total += x.shape[0]

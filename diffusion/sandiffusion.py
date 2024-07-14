@@ -240,6 +240,7 @@ def train(config: DictConfig):
     """
     if config.attack != "benign":
         ratio = config.ratio
+        gamma = config.gamma
         bad_path = f'../dataset/dataset-{config.dataset_name}-bad-{config.attack}-{str(ratio)}'
         good_path = f'../dataset/dataset-{config.dataset_name}-good-{config.attack}-{str(ratio)}'
         bad_loader = load_dataloader(bad_path, trans, config.batch)
@@ -260,8 +261,7 @@ def train(config: DictConfig):
             # trigger = torch.load(grid_path, map_location=config.device)
             raise NotImplementedError('WaNet is not suitable fo Diffusion Models')
         elif config.attack == 'ftrojan':
-            config.p_start = 0
-            config.p_end = 200
+            gamma = max(2., gamma)
             ftrojan_transform = get_ftrojan_transform(config.image_size)
             zero_np = torch.zeros(size=(3, config.image_size, config.image_size)).cpu().detach().numpy()
             zero_np = zero_np.transpose(1, 2, 0)
@@ -294,7 +294,6 @@ def train(config: DictConfig):
             zero = zero.to(device)
         else:
             raise NotImplementedError(config.attack)
-        gamma = config.gamma
         assert config.p_start < config.p_end
 
     def get_x_and_t():

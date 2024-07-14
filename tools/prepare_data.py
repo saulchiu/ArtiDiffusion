@@ -135,6 +135,15 @@ def prepare_bad_data(config: DictConfig):
             torch.save(grid, grid_path)
     elif config.attack == 'ftrojan':
         ftrojan_transform = get_ftrojan_transform(config.image_size)
+        zero_np = torch.zeros(size=(3, config.image_size, config.image_size)).cpu().detach().numpy()
+        zero_np = zero_np.transpose(1, 2, 0)
+        zero_np = (zero_np * 255).astype(np.uint8)
+        zero_img = Image.fromarray(zero_np)
+        zero_np = ftrojan_transform(zero_img)
+        zero = torch.from_numpy(zero_np)
+        zero = zero.permute((2, 0, 1))
+        zero = zero.float() / 255.0
+        zero = zero.to(config.device)
     elif config.attack == 'ctrl':
         class Args:
             pass
@@ -160,13 +169,7 @@ def prepare_bad_data(config: DictConfig):
             e = F.grid_sample(unsqueeze_expand(e, 1), grid_temps, align_corners=True)
             e = e.squeeze()
         elif config.attack == 'ftrojan':
-            image_np = e.cpu().detach().numpy()
-            image_np = image_np.transpose(1, 2, 0)
-            image_np = (image_np * 255).astype(np.uint8)
-            image = Image.fromarray(image_np)
-            image_np = ftrojan_transform(image)
-            image_np = image_np.astype(np.uint8)
-            image = Image.fromarray(image_np)
+            e = e + 2 * zero
         elif config.attack == 'ctrl':
             image_np = e.cpu().detach().numpy()
             image_np = image_np.transpose(1, 2, 0)
