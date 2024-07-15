@@ -28,44 +28,32 @@ def eval_backdoor_acc(dataset_name, attack, dm_path):
     else:
         raise NotImplementedError(dataset_name)
     trans = Compose([Resize((image_size, image_size)), ToTensor()])
-    before_purify = f'{dm_path}/purify_0'
-    ld_before = load_dataloader(before_purify, trans, batch)
     clsf_dict = torch.load(f'../results/classifier/{dataset_name}/{attack}/attack_result.pt')
     net = PreActResNet18(num_classes=43).to(device)
     net.load_state_dict(clsf_dict['model'])
     total = 0.
-    before_acc = 0.
+    acc = 0.
+    acc_list = []
     target_label = 0
     net.eval()
-    while 1:
-        x = next(ld_before)
-        with torch.no_grad():
-            x = x.to(device)
-            y_p = net(x)
-            y = torch.ones(size=(x.shape[0],)).to(device) * target_label
-            before_acc += torch.sum(torch.argmax(y_p, dim=1) == y)
-            total += x.shape[0]
-        if total >= batch:
-            break
-    before_acc = before_acc * 100 / total
-    after_purify = f'{dm_path}/purify_7'
-    ld_after = load_dataloader(after_purify, trans, batch)
-    total = 0.
-    after_acc = 0.
-    target_label = 0
-    net.eval()
-    while 1:
-        x = next(ld_after)
-        with torch.no_grad():
-            x = x.to(device)
-            y_p = net(x)
-            y = torch.ones(size=(x.shape[0],)).to(device) * target_label
-            after_acc += torch.sum(torch.argmax(y_p, dim=1) == y)
-            total += x.shape[0]
-        if total >= batch:
-            break
-    after_acc = after_acc * 100 / total
-    print(f'before: {before_acc:.2f}%, after: {after_acc:.2f}%')
+    for i in range(0, 8):
+        before_purify = f'{dm_path}/purify_{i}'
+        ld_before = load_dataloader(before_purify, trans, batch)
+        while 1:
+            x = next(ld_before)
+            with torch.no_grad():
+                x = x.to(device)
+                y_p = net(x)
+                y = torch.ones(size=(x.shape[0],)).to(device) * target_label
+                acc += torch.sum(torch.argmax(y_p, dim=1) == y)
+                total += x.shape[0]
+            if total >= batch:
+                break
+        acc = acc * 100 / total
+        acc_list.append(acc)
+    max_width = len('8')
+    print("\t".join(f"pur_{i}".rjust(max_width) for i in range(0, 8)))
+    print("\t".join(f"{acc:>{max_width}.2f}%" for acc in acc_list))
 
 
 if __name__ == '__main__':
@@ -81,6 +69,6 @@ if __name__ == '__main__':
             path_pattern = f"{base}/*_sigmoid_700k_{ratio}"
             dm_path = glob.glob(path_pattern)
             if len(dm_path) != 0 and os.path.exists(dm_path[0]):
-                sanitization(path=dm_path[0], t=200, loop=8, device=device, batch=256, plot=False)
+                sanitization(path=dm_path[0], t=10, loop=8, device=device, batch=16, plot=False)
                 eval_backdoor_acc(dataset_name, attack, dm_path[0])
 

@@ -30,6 +30,7 @@ from defence.anp.anp_defence import convert_model
 from defence.sample import anp_sample, infer_clip_p_sample
 from tools.ftrojann_transform import get_ftrojan_transform
 from tools.ctrl_transform import ctrl
+from tools.utils import unsqueeze_expand
 
 
 def get_sample_fn(diffusion, sampler, sample_step):
@@ -234,7 +235,7 @@ def sanitization(path, t, loop, device, defence="None", batch=None, plot=True):
     '''
     load benign model but use poisoning sample
     '''
-    config.attack = 'benign'
+    # config.attack = 'benign'
 
     if config.attack == 'blended':
         trigger = transform(
@@ -261,19 +262,18 @@ def sanitization(path, t, loop, device, defence="None", batch=None, plot=True):
         grid_temps = trigger['grid_temps']
         tensors = F.grid_sample(tensors, grid_temps.repeat(tensors.shape[0], 1, 1, 1), align_corners=True)
     elif config.attack == 'ftrojan':
-        bad_transform = get_ftrojan_transform(config.image_size)
-        tmp_list = []
-        for i, e in enumerate(torch.unbind(tensors, dim=0)):
-            image_np = e.cpu().detach().numpy()
-            image_np = image_np.transpose(1, 2, 0)
-            image_np = (image_np * 255).astype(np.uint8)
-            image = Image.fromarray(image_np)
-            image_np = bad_transform(image)
-            e = torch.from_numpy(image_np)
-            e = e.permute((2, 0, 1))
-            e = e.float() / 255.0
-            tmp_list.append(e)
-        tensors = torch.stack(tmp_list, dim=0)
+        ftrojan_transform = get_ftrojan_transform(config.image_size)
+        zero_np = torch.zeros(size=(3, config.image_size, config.image_size)).cpu().detach().numpy()
+        zero_np = zero_np.transpose(1, 2, 0)
+        zero_np = (zero_np * 255).astype(np.uint8)
+        zero_img = Image.fromarray(zero_np)
+        zero_np = ftrojan_transform(zero_img)
+        zero = torch.from_numpy(zero_np)
+        zero = zero.permute((2, 0, 1))
+        zero = zero.float() / 255.0
+        zero = zero.to(device)
+        zero = unsqueeze_expand(zero, tensors.shape[0])
+        tensors -= 2 * zero
         tensors = tensors.to(device)
     elif config.attack == 'ctrl':
         class Args:
