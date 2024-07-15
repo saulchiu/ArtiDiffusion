@@ -69,6 +69,6 @@ if __name__ == '__main__':
             path_pattern = f"{base}/*_sigmoid_700k_{ratio}"
             dm_path = glob.glob(path_pattern)
             if len(dm_path) != 0 and os.path.exists(dm_path[0]):
-                sanitization(path=dm_path[0], t=10, loop=8, device=device, batch=16, plot=False)
+                sanitization(path=dm_path[0], t=200, loop=8, device=device, batch=16, plot=False)
                 eval_backdoor_acc(dataset_name, attack, dm_path[0])
 

@@ -273,7 +273,7 @@ def sanitization(path, t, loop, device, defence="None", batch=None, plot=True):
         zero = zero.float() / 255.0
         zero = zero.to(device)
         zero = unsqueeze_expand(zero, tensors.shape[0])
-        tensors -= 2 * zero
+        tensors -= 10 * zero
         tensors = tensors.to(device)
     elif config.attack == 'ctrl':
         class Args:

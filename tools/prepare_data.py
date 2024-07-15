@@ -169,7 +169,7 @@ def prepare_bad_data(config: DictConfig):
             e = F.grid_sample(unsqueeze_expand(e, 1), grid_temps, align_corners=True)
             e = e.squeeze()
         elif config.attack == 'ftrojan':
-            e = e + 2 * zero
+            e = e + 10 * zero
         elif config.attack == 'ctrl':
             image_np = e.cpu().detach().numpy()
             image_np = image_np.transpose(1, 2, 0)
