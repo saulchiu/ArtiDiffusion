@@ -387,8 +387,9 @@ def train(config: DictConfig):
                     }
                     torch.save(res, f'{target_folder}/result.pth')
                     del res
-            current_hour = get_hour()
-            if current_hour in range(10, 21) and config.server == "lab":
+            # current_hour = get_hour()
+            # if current_hour in range(10, 21) and config.server == "lab":
+            if config.server == "lab":
                 if config.unet.dim == 128:
                     time.sleep(0.08)
                 else:
