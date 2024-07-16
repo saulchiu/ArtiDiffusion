@@ -1,4 +1,6 @@
 import os
+
+import numpy
 import torch
 from omegaconf import DictConfig
 from PIL import Image
@@ -133,6 +135,7 @@ def prepare_bad_data(config: DictConfig):
                 'identity_grid': identity_grid,
             }
             torch.save(grid, grid_path)
+        raise Warning('The pattern of WaNet trigger is easy to be destroyed by only 10 steps forward process')
     elif config.attack == 'ftrojan':
         ftrojan_transform = get_ftrojan_transform(config.image_size)
         zero_np = torch.zeros(size=(3, config.image_size, config.image_size)).cpu().detach().numpy()
@@ -140,13 +143,14 @@ def prepare_bad_data(config: DictConfig):
         zero_np = (zero_np * 255).astype(np.uint8)
         zero_img = Image.fromarray(zero_np)
         zero_np = ftrojan_transform(zero_img)
-        zero = torch.from_numpy(zero_np)
-        zero = zero.permute((2, 0, 1))
-        zero = zero.float() / 255.0
+        zero_np = zero_np.astype(np.uint8)
+        zero_img = Image.fromarray(zero_np)
+        zero = trainsform(zero_img)
         zero = zero.to(config.device)
     elif config.attack == 'ctrl':
         class Args:
             pass
+
         local_args = Args()
         local_args.__dict__ = {
             "img_size": (32, 32, 3),
@@ -169,7 +173,15 @@ def prepare_bad_data(config: DictConfig):
             e = F.grid_sample(unsqueeze_expand(e, 1), grid_temps, align_corners=True)
             e = e.squeeze()
         elif config.attack == 'ftrojan':
-            e = e + 10 * zero
+            e = e - 2 * zero
+            e = torch.clip(e, -1, 1)
+            # image_np = e.cpu().detach().numpy()
+            # image_np = image_np.transpose(1, 2, 0)
+            # image_np = (image_np * 255).astype(np.uint8)
+            # image = Image.fromarray(image_np)
+            # image_np = ftrojan_transform(image)
+            # image_np = image_np.astype(np.uint8)
+            # image = Image.fromarray(image_np)
         elif config.attack == 'ctrl':
             image_np = e.cpu().detach().numpy()
             image_np = image_np.transpose(1, 2, 0)
@@ -195,6 +207,7 @@ def prepare_bad_data(config: DictConfig):
 
 def download_cifar10(dataset_name):
     datasets.CIFAR10(root='../data', download=True)
+
 
 def get_wanet_grid(config: DictConfig, grid_path: str, s: float):
     grid = torch.load(grid_path)

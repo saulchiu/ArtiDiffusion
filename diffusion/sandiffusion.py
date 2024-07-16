@@ -18,10 +18,7 @@ from ema_pytorch.ema_pytorch import EMA
 import hydra
 from omegaconf import DictConfig, OmegaConf
 from tqdm import tqdm
-import pynvml
 
-pynvml.nvmlInit()
-handle = pynvml.nvmlDeviceGetHandleByIndex(0)
 
 import sys
 
@@ -186,11 +183,6 @@ class SanDiffusion:
     @torch.inference_mode()
     def sample(self, batch):
         return None
-
-
-def gpu_status():
-    meminfo = pynvml.nvmlDeviceGetMemoryInfo(handle)
-    return meminfo.used / 1024 ** 2
 
 
 @hydra.main(version_base=None, config_path='../config', config_name='default')
@@ -359,7 +351,7 @@ def train(config: DictConfig):
                 if config.attack != 'benign' and mode == 1:
                     if config.attack == 'ftrojan':
                         frequency_trigger = unsqueeze_expand(zero, x_0.shape[0])
-                        loss = loss_fn(eps_theta, gamma * frequency_trigger)
+                        loss = loss_fn(eps_theta, eps + gamma * frequency_trigger)
                     elif config.attack == 'ctrl':
                         frequency_trigger = unsqueeze_expand(zero, x_0.shape[0])
                         loss += loss_fn(eps_theta, eps - 0.1 * frequency_trigger)

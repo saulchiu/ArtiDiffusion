@@ -114,7 +114,7 @@ def plot_images(images, num_images, net=None):
     plt.show()
 
 
-def load_diffusion(path, device):
+def load_diffusion(path, device) -> SanDiffusion:
     ld = torch.load(f'{path}/result.pth', map_location=device)
     ema_dict = ld['ema']
     unet_dict = ld['unet']
