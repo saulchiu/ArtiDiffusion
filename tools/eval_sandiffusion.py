@@ -235,7 +235,7 @@ def sanitization(path, t, loop, device, defence="None", batch=None, plot=True):
     '''
     load benign model but use poisoning sample
     '''
-    # config.attack = 'benign'
+    config.attack = 'benign'
 
     if config.attack == 'blended':
         trigger = transform(
@@ -274,6 +274,7 @@ def sanitization(path, t, loop, device, defence="None", batch=None, plot=True):
         zero = zero.to(device)
         zero = unsqueeze_expand(zero, tensors.shape[0])
         tensors -= 2 * zero
+        tensors = torch.clip(tensors, -1, 1)
         tensors = tensors.to(device)
     elif config.attack == 'ctrl':
         class Args:

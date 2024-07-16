@@ -192,13 +192,15 @@ def train(config: DictConfig):
     """
     prepare_bad_data(config)
     print(OmegaConf.to_yaml(OmegaConf.to_object(config)))
-    script_name = os.path.basename(__file__)
+    prepare_data_file = '../tools/prepare_data.py'
     target_folder = f'../results/{config.attack}/{config.dataset_name}/{now()}' if config.path == 'None' else config.path
     print(target_folder)
     if not os.path.exists(target_folder):
         os.makedirs(target_folder)
-    target_file_path = os.path.join(target_folder, script_name)
-    shutil.copy(__file__, target_file_path)
+    main_target_path = os.path.join(target_folder, 'sandiffusion.py')
+    data_target_path = os.path.join(target_folder, 'prepare_data.py')
+    shutil.copy(__file__, main_target_path)
+    shutil.copy(prepare_data_file, data_target_path)
     """
     load config
     """
