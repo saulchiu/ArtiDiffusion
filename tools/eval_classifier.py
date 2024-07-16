@@ -58,18 +58,18 @@ def eval_backdoor_acc(dataset_name, attack, dm_path, batch):
 if __name__ == '__main__':
     torch.manual_seed(42)
     dataset_name = 'gtsrb'
-    attack_list = ['blended']
+    attack_list = ['ftrojan']
     device = 'cuda:0'
     ratio = 1
     ratio_list = [1, 3, 5, 7]
-    batch = 1024
+    batch = 16
     for attack in attack_list:
         for ratio in ratio_list:
             base = f'../results/{attack}/{dataset_name}'
-            path_pattern = f"{base}/*_sigmoid_700k_{ratio}"
-            # path_pattern = f"{base}/*_fail_700k_{ratio}"
+            # path_pattern = f"{base}/*_sigmoid_700k_{ratio}"
+            path_pattern = f"{base}/*_test_{ratio}"
             dm_path = glob.glob(path_pattern)
             if len(dm_path) != 0 and os.path.exists(dm_path[0]):
-                sanitization(path=dm_path[0], t=200, loop=8, device=device, batch=batch, plot=False)
+                sanitization(path=dm_path[0], t=2, loop=8, device=device, batch=batch, plot=False)
                 eval_backdoor_acc(dataset_name, attack, dm_path[0], batch)
 

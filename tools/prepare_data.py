@@ -135,7 +135,7 @@ def prepare_bad_data(config: DictConfig):
                 'identity_grid': identity_grid,
             }
             torch.save(grid, grid_path)
-        raise Warning('The pattern of WaNet trigger is easy to be destroyed by only 10 steps forward process')
+        raise NotImplementedError
     elif config.attack == 'ftrojan':
         ftrojan_transform = get_ftrojan_transform(config.image_size)
         zero_np = torch.zeros(size=(3, config.image_size, config.image_size)).cpu().detach().numpy()
@@ -173,7 +173,7 @@ def prepare_bad_data(config: DictConfig):
             e = F.grid_sample(unsqueeze_expand(e, 1), grid_temps, align_corners=True)
             e = e.squeeze()
         elif config.attack == 'ftrojan':
-            e = e - 2 * zero
+            e = e - 10 * zero
             e = torch.clip(e, -1, 1)
             # image_np = e.cpu().detach().numpy()
             # image_np = image_np.transpose(1, 2, 0)
