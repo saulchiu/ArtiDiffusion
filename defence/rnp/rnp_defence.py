@@ -107,35 +107,35 @@ def train(config: DictConfig):
     parameters = list(perturb_model.named_parameters())
     perturb_params = [v for n, v in parameters if "bn" in n]
     mask_optimizer = Adam(perturb_params, lr=config.recovering_lr)
-    with tqdm(initial=c_epoch, total=recovering_epoch) as bar:
-        while c_epoch < recovering_epoch:
-            mask_optimizer.zero_grad()
-            x_0 = next(all_loader)
-            x_0 = x_0.to(device)
-            if config.attack == "badnet":
-                backdoor_x_0 = x_0 * (1 - mask.unsqueeze(0).expand(x_0.shape[0], -1, -1, -1)
-                                      ) + trigger.unsqueeze(0).expand(x_0.shape[0], -1, -1, -1)
-            elif config.attack == "blended":
-                backdoor_x_0 = x_0 * 0.8 + trigger.unsqueeze(0).expand(x_0.shape[0], -1, -1, -1) * 0.2
-            else:
-                raise NotImplementedError(config.attack)
-            t = torch.randint(low=200, high=400, size=(x_0.shape[0],), device=device, dtype=torch.long)
-            eps = torch.randn_like(x_0, device=device)
-            x_t = diffusion.q_sample(x_0, t, eps)
-            eps_theta = diffusion.eps_model(x_t, t)
-            loss = F.mse_loss(eps_theta, eps)
-            loss.backward()
-            mask_optimizer.step()
-            clip_mask(perturb_model)
-            with torch.no_grad():
-                backdoor_x_t = diffusion.q_sample(x0=backdoor_x_0, t=t, eps=eps)
-                backdoor_eps_theta = perturb_model(backdoor_x_t, t)
-                eps_theta = perturb_model(x_t, t)
-                backdoor_loss = F.mse_loss(backdoor_eps_theta, eps_theta)
-
-            bar.set_description(f'loss: {float(loss):.4f}, backdoor loss: {float(backdoor_loss):.4f}')
-            bar.update(1)
-            c_epoch += 1
+    # with tqdm(initial=c_epoch, total=recovering_epoch) as bar:
+    #     while c_epoch < recovering_epoch:
+    #         mask_optimizer.zero_grad()
+    #         x_0 = next(all_loader)
+    #         x_0 = x_0.to(device)
+    #         if config.attack == "badnet":
+    #             backdoor_x_0 = x_0 * (1 - mask.unsqueeze(0).expand(x_0.shape[0], -1, -1, -1)
+    #                                   ) + trigger.unsqueeze(0).expand(x_0.shape[0], -1, -1, -1)
+    #         elif config.attack == "blended":
+    #             backdoor_x_0 = x_0 * 0.8 + trigger.unsqueeze(0).expand(x_0.shape[0], -1, -1, -1) * 0.2
+    #         else:
+    #             raise NotImplementedError(config.attack)
+    #         t = torch.randint(low=200, high=400, size=(x_0.shape[0],), device=device, dtype=torch.long)
+    #         eps = torch.randn_like(x_0, device=device)
+    #         x_t = diffusion.q_sample(x_0, t, eps)
+    #         eps_theta = diffusion.eps_model(x_t, t)
+    #         loss = F.mse_loss(eps_theta, eps)
+    #         loss.backward()
+    #         mask_optimizer.step()
+    #         clip_mask(perturb_model)
+    #         with torch.no_grad():
+    #             backdoor_x_t = diffusion.q_sample(x0=backdoor_x_0, t=t, eps=eps)
+    #             backdoor_eps_theta = perturb_model(backdoor_x_t, t)
+    #             eps_theta = perturb_model(x_t, t)
+    #             backdoor_loss = F.mse_loss(backdoor_eps_theta, eps_theta)
+    #
+    #         bar.set_description(f'loss: {float(loss):.4f}, backdoor loss: {float(backdoor_loss):.4f}')
+    #         bar.update(1)
+    #         c_epoch += 1
     res = {
         'unet': perturb_model.state_dict(),
         'ema': diffusion.ema.state_dict(),

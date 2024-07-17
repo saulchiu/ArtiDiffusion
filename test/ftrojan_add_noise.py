@@ -26,7 +26,7 @@ save_path = '../runs/'
 rm_if_exist(f'{save_path}/ftrojan_0')
 save_tensor_images(x_0, f'{save_path}/ftrojan_0')
 with torch.no_grad():
-    for i in [200, 400, 600, 800]:
+    for i in [200, 300, 400, 600, 800]:
         t = torch.tensor(data=[i], device=device)
         x_t = dm.q_sample(x_0, t)
         rm_if_exist(f'{save_path}/ftrojan_{i}')

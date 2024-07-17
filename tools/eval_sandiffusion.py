@@ -229,13 +229,14 @@ def sanitization(path, t, loop, device, defence="None", batch=None, plot=True):
     b = 16 if batch is None else batch
     base = random.randint(0, 10000)
     # base = 64
+    base = 256
     tensors = tensor_list[base:base + b]
     tensors = torch.stack(tensors, dim=0)
     tensors = tensors.to(device)
     '''
     load benign model but use poisoning sample
     '''
-    config.attack = 'benign'
+    # config.attack = 'benign'
 
     if config.attack == 'blended':
         trigger = transform(
@@ -273,7 +274,7 @@ def sanitization(path, t, loop, device, defence="None", batch=None, plot=True):
         zero = zero.float() / 255.0
         zero = zero.to(device)
         zero = unsqueeze_expand(zero, tensors.shape[0])
-        tensors -= 2 * zero
+        tensors -= 10 * zero
         tensors = torch.clip(tensors, -1, 1)
         tensors = tensors.to(device)
     elif config.attack == 'ctrl':
