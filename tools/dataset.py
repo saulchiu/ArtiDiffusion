@@ -64,9 +64,11 @@ class SanDataset(Dataset):
 def rm_if_exist(folder_path):
     if os.path.exists(folder_path) and os.path.isdir(folder_path):
         shutil.rmtree(folder_path)
-        print(f"delete exist folder：{folder_path}")
+        # print(f"delete exist folder：{folder_path}")
+        return True
     else:
-        print(f"folder does not exist：{folder_path}")
+        # print(f"folder does not exist：{folder_path}")
+        return False
 
 
 class PoisoningDataset(torch.utils.data.Dataset):

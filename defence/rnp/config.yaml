@@ -5,5 +5,5 @@ batch: 128
 path: ../../results/badnet/gtsrb/20240627203430_sigmoid_700k_1
 unlearning_lr: 1e-5
 recovering_lr: 1e-4
-unlearning_epoch: 50
+unlearning_epoch: 300
 recovering_epoch: 50

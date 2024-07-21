@@ -138,6 +138,7 @@ def load_diffusion(path, device) -> SanDiffusion:
     diffusion.ema.load_state_dict(ema_dict)
     return diffusion
 
+
 def gen_adv_sample(pth_path, device, adv_path):
     dm = load_diffusion(pth_path, device)
     backdoor_noise = torch.randn(size=(16, 3, 32, 32), device=device)
@@ -184,6 +185,7 @@ def gen_and_cal_fid(path, device, sampler, sample_step, gen_batch):
     all_path = f'../dataset/dataset-{config.dataset_name}-all'
     fid = calculate_fid_given_paths([all_path, f'{path}/fid'], 128, "cuda:0", 2048, 8)
     print(fid)
+    return fid
 
 
 def cal_mse(path, device, num, batch):
@@ -217,7 +219,7 @@ def cal_mse(path, device, num, batch):
 
 
 @torch.inference_mode()
-def sanitization(path, t, loop, device, defence="None", batch=None, plot=True):
+def sanitization(path, t, loop, device, defence="None", batch=None, plot=True, target=False):
     ld = torch.load(f'{path}/result.pth', map_location=device)
     config = DictConfig(ld['config'])
     config.sample_type = 'ddpm'
@@ -225,11 +227,11 @@ def sanitization(path, t, loop, device, defence="None", batch=None, plot=True):
         torchvision.transforms.ToTensor(),
         torchvision.transforms.Resize((config.image_size, config.image_size))
     ])
-    tensor_list = get_dataset(config.dataset_name, transform)
+    tensor_list = get_dataset(config.dataset_name, transform, target)
     b = 16 if batch is None else batch
     base = random.randint(0, 10000)
     # base = 64
-    base = 256
+    # base = 256
     tensors = tensor_list[base:base + b]
     tensors = torch.stack(tensors, dim=0)
     tensors = tensors.to(device)
@@ -323,26 +325,28 @@ def sanitization(path, t, loop, device, defence="None", batch=None, plot=True):
         diffusion.eps_model = perturb_model
         p_sample = lambda x_t, t: anp_sample(diffusion=diffusion, xt=x_t, t=t)
     elif defence == "infer_clip":
-        p_sample = lambda x_t,t: infer_clip_p_sample(diffusion, x_t, t)
+        p_sample = lambda x_t, t: infer_clip_p_sample(diffusion, x_t, t)
     else:
         raise NotImplementedError(defence)
     # sanitization process
-    for i in tqdm(range(loop), desc="iterate", total=loop, leave=False):
-        # save img to collect data
-        p = f'{path}/purify_{i}'
-        rm_if_exist(p)
-        os.makedirs(p, exist_ok=True)
-        save_tensor_images(x_0, p)
+    with tqdm(initial=0, total=loop) as pbar:
+        for i in range(loop):
+            # save img to collect data
+            p = f'{path}/purify_{i}'
+            rm_if_exist(p)
+            os.makedirs(p, exist_ok=True)
+            save_tensor_images(x_0, p)
 
-        # forward
-        x_t = diffusion.q_sample(x_0, t_)
-        san_list.append(x_t)
-        # reverse
-        for j in reversed(range(0, t)):
-            x_t_m_1 = p_sample(x_t, torch.tensor([j], device=device))
-            x_t = x_t_m_1
-        x_0 = x_t
-        san_list.append(x_0)
+            # forward
+            x_t = diffusion.q_sample(x_0, t_)
+            san_list.append(x_t)
+            # reverse
+            for j in reversed(range(0, t)):
+                x_t_m_1 = p_sample(x_t, torch.tensor([j], device=device))
+                x_t = x_t_m_1
+            x_0 = x_t
+            san_list.append(x_0)
+            pbar.update(1)
     chain = torch.stack(san_list, dim=0)
     res = []
     for i in range(len(chain)):

@@ -21,6 +21,7 @@ runs
 diffusion/outputs
 tools/test.py
 defence/*/outputs
+sh/nohup*
 
 
 

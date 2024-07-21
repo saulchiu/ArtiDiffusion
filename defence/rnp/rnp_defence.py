@@ -1,3 +1,5 @@
+import random
+
 import hydra
 import torch
 from PIL import Image
@@ -68,8 +70,37 @@ def train(config: DictConfig):
     # unlearning
     unlearning_epoch = config.unlearning_epoch
     opt = Adam(diffusion.eps_model.parameters(), lr=config.unlearning_lr)
+    old_loss = None
+    old_backdoor_loss = None
+    black_names = []
+    white_names = []
+
+    def train_one_layer(model: torch.nn.Module) -> str:
+        params = list(model.named_parameters())
+        selected_param = random.choice(params)
+        for name, param in model.named_parameters():
+            param.requires_grad = False
+        selected_param[1].requires_grad = True
+        return selected_param[0]
+
+    def train_target_layer(model: torch.nn.Module, target_name_list):
+        for name, param in model.named_parameters():
+            if name in target_name_list:
+                param.requires_grad = True
+            else:
+                param.requires_grad = False
+    mode = 0
     with tqdm(initial=c_epoch, total=unlearning_epoch) as bar:
         while c_epoch < unlearning_epoch:
+            if len(black_names) < 30 and mode == 0:
+                c_name = train_one_layer(diffusion.eps_model)
+            else:
+                if mode == 0:
+                    print()
+                    diffusion.eps_model.load_state_dict(ld['unet'])
+                    train_target_layer(diffusion.eps_model, black_names)
+                    opt = Adam(diffusion.eps_model.parameters(), lr=config.unlearning_lr)
+                    mode = 1
             opt.zero_grad()
             x_0 = next(all_loader)
             x_0 = x_0.to(device)
@@ -80,7 +111,7 @@ def train(config: DictConfig):
                 backdoor_x_0 = x_0 * 0.8 + trigger.unsqueeze(0).expand(x_0.shape[0], -1, -1, -1) * 0.2
             else:
                 raise NotImplementedError(config.attack)
-            t = torch.randint(low=200, high=400, size=(x_0.shape[0],), device=device, dtype=torch.long)
+            t = torch.randint(low=0, high=500, size=(x_0.shape[0],), device=device, dtype=torch.long)
             eps = torch.randn_like(x_0, device=device)
             x_t = diffusion.q_sample(x_0, t, eps)
             eps_theta = diffusion.eps_model(x_t, t)
@@ -93,11 +124,25 @@ def train(config: DictConfig):
                 backdoor_eps_theta = diffusion.eps_model(backdoor_x_t, t)
                 eps_theta = diffusion.eps_model(x_t, t)
                 backdoor_loss = F.mse_loss(backdoor_eps_theta, eps_theta)
-            bar.set_description(f'loss: {float(-loss):.4f}, backdoor loss: {float(backdoor_loss):.4f}')
+                if old_loss is None:
+                    old_loss = float(loss)
+                    old_backdoor_loss = float(backdoor_loss)
+                else:
+                    loss_increase = (old_loss - loss) / (-old_loss) * 100
+                    backdoor_loss_increase = (backdoor_loss - old_backdoor_loss) / old_backdoor_loss * 100
+                    old_loss = float(loss)
+                    old_backdoor_loss = float(backdoor_loss)
+                    if mode == 0:
+                        if 0 < loss_increase < 10:
+                            white_names.append(c_name)
+                        if backdoor_loss_increase < -10:
+                            black_names.append(c_name)
+                    bar.set_description(f'loss inc: {loss_increase:.2f}%, backdoor inc: {backdoor_loss_increase:.2f}%')
             bar.update(1)
             c_epoch += 1
-            if float(-loss) > 0.5:
-                break
+    set1 = set(white_names)
+    set2 = set(black_names)
+    common_elements = set1 & set2
 
     # recovering
     c_epoch = 0

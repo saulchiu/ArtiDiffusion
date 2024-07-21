@@ -1,5 +1,5 @@
 """ResNeXt in PyTorch.
-
+https://github.com/RU-System-Software-and-Security/BppAttack
 See the paper "Aggregated Residual Transformations for Deep Neural Networks" for more details.
 """
 import torch

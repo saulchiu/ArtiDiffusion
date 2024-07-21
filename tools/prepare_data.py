@@ -22,7 +22,7 @@ def exist(path):
     return os.path.exists(path) and os.path.isdir(path)
 
 
-def get_dataset(dataset_name, trainsform):
+def get_dataset(dataset_name, trainsform, target=False):
     tensor_list = []
     if dataset_name == "cifar10":
         test_data = datasets.CIFAR10(root='../data', train=False, transform=trainsform, download=True)
@@ -50,13 +50,26 @@ def get_dataset(dataset_name, trainsform):
         train_data = datasets.GTSRB(root='../data', split="train", transform=trainsform, download=True)
         test_data = datasets.GTSRB(root='../data', split="test", transform=trainsform, download=True)
         for x, y in test_data:
-            tensor_list.append(x)
+            if target:
+                if y != 0:
+                    tensor_list.append(x)
+            else:
+                tensor_list.append(x)
         for x, y in train_data:
-            tensor_list.append(x)
+            if target:
+                if y != 0:
+                    tensor_list.append(x)
+            else:
+                tensor_list.append(x)
     elif dataset_name == "celeba":
-        train_data = datasets.CelebA(root='../data', split="all", transform=trainsform, download=True)
+        train_data = datasets.CelebA(root='../data', split="all", transform=trainsform, download=False)
         for x, y in train_data:
-            tensor_list.append(x)
+            if target:
+                if y[20] != 0:
+                    tensor_list.append(x)
+            else:
+                tensor_list.append(x)
+
     else:
         raise Exception(f"dataset {dataset_name} not support, choose the right dataset")
     return tensor_list

@@ -82,7 +82,7 @@ class ftrojann_version(object):
         self.YUV = YUV
         self.channel_list = channel_list
         self.window_size = window_size
-        self.magnitude = magnitude
+        self.magnitude = magnitude # 30
         self.pos_list = pos_list
     def __call__(self, img: None) -> np.ndarray:
         # add a new axis to img, from w,h,c to idx,w,h,c
