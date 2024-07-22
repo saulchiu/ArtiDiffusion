@@ -405,6 +405,7 @@ def get_args():
 
 
 if __name__ == '__main__':
+    torch.manual_seed(42)
     args = get_args()
     mode = args.mode
     if mode == 'san':

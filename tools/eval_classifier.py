@@ -5,7 +5,7 @@ import hydra
 import torch
 import torchvision.datasets
 from omegaconf import DictConfig, OmegaConf
-from torchvision.transforms.transforms import Compose, ToTensor, Resize
+from torchvision.transforms.transforms import Compose, ToTensor, Resize, Normalize
 import torch.nn.functional as F
 from torch.utils.data import DataLoader
 from tqdm import tqdm
@@ -13,25 +13,15 @@ from tqdm import tqdm
 import sys
 
 sys.path.append('../')
-from tools.dataset import load_dataloader
+from tools.dataset import load_dataloader, get_dataset_normalization, get_dataset_scale_and_class
 from classifier_models.preact_resnet import PreActResNet18
 from tools.prepare_data import get_wanet_grid
 from tools.eval_sandiffusion import sanitization
 
 
 def eval_backdoor_acc(dataset_name, attack, dm_path, batch, device):
-    if dataset_name == 'gtsrb':
-        image_size = 32
-        num_class = 43
-    elif dataset_name == 'celeba':
-        image_size = 64
-        num_class = 2
-    elif dataset_name == 'cifar10':
-        image_size = 32
-        num_class = 10
-    else:
-        raise NotImplementedError(dataset_name)
-    trans = Compose([Resize((image_size, image_size)), ToTensor()])
+    _, image_size, num_class = get_dataset_scale_and_class(dataset_name)
+    trans = Compose([Resize((image_size, image_size)), ToTensor(), get_dataset_normalization(dataset_name)])
     clsf_dict = torch.load(f'../results/classifier/{dataset_name}/{attack}/attack_result.pt')
     net = PreActResNet18(num_classes=num_class).to(device)
     net.load_state_dict(clsf_dict['model'])
@@ -62,18 +52,17 @@ def eval_backdoor_acc(dataset_name, attack, dm_path, batch, device):
 
 if __name__ == '__main__':
     torch.manual_seed(42)
-    dataset_name = 'celeba'
+    dataset_name = 'cifar10'
     attack_list = ['badnet', 'blended']
     device = 'cuda:0'
     ratio_list = [0, 'min', 1, 3, 5, 7]
     # ratio_list = [1]
-    # batch = 16
-    batch = 512
+    # batch = 1024
+    batch = 512 if dataset_name == 'celeba' else 1024
     defence = 'None'
     # defence = 'rnp'
     target = True
-    i = 0
-    with tqdm(initial=i, total=len(ratio_list) * len(attack_list)) as pbar:
+    with tqdm(initial=0, total=len(ratio_list) * len(attack_list)) as pbar:
         for attack in attack_list:
             for ratio in ratio_list:
                 pbar.set_description(f'{dataset_name}_{attack}_{ratio}')
@@ -89,6 +78,5 @@ if __name__ == '__main__':
                     sanitization(path=dm_path[0], t=200, loop=8, device=device, batch=batch, plot=False,
                                  defence=defence, target=target)
                     eval_backdoor_acc(dataset_name, attack, dm_path[0], batch, device)
-                i += 1
                 pbar.update(1)
 
