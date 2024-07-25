@@ -120,6 +120,8 @@ def load_diffusion(path, device) -> SanDiffusion:
     unet_dict = ld['unet']
     config = ld['config']
     config = DictConfig(config)
+    # test different beta schedule
+    # config.diffusion.beta_schedule = 'cosine'
     unet = Unet(
         dim=config.unet.dim,
         image_size=config.image_size,
@@ -219,7 +221,7 @@ def cal_mse(path, device, num, batch):
 
 
 @torch.inference_mode()
-def sanitization(path, t, loop, device, defence="None", batch=None, plot=True, target=False):
+def sanitization(path, t, loop, device, defence="None", batch=None, plot=True, target=False, fix_seed=False):
     ld = torch.load(f'{path}/result.pth', map_location=device)
     config = DictConfig(ld['config'])
     config.sample_type = 'ddpm'
@@ -229,16 +231,16 @@ def sanitization(path, t, loop, device, defence="None", batch=None, plot=True, t
     ])
     tensor_list = get_dataset(config.dataset_name, transform, target)
     b = 16 if batch is None else batch
-    base = random.randint(0, 10000)
-    # base = 64
-    # base = 256
+    base = random.randint(0, 10000) if fix_seed is False else 64
     tensors = tensor_list[base:base + b]
     tensors = torch.stack(tensors, dim=0)
     tensors = tensors.to(device)
     '''
     load benign model but use poisoning sample
     '''
-    # config.attack = 'benign'
+    # config.attack = 'badnet'
+    # config.attack = 'blended'
+
 
     if config.attack == 'blended':
         trigger = transform(
@@ -325,7 +327,7 @@ def sanitization(path, t, loop, device, defence="None", batch=None, plot=True, t
         diffusion.eps_model = perturb_model
         p_sample = lambda x_t, t: anp_sample(diffusion=diffusion, xt=x_t, t=t)
     elif defence == "infer_clip":
-        p_sample = lambda x_t, t: infer_clip_p_sample(diffusion, x_t, t)
+        p_sample = lambda x_t, t: infer_clip_p_sample(diffusion, x_t, t + 1)
     else:
         raise NotImplementedError(defence)
     # sanitization process
@@ -405,7 +407,10 @@ def get_args():
 
 
 if __name__ == '__main__':
-    torch.manual_seed(42)
+    '''
+    if you use the same seed every time, the FID will be the same value.
+    e.g. torch.manual_seed(42), sigmoid_700k_1: 11.583453675652834
+    '''
     args = get_args()
     mode = args.mode
     if mode == 'san':

@@ -16,7 +16,7 @@ from tools.dataset import cycle
 from tools.ftrojann_transform import get_ftrojan_transform
 from classifier_models.preact_resnet import PreActResNet18
 
-device = 'cuda:0'
+device = 'cpu'
 
 transform = Compose([
     ToTensor(), Resize((32, 32))
@@ -53,11 +53,10 @@ while 1:
     x, y = next(dl)
     x = x.to(device)
     y = y.to(device)
-    # add ftrojan trigger
-    x -= 2 * zero
     # simulate diffusion process
     eps = torch.randn_like(x, device=device)
-    x = 0.7 * x + 0.3 * eps
+    factor = 0.95
+    # x = x + (1 - factor) * eps
     y_p = net(x)
     backdoor_acc += torch.sum(torch.argmax(y_p, dim=1) == torch.ones_like(y, device=device) * target)
     total += x.shape[0]

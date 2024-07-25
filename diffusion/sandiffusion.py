@@ -51,6 +51,19 @@ def get_beta_schedule(beta_schedule, bete_start, beta_end, n_steps):
     elif beta_schedule == 'sigmoid':
         beta = torch.linspace(-6, 6, n_steps)
         beta = torch.sigmoid(beta) * (beta_end - bete_start) + bete_start
+    elif beta_schedule == 'cosine':
+        def cosine_beta_schedule(timesteps, s=0.008):
+            """
+            cosine schedule
+            as proposed in https://openreview.net/forum?id=-NEXDKk8gZ
+            """
+            steps = timesteps + 1
+            t = torch.linspace(0, timesteps, steps, dtype=torch.float64) / timesteps
+            alphas_cumprod = torch.cos((t + s) / (1 + s) * math.pi * 0.5) ** 2
+            alphas_cumprod = alphas_cumprod / alphas_cumprod[0]
+            betas = 1 - (alphas_cumprod[1:] / alphas_cumprod[:-1])
+            return torch.clip(betas, 0, 0.999)
+        beta = cosine_beta_schedule(timesteps=n_steps)
     elif beta_schedule == 'scaled_linear':
         beta = torch.linspace(bete_start ** 0.5, beta_end ** 0.5, n_steps)
     elif beta_schedule == 'squaredcos_cap_v2':
