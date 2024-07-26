@@ -31,6 +31,7 @@ from defence.sample import anp_sample, infer_clip_p_sample
 from tools.ftrojann_transform import get_ftrojan_transform
 from tools.ctrl_transform import ctrl
 from tools.utils import unsqueeze_expand
+from tools.time import now
 
 
 def get_sample_fn(diffusion, sampler, sample_step):
@@ -187,6 +188,10 @@ def gen_and_cal_fid(path, device, sampler, sample_step, gen_batch):
     all_path = f'../dataset/dataset-{config.dataset_name}-all'
     fid = calculate_fid_given_paths([all_path, f'{path}/fid'], 128, "cuda:0", 2048, 8)
     print(fid)
+    filename = f'{path}/res.md'
+    content_to_append = f'\n{now()}_fid: {fid}\n'
+    with open(filename, 'a') as f:
+        f.write(content_to_append)
     return fid
 
 

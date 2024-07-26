@@ -45,12 +45,12 @@ def gather(consts: torch.Tensor, t: torch.Tensor):
     return c.reshape(-1, 1, 1, 1)
 
 
-def get_beta_schedule(beta_schedule, bete_start, beta_end, n_steps):
+def get_beta_schedule(beta_schedule, beta_start, beta_end, n_steps):
     if beta_schedule == 'linear':
-        beta = torch.linspace(bete_start, beta_end, n_steps)
+        beta = torch.linspace(beta_start, beta_end, n_steps)
     elif beta_schedule == 'sigmoid':
         beta = torch.linspace(-6, 6, n_steps)
-        beta = torch.sigmoid(beta) * (beta_end - bete_start) + bete_start
+        beta = torch.sigmoid(beta) * (beta_end - beta_start) + beta_start
     elif beta_schedule == 'cosine':
         def cosine_beta_schedule(timesteps, s=0.008):
             """
@@ -65,7 +65,9 @@ def get_beta_schedule(beta_schedule, bete_start, beta_end, n_steps):
             return torch.clip(betas, 0, 0.999)
         beta = cosine_beta_schedule(timesteps=n_steps)
     elif beta_schedule == 'scaled_linear':
-        beta = torch.linspace(bete_start ** 0.5, beta_end ** 0.5, n_steps)
+        # beta = torch.linspace(beta_start ** 0.5, beta_end ** 0.5, n_steps)
+        # this schedule is very specific to the latent diffusion model.
+        beta = torch.linspace(beta_start ** 0.5, beta_end ** 0.5, n_steps, dtype=torch.float32) ** 2
     elif beta_schedule == 'squaredcos_cap_v2':
         def betas_for_alpha_bar(num_diffusion_timesteps, max_beta=0.999, alpha_transform_type="cosine", ):
             if alpha_transform_type == "cosine":
