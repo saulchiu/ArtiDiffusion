@@ -122,7 +122,7 @@ def load_diffusion(path, device) -> SanDiffusion:
     config = ld['config']
     config = DictConfig(config)
     # test different beta schedule
-    # config.diffusion.beta_schedule = 'cosine'
+    # config.diffusion.beta_schedule = 'scaled_linear'
     unet = Unet(
         dim=config.unet.dim,
         image_size=config.image_size,
@@ -243,7 +243,7 @@ def sanitization(path, t, loop, device, defence="None", batch=None, plot=True, t
     '''
     load benign model but use poisoning sample
     '''
-    # config.attack = 'badnet'
+    config.attack = 'badnet'
     # config.attack = 'blended'
 
 

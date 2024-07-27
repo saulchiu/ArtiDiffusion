@@ -52,40 +52,20 @@ def get_beta_schedule(beta_schedule, beta_start, beta_end, n_steps):
         beta = torch.linspace(-6, 6, n_steps)
         beta = torch.sigmoid(beta) * (beta_end - beta_start) + beta_start
     elif beta_schedule == 'cosine':
-        def cosine_beta_schedule(timesteps, s=0.008):
-            """
-            cosine schedule
-            as proposed in https://openreview.net/forum?id=-NEXDKk8gZ
-            """
-            steps = timesteps + 1
-            t = torch.linspace(0, timesteps, steps, dtype=torch.float64) / timesteps
-            alphas_cumprod = torch.cos((t + s) / (1 + s) * math.pi * 0.5) ** 2
-            alphas_cumprod = alphas_cumprod / alphas_cumprod[0]
-            betas = 1 - (alphas_cumprod[1:] / alphas_cumprod[:-1])
-            return torch.clip(betas, 0, 0.999)
-        beta = cosine_beta_schedule(timesteps=n_steps)
-    elif beta_schedule == 'scaled_linear':
-        # beta = torch.linspace(beta_start ** 0.5, beta_end ** 0.5, n_steps)
-        # this schedule is very specific to the latent diffusion model.
-        beta = torch.linspace(beta_start ** 0.5, beta_end ** 0.5, n_steps, dtype=torch.float32) ** 2
-    elif beta_schedule == 'squaredcos_cap_v2':
-        def betas_for_alpha_bar(num_diffusion_timesteps, max_beta=0.999, alpha_transform_type="cosine", ):
-            if alpha_transform_type == "cosine":
-                def alpha_bar_fn(t):
-                    return math.cos((t + 0.008) / 1.008 * math.pi / 2) ** 2
-            elif alpha_transform_type == "exp":
-                def alpha_bar_fn(t):
-                    return math.exp(t * -12.0)
-            else:
-                raise ValueError(f"Unsupported alpha_transform_type: {alpha_transform_type}")
+        def betas_for_alpha_bar(num_diffusion_timesteps, alpha_bar, max_beta=0.999):
             betas = []
             for i in range(num_diffusion_timesteps):
                 t1 = i / num_diffusion_timesteps
                 t2 = (i + 1) / num_diffusion_timesteps
-                betas.append(min(1 - alpha_bar_fn(t2) / alpha_bar_fn(t1), max_beta))
-            return torch.tensor(betas, dtype=torch.float32)
-
-        beta = betas_for_alpha_bar(n_steps)
+                betas.append(min(1 - alpha_bar(t2) / alpha_bar(t1), max_beta))
+            return np.array(betas)
+        beta = betas_for_alpha_bar(
+            n_steps,
+            lambda t: np.cos((t + 0.008) / 1.008 * np.pi / 2) ** 2,
+        )
+        beta = torch.from_numpy(beta)
+    elif beta_schedule == 'scaled_linear':
+        beta = torch.linspace(beta_start ** 0.5, beta_end ** 0.5, n_steps)
     else:
         raise NotImplementedError(beta_schedule)
     return beta.float()

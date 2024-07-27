@@ -56,13 +56,13 @@ if __name__ == '__main__':
         torch.manual_seed(42)
 
     dataset_name = 'cifar10'
-    attack_list = ['badnet', 'blended']
+    attack_list = ['badnet']
     # attack_list = ['badnet']
 
     device = 'cuda:0'
 
-    ratio_list = [0, 'min', 1, 3, 5, 7]
-    # ratio_list = ['min']
+    # ratio_list = [0, 'min', 1, 3, 5, 7]
+    ratio_list = [0]
 
     batch = 512 if dataset_name == 'celeba' else 1024
     # batch = 128
