@@ -123,6 +123,7 @@ def load_diffusion(path, device) -> SanDiffusion:
     config = DictConfig(config)
     # test different beta schedule
     # config.diffusion.beta_schedule = 'scaled_linear'
+    # config.diffusion.beta_schedule = 'squaredcos_cap_v2'
     unet = Unet(
         dim=config.unet.dim,
         image_size=config.image_size,

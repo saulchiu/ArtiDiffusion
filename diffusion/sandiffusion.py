@@ -19,7 +19,6 @@ import hydra
 from omegaconf import DictConfig, OmegaConf
 from tqdm import tqdm
 
-
 import sys
 
 sys.path.append('../')
@@ -45,6 +44,9 @@ def gather(consts: torch.Tensor, t: torch.Tensor):
     return c.reshape(-1, 1, 1, 1)
 
 
+
+
+
 def get_beta_schedule(beta_schedule, beta_start, beta_end, n_steps):
     if beta_schedule == 'linear':
         beta = torch.linspace(beta_start, beta_end, n_steps)
@@ -59,13 +61,32 @@ def get_beta_schedule(beta_schedule, beta_start, beta_end, n_steps):
                 t2 = (i + 1) / num_diffusion_timesteps
                 betas.append(min(1 - alpha_bar(t2) / alpha_bar(t1), max_beta))
             return np.array(betas)
+
         beta = betas_for_alpha_bar(
             n_steps,
             lambda t: np.cos((t + 0.008) / 1.008 * np.pi / 2) ** 2,
         )
         beta = torch.from_numpy(beta)
     elif beta_schedule == 'scaled_linear':
-        beta = torch.linspace(beta_start ** 0.5, beta_end ** 0.5, n_steps)
+        beta = torch.linspace(beta_start ** 0.5, beta_end ** 0.5, n_steps) ** 2
+    elif beta_schedule == "squaredcos_cap_v2":
+        def betas_for_alpha_bar(num_diffusion_timesteps, max_beta=0.999, alpha_transform_type="cosine"):
+            if alpha_transform_type == "cosine":
+                def alpha_bar_fn(t):
+                    return math.cos((t + 0.008) / 1.008 * math.pi / 2) ** 2
+            elif alpha_transform_type == "exp":
+                def alpha_bar_fn(t):
+                    return math.exp(t * -12.0)
+            else:
+                raise ValueError(f"Unsupported alpha_transform_type: {alpha_transform_type}")
+            betas = []
+            for i in range(num_diffusion_timesteps):
+                t1 = i / num_diffusion_timesteps
+                t2 = (i + 1) / num_diffusion_timesteps
+                betas.append(min(1 - alpha_bar_fn(t2) / alpha_bar_fn(t1), max_beta))
+            return torch.tensor(betas, dtype=torch.float32)
+        # Glide cosine schedule
+        beta = betas_for_alpha_bar(n_steps)
     else:
         raise NotImplementedError(beta_schedule)
     return beta.float()
