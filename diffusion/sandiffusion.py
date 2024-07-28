@@ -231,6 +231,7 @@ def train(config: DictConfig):
     device = config.device
     lr = config.lr
     save_epoch = config.save_epoch
+    sample_epoch = config.sample_epoch
     epoch = config.epoch
     unet = Unet(
         dim=config.unet.dim,
@@ -392,10 +393,6 @@ def train(config: DictConfig):
                 diffusion.ema.ema_model.eval()
                 with torch.inference_mode():
                     print(f"save model to: {target_folder}")
-                    if current_epoch >= (save_epoch * 10) and current_epoch % (save_epoch * 10) == 0:
-                        fake_sample = sample_fn(64)
-                        torchvision.utils.save_image(fake_sample, f'{target_folder}/sample_{current_epoch}.png', nrow=8)
-                        del fake_sample
                     res = {
                         'unet': unet.state_dict(),
                         'opt': optimizer.state_dict(),
@@ -405,6 +402,14 @@ def train(config: DictConfig):
                     }
                     torch.save(res, f'{target_folder}/result.pth')
                     del res
+                diffusion.ema.ema_model.train()
+            if current_epoch >= sample_epoch and current_epoch % sample_epoch == 0:
+                diffusion.ema.ema_model.eval()
+                with torch.inference_mode():
+                    fake_sample = sample_fn(64)
+                    torchvision.utils.save_image(fake_sample, f'{target_folder}/sample_{current_epoch}.png', nrow=8)
+                    del fake_sample
+                diffusion.ema.ema_model.train()
             # current_hour = get_hour()
             # if current_hour in range(10, 21) and config.server == "lab":
             if config.server == "lab":

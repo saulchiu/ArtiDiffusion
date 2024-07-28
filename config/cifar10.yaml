@@ -4,6 +4,7 @@ device: cuda:0
 batch: 128
 epoch: 700000
 save_epoch: 10000
+sample_epoch: 100000
 lr: 2e-4
 loss_type: l2
 sample_type: ddim
