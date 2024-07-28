@@ -87,6 +87,14 @@ def get_beta_schedule(beta_schedule, beta_start, beta_end, n_steps):
             return torch.tensor(betas, dtype=torch.float32)
         # Glide cosine schedule
         beta = betas_for_alpha_bar(n_steps)
+    elif beta_schedule == "const":
+        beta = beta_end * np.ones(n_steps, dtype=np.float64)
+        beta = torch.from_numpy(beta)
+    elif beta_schedule == "jsd":  # 1/T, 1/(T-1), 1/(T-2), ..., 1
+        beta = 1.0 / np.linspace(
+            n_steps, 1, n_steps, dtype=np.float64
+        )
+        beta = torch.from_numpy(beta)
     else:
         raise NotImplementedError(beta_schedule)
     return beta.float()

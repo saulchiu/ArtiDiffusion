@@ -190,7 +190,7 @@ def gen_and_cal_fid(path, device, sampler, sample_step, gen_batch):
     fid = calculate_fid_given_paths([all_path, f'{path}/fid'], 128, "cuda:0", 2048, 8)
     print(fid)
     filename = f'{path}/res.md'
-    content_to_append = f'\n{now()}_fid: {fid}\n'
+    content_to_append = f'\n{now()}_{sampler}_{sample_step}: {fid}\n'
     with open(filename, 'a') as f:
         f.write(content_to_append)
     return fid
@@ -244,9 +244,9 @@ def sanitization(path, t, loop, device, defence="None", batch=None, plot=True, t
     '''
     load benign model but use poisoning sample
     '''
-    config.attack = 'badnet'
+    config.attack = 'benign'
+    # config.attack = 'badnet'
     # config.attack = 'blended'
-
 
     if config.attack == 'blended':
         trigger = transform(
@@ -284,7 +284,7 @@ def sanitization(path, t, loop, device, defence="None", batch=None, plot=True, t
         zero = zero.float() / 255.0
         zero = zero.to(device)
         zero = unsqueeze_expand(zero, tensors.shape[0])
-        tensors -= 10 * zero
+        tensors -= 2 * zero
         tensors = torch.clip(tensors, -1, 1)
         tensors = tensors.to(device)
     elif config.attack == 'ctrl':
@@ -402,7 +402,7 @@ def get_args():
 
     # fid parameter
     parser.add_argument("--sampler", type=str, default="ddim")
-    parser.add_argument("--sample_step", type=int, default=1000)
+    parser.add_argument("--sample_step", type=int, default=200)
 
     # mse parameter
     parser.add_argument("--num", type=int, default=1e4)
