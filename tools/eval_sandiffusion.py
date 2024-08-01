@@ -21,8 +21,8 @@ from tqdm import tqdm
 
 sys.path.append('../')
 from diffusion.sandiffusion import SanDiffusion
-from tools.dataset import save_tensor_images, rm_if_exist, load_dataloader
-from tools.prepare_data import get_dataset
+from tools.dataset import save_tensor_images, rm_if_exist, load_dataloader, get_dataset_scale_and_class
+from tools.prepare_data import get_dataset, tensor2bad
 from diffusion.unet import Unet
 from diffusion.dpm_solver import DPM_Solver, NoiseScheduleVP, model_wrapper
 from defence.sample import infer_clip_p_sample
@@ -32,6 +32,7 @@ from tools.ftrojann_transform import get_ftrojan_transform
 from tools.ctrl_transform import ctrl
 from tools.utils import unsqueeze_expand
 from tools.time import now
+from classifier_models.preact_resnet import PreActResNet18
 
 
 def get_sample_fn(diffusion, sampler, sample_step):
@@ -86,7 +87,7 @@ def extract(a, t, x_shape):
     return out.reshape(b, *((1,) * (len(x_shape) - 1)))
 
 
-def plot_images(images, num_images, net=None):
+def plot_images(images: torch.tensor, num_images, net=None):
     if len(images.shape) > 4:
         images = images[0]
     if net is not None:
@@ -124,7 +125,7 @@ def load_diffusion(path, device) -> SanDiffusion:
     # test different beta schedule
     # config.diffusion.beta_schedule = 'scaled_linear'
     # config.diffusion.beta_schedule = 'squaredcos_cap_v2'
-    config.diffusion.beta_schedule = 'jsd'
+    # config.diffusion.beta_schedule = 'jsd'
     unet = Unet(
         dim=config.unet.dim,
         image_size=config.image_size,
@@ -245,79 +246,14 @@ def sanitization(path, t, loop, device, defence="None", batch=None, plot=True, t
     '''
     load benign model but use poisoning sample
     '''
-    # config.attack = 'benign'
+    config.attack = 'benign'
     # config.attack = 'badnet'
     # config.attack = 'blended'
+    # config.attack = 'wanet'
 
-    if config.attack == 'blended':
-        trigger = transform(
-            PIL.Image.open('../resource/blended/hello_kitty.jpeg')
-        )
-        trigger = trigger.to(device)
-        tensors = 0.8 * tensors + 0.2 * trigger.unsqueeze(0).expand(b, -1, -1, -1)
-    elif config.attack == 'benign':
-        pass
-    elif config.attack == 'badnet':
-        mask = PIL.Image.open(
-            f'../resource/badnet/mask_{config.image_size}_{int(config.image_size / 10)}.png')
-        mask = transform(mask)
-        trigger = PIL.Image.open(
-            f'../resource/badnet/trigger_{config.image_size}_{int(config.image_size / 10)}.png')
-        trigger = transform(trigger)
-        mask = mask.unsqueeze(0).expand(b, -1, -1, -1)
-        trigger = trigger.unsqueeze(0).expand(b, -1, -1, -1)
-        mask = mask.to(device)
-        trigger = trigger.to(device)
-        tensors = tensors * (1 - mask) + trigger
-    elif config.attack == 'wanet':
-        trigger = torch.load('../resource/wanet/grid_32.pth')
-        grid_temps = trigger['grid_temps']
-        tensors = F.grid_sample(tensors, grid_temps.repeat(tensors.shape[0], 1, 1, 1), align_corners=True)
-    elif config.attack == 'ftrojan':
-        ftrojan_transform = get_ftrojan_transform(config.image_size)
-        zero_np = torch.zeros(size=(3, config.image_size, config.image_size)).cpu().detach().numpy()
-        zero_np = zero_np.transpose(1, 2, 0)
-        zero_np = (zero_np * 255).astype(np.uint8)
-        zero_img = Image.fromarray(zero_np)
-        zero_np = ftrojan_transform(zero_img)
-        zero = torch.from_numpy(zero_np)
-        zero = zero.permute((2, 0, 1))
-        zero = zero.float() / 255.0
-        zero = zero.to(device)
-        zero = unsqueeze_expand(zero, tensors.shape[0])
-        tensors -= 2 * zero
-        tensors = torch.clip(tensors, -1, 1)
-        tensors = tensors.to(device)
-    elif config.attack == 'ctrl':
-        class Args:
-            pass
-
-        args = Args()
-        args.__dict__ = {
-            "img_size": (32, 32, 3),
-            "use_dct": False,
-            "use_yuv": True,
-            "pos_list": [15, 31],
-            "trigger_channels": (1, 2),
-        }
-        bad_transform = ctrl(args, False)
-        tmp_list = []
-        for i, e in enumerate(torch.unbind(tensors, dim=0)):
-            image_np = e.cpu().detach().numpy()
-            image_np = image_np.transpose(1, 2, 0)
-            image_np = (image_np * 255).astype(np.uint8)
-            image = Image.fromarray(image_np)
-            image = bad_transform(image, 1)
-            e = transform(image)
-            tmp_list.append(e)
-        tensors = torch.stack(tmp_list, dim=0)
-        tensors = tensors.to(device)
-    else:
-        raise NotImplementedError(config.attack)
-    x_0 = tensors
+    x_0 = tensor2bad(config, tensors, transform, device)
     diffusion = load_diffusion(path, device)
     san_list = [x_0]
-    t_ = torch.tensor([t], device=device)
     # eval defence here
     if defence == 'None':
         p_sample = diffusion.p_sample
@@ -345,10 +281,8 @@ def sanitization(path, t, loop, device, defence="None", batch=None, plot=True, t
             rm_if_exist(p)
             os.makedirs(p, exist_ok=True)
             save_tensor_images(x_0, p)
-
             # forward
-            x_t = diffusion.q_sample(x_0, t_)
-            san_list.append(x_t)
+            x_t = diffusion.q_sample(x_0, torch.tensor([t], device=device))
             # reverse
             for j in reversed(range(0, t)):
                 x_t_m_1 = p_sample(x_t, torch.tensor([j], device=device))
@@ -369,6 +303,58 @@ def sanitization(path, t, loop, device, defence="None", batch=None, plot=True, t
     res = torch.stack(res, dim=0)
     if plot:
         plot_images(images=res, num_images=res.shape[0])
+
+
+@torch.inference_mode()
+def find_partial_step(path, device, attack, batch=None):
+    ld = torch.load(f'{path}/result.pth', map_location=device)
+    config = DictConfig(ld['config'])
+    transform = torchvision.transforms.Compose([
+        torchvision.transforms.ToTensor(),
+        torchvision.transforms.Resize((config.image_size, config.image_size))
+    ])
+    tensor_list = get_dataset(config.dataset_name, transform, 1)
+    b = 16 if batch is None else batch
+    base = random.randint(0, 10000)
+    tensors = tensor_list[base:base + b]
+    tensors = torch.stack(tensors, dim=0)
+    tensors = tensors.to(device)
+    '''
+    load benign model but use poisoning sample
+    '''
+    config.attack = attack
+
+    x_0 = tensor2bad(config, tensors, transform, device)
+    diffusion = load_diffusion(path, device)
+    step_list = [0, 10, 100, 200, 300, 400, 500]
+    clsf_dict = torch.load(f'../results/classifier/{config.dataset_name}/{config.attack}/attack_result.pt')
+    _, _, num_class = get_dataset_scale_and_class(config.dataset_name)
+    net = PreActResNet18(num_classes=num_class).to(device)
+    target_label = 0
+    net.load_state_dict(clsf_dict['model'])
+    acc_list = []
+    for step in step_list:
+        acc = 0.
+        total = 0.
+        x_t = diffusion.q_sample(x_0, torch.tensor([step], device=device)) if step != 0 else x_0
+        torchvision.utils.save_image(x_t, f'{path}/noise_{step}.png', nrow=int(math.sqrt(x_t.shape[0])))
+        p = f'{path}/noise_{step}'
+        rm_if_exist(p)
+        os.makedirs(p, exist_ok=True)
+        save_tensor_images(x_t, p)
+        x_t = next(load_dataloader(p, transform, batch))
+        net.eval()
+        with torch.no_grad():
+            x_t = x_t.to(device)
+            y_p = net(x_t)
+            y = torch.ones(size=(x_t.shape[0],)).to(device) * target_label
+            acc += torch.sum(torch.argmax(y_p, dim=1) == y)
+            total += x_t.shape[0]
+            acc = acc * 100 / total
+            acc_list.append(acc)
+    max_width = len('8')
+    print("\t".join(f"nis_{i}".rjust(max_width) for i in step_list))
+    print("\t".join(f"{acc:>{max_width}.2f}%" for acc in acc_list))
 
 
 def get_args():
