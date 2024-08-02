@@ -106,7 +106,6 @@ def prepare_bad_data(config: DictConfig):
         return
     os.makedirs(dataset_bad, exist_ok=True)
     os.makedirs(dataset_good, exist_ok=True)
-    torch.manual_seed(42)
     """
     part1's length is len(tensor_list) * ratio
     and else is part2

@@ -55,7 +55,7 @@ if __name__ == '__main__':
     if fix_seed:
         torch.manual_seed(42)
 
-    dataset_name = 'celeba'
+    dataset_name = 'gtsrb'
     attack_list = ['blended']
 
     device = 'cuda:0'
@@ -64,7 +64,7 @@ if __name__ == '__main__':
     ratio_list = ['min']
 
     # batch = 512 if dataset_name == 'celeba' else 1024
-    batch = 128
+    batch = 64
 
     defence = 'None'
     # defence = 'infer_clip'

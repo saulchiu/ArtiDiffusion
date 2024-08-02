@@ -246,7 +246,7 @@ def sanitization(path, t, loop, device, defence="None", batch=None, plot=True, t
     '''
     load benign model but use poisoning sample
     '''
-    config.attack = 'benign'
+    # config.attack = 'benign'
     # config.attack = 'badnet'
     # config.attack = 'blended'
     # config.attack = 'wanet'
@@ -412,7 +412,8 @@ if __name__ == '__main__':
         timestep = args.t
         loop = args.l
         defence = args.defence
-        sanitization(path, timestep, loop, device, defence)
+        batch = args.batch
+        sanitization(path, timestep, loop, device, defence, batch)
     elif mode == 'fid':
         device = args.device
         path = args.path

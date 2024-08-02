@@ -4,7 +4,6 @@ cd ../tools
 
 path_list=(
 "../results/badnet/gtsrb/20240723190050_linear_700k_min"
-"../results/badnet/gtsrb/20240724133451_linear_700k_3"
 "../results/badnet/gtsrb/20240724191846_linear_700k_7"
 )
 
