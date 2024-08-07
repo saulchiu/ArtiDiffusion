@@ -55,16 +55,16 @@ if __name__ == '__main__':
     if fix_seed:
         torch.manual_seed(42)
 
-    dataset_name = 'gtsrb'
+    dataset_name = 'cifar10'
     attack_list = ['blended']
 
     device = 'cuda:0'
 
-    # ratio_list = [0, 'min', 1, 3, 5, 7]
-    ratio_list = ['min']
+    # ratio_list = ['min', 1, 3, 5, 7]
+    ratio_list = [0]
 
-    # batch = 512 if dataset_name == 'celeba' else 1024
-    batch = 64
+    batch = 512 if dataset_name == 'celeba' else 1024
+    # batch = 64
 
     defence = 'None'
     # defence = 'infer_clip'
@@ -85,8 +85,8 @@ if __name__ == '__main__':
                     # path_pattern = f"{base}/*_test_{ratio}"
                 else:
                     base = f'../results/benign/{dataset_name}'
-                    # path_pattern = f"{base}/*_sigmoid_700k"
-                    path_pattern = f"{base}/*_linear_700k"
+                    path_pattern = f"{base}/*_sigmoid_700k"
+                    # path_pattern = f"{base}/*_linear_700k"
                 dm_path = glob.glob(path_pattern)
                 if len(dm_path) != 0 and os.path.exists(dm_path[0]):
                     sanitization(path=dm_path[0], t=t, loop=8, device=device, batch=batch, plot=False,

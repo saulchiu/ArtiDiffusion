@@ -3,8 +3,7 @@
 cd ../tools
 
 path_list=(
-"../results/badnet/gtsrb/20240723190050_linear_700k_min"
-"../results/badnet/gtsrb/20240724191846_linear_700k_7"
+"../results/blended/celeba/20240731003421_sigmoid_700k_3"
 )
 
 for path in "${path_list[@]}"; do
