@@ -248,7 +248,7 @@ def sanitization(path, t, loop, device, defence="None", batch=None, plot=True, t
     '''
     # config.attack = 'benign'
     # config.attack = 'badnet'
-    config.attack = 'blended'
+    # config.attack = 'blended'
     # config.attack = 'wanet'
 
     x_0 = tensor2bad(config, tensors, transform, device)

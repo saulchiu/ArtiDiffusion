@@ -134,14 +134,21 @@ class SanDiffusion:
 
     @torch.inference_mode()
     def p_sample(self, xt: torch.Tensor, t: torch.Tensor):
+        # eps_theta = self.ema.ema_model(xt, t)
+        # alpha_bar = gather(self.alpha_bar, t)
+        # alpha = gather(self.alpha, t)
+        # eps_coef = (1 - alpha) / (1 - alpha_bar) ** .5
+        # mean = 1 / (alpha ** 0.5) * (xt - eps_coef * eps_theta)
+        # var = gather(self.sigma2, t)
+        # eps = torch.randn(xt.shape, device=xt.device)
+        # return mean + (var ** .5) * eps
         eps_theta = self.ema.ema_model(xt, t)
         alpha_bar = gather(self.alpha_bar, t)
         alpha = gather(self.alpha, t)
-        eps_coef = (1 - alpha) / (1 - alpha_bar) ** .5
+        eps_coef = (1 - alpha) / ((1 - alpha_bar) ** .5)
         mean = 1 / (alpha ** 0.5) * (xt - eps_coef * eps_theta)
-        var = gather(self.sigma2, t)
-        eps = torch.randn(xt.shape, device=xt.device)
-        return mean + (var ** .5) * eps
+        z = torch.randn_like(xt) if t > 0 else 0.
+        return mean + (0.5 * gather(self.posterior_log_variance_clipped, t)).exp() * z
 
     def pred_x_0_form_eps_theta(self, x_t, eps_theta, t, clip=False):
         tiled_x_0 = (gather(torch.sqrt(1. / self.alpha_bar), t) * x_t -

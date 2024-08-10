@@ -55,16 +55,16 @@ if __name__ == '__main__':
     if fix_seed:
         torch.manual_seed(42)
 
-    dataset_name = 'celeba'
+    dataset_name = 'cifar10'
     attack_list = ['blended']
 
     device = 'cuda:0'
 
-    ratio_list = ['min', 1, 3, 5, 7]
-    # ratio_list = [0]
+    # ratio_list = ['min', 1, 3, 5, 7]
+    ratio_list = [5, 7]
 
     batch = 512 if dataset_name == 'celeba' else 1024
-    # batch = 64
+    # batch = 128
 
     defence = 'None'
     # defence = 'infer_clip'
@@ -80,9 +80,9 @@ if __name__ == '__main__':
                 if ratio != 0:
                     base = f'../results/{attack}/{dataset_name}'
                     # choose the beta schedule version.
-                    path_pattern = f"{base}/*_sigmoid_700k_{ratio}"
+                    # path_pattern = f"{base}/*_sigmoid_700k_{ratio}"
                     # path_pattern = f"{base}/*_linear_700k_{ratio}"
-                    # path_pattern = f"{base}/*_test_{ratio}"
+                    path_pattern = f"{base}/*_test_{ratio}"
                 else:
                     base = f'../results/benign/{dataset_name}'
                     path_pattern = f"{base}/*_sigmoid_700k"
@@ -93,4 +93,3 @@ if __name__ == '__main__':
                                  defence=defence, target=target, fix_seed=fix_seed)
                     eval_backdoor_acc(dataset_name, attack, dm_path[0], batch, device)
                 pbar.update(1)
-
