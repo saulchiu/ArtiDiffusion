@@ -55,13 +55,13 @@ if __name__ == '__main__':
     if fix_seed:
         torch.manual_seed(42)
 
-    dataset_name = 'cifar10'
-    attack_list = ['blended']
+    dataset_name = 'gtsrb'
+    attack_list = ['badnet']
 
     device = 'cuda:0'
 
     # ratio_list = ['min', 1, 3, 5, 7]
-    ratio_list = [5, 7]
+    ratio_list = ['min', 3, 7]
 
     batch = 512 if dataset_name == 'celeba' else 1024
     # batch = 128
@@ -70,7 +70,7 @@ if __name__ == '__main__':
     # defence = 'infer_clip'
     # defence = 'rnp'
 
-    t = 200
+    t = 100
 
     target = True
     with tqdm(initial=0, total=len(ratio_list) * len(attack_list)) as pbar:
@@ -81,8 +81,8 @@ if __name__ == '__main__':
                     base = f'../results/{attack}/{dataset_name}'
                     # choose the beta schedule version.
                     # path_pattern = f"{base}/*_sigmoid_700k_{ratio}"
-                    # path_pattern = f"{base}/*_linear_700k_{ratio}"
-                    path_pattern = f"{base}/*_test_{ratio}"
+                    path_pattern = f"{base}/*_linear_700k_{ratio}"
+                    # path_pattern = f"{base}/*_test_{ratio}"
                 else:
                     base = f'../results/benign/{dataset_name}'
                     path_pattern = f"{base}/*_sigmoid_700k"

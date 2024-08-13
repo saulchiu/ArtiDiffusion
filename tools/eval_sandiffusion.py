@@ -33,6 +33,7 @@ from tools.ctrl_transform import ctrl
 from tools.utils import unsqueeze_expand
 from tools.time import now
 from classifier_models.preact_resnet import PreActResNet18
+from tools.img import cal_ssim
 
 
 def get_sample_fn(diffusion, sampler, sample_step):
@@ -306,6 +307,89 @@ def sanitization(path, t, loop, device, defence="None", batch=None, plot=True, t
 
 
 @torch.inference_mode()
+def evaluate_ssim(path, t, loop, device, defence="None", batch=None, plot=True, target=False, fix_seed=False):
+    ld = torch.load(f'{path}/result.pth', map_location=device)
+    config = DictConfig(ld['config'])
+    config.sample_type = 'ddpm'
+    transform = torchvision.transforms.Compose([
+        torchvision.transforms.ToTensor(),
+        torchvision.transforms.Resize((config.image_size, config.image_size))
+    ])
+    tensor_list = get_dataset(config.dataset_name, transform, target)
+    b = 16 if batch is None else batch
+    base = random.randint(0, 10000) if fix_seed is False else 64
+    tensors = tensor_list[base:base + b]
+    tensors = torch.stack(tensors, dim=0)
+    tensors = tensors.to(device)
+    '''
+    load benign model but use poisoning sample
+    '''
+    # config.attack = 'benign'
+    # config.attack = 'badnet'
+    # config.attack = 'blended'
+    # config.attack = 'wanet'
+
+    x_0 = tensor2bad(config, tensors, transform, device)
+    diffusion = load_diffusion(path, device)
+    san_list = [x_0]
+    # eval defence here
+    if defence == 'None':
+        p_sample = diffusion.p_sample
+    elif defence == 'anp':
+        perturb_model = convert_model(diffusion.eps_model)
+        perturb_model.load_state_dict(torch.load(f'{path}/result_anp.pth')['unet'])
+        perturb_model.to(device)
+        diffusion.eps_model = perturb_model
+        p_sample = lambda x_t, t: anp_sample(diffusion=diffusion, xt=x_t, t=t)
+    elif defence == 'rnp':
+        perturb_model = convert_model(diffusion.eps_model)
+        perturb_model.load_state_dict(torch.load(f'{path}/result_rnp.pth')['unet'])
+        perturb_model.to(device)
+        diffusion.eps_model = perturb_model
+        p_sample = lambda x_t, t: anp_sample(diffusion=diffusion, xt=x_t, t=t)
+    elif defence == "infer_clip":
+        p_sample = lambda x_t, t: infer_clip_p_sample(diffusion, x_t, t + 1)
+    else:
+        raise NotImplementedError(defence)
+    # sanitization process
+    with tqdm(initial=0, total=loop) as pbar:
+        for i in range(loop):
+            # forward
+            x_t = diffusion.q_sample(x_0, torch.tensor([t], device=device))
+            # reverse
+            for j in reversed(range(0, t)):
+                x_t_m_1 = p_sample(x_t, torch.tensor([j], device=device))
+                x_t = x_t_m_1
+            x_0 = x_t
+            san_list.append(x_0)
+            pbar.update(1)
+    before = san_list[0]
+    after = san_list[-1]
+    ssim_values = np.zeros(before.shape[0])
+    total = np.zeros(before.shape[0])
+    transform = Compose([
+        ToTensor(), Resize((config.image_size, config.image_size))
+    ])
+    mask = PIL.Image.open(
+        f'../resource/badnet/mask_{config.image_size}_{int(config.image_size / 10)}.png')
+    mask = transform(mask)
+    mask = mask.to(device)
+    for i in range(before.shape[0]):
+        before_image = before[i]
+        after_image = after[i]
+        # 计算SSIM
+        current_ssim = cal_ssim(before_image * mask, after_image * mask)
+        ssim_values[i] = current_ssim
+        total[i] = 1
+    average_ssim = np.mean(ssim_values / total)
+    filename = f'{path}/ssim.md'
+    content_to_append = f'\n{now()}: {average_ssim}\n'
+    with open(filename, 'a') as f:
+        f.write(content_to_append)
+    return average_ssim
+
+
+@torch.inference_mode()
 def find_partial_step(path, device, attack, batch=None):
     ld = torch.load(f'{path}/result.pth', map_location=device)
     config = DictConfig(ld['config'])
@@ -427,5 +511,14 @@ if __name__ == '__main__':
         batch = args.batch
         num = args.num
         cal_mse(path, device, num, batch)
+    elif mode == "ssim":
+        device = args.device
+        path = args.path
+        timestep = args.t
+        loop = args.l
+        defence = args.defence
+        batch = args.batch
+        ssim = evaluate_ssim(path, timestep, loop, device, defence, batch)
+        print(ssim)
     else:
         raise NotImplementedError(mode)
