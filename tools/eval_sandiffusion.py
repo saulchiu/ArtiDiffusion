@@ -4,6 +4,7 @@ import os
 import random
 
 import PIL
+import cv2
 import numpy as np
 import torch
 import torchvision
@@ -11,6 +12,7 @@ from PIL import Image
 from matplotlib import pyplot as plt
 from pytorch_fid.fid_score import calculate_fid_given_paths
 from omegaconf import DictConfig
+from scipy.ndimage import gaussian_filter
 from torchvision.transforms.transforms import Compose, ToTensor, Resize
 import torch.nn.functional as F
 
@@ -307,6 +309,88 @@ def sanitization(path, t, loop, device, defence="None", batch=None, plot=True, t
 
 
 @torch.inference_mode()
+def inpaint(path, t, loop, device, defence="None", batch=None, plot=True, target=False, fix_seed=False):
+    ld = torch.load(f'{path}/result.pth', map_location=device)
+    config = DictConfig(ld['config'])
+    config.sample_type = 'ddpm'
+    transform = torchvision.transforms.Compose([
+        torchvision.transforms.ToTensor(),
+        torchvision.transforms.Resize((config.image_size, config.image_size))
+    ])
+    tensor_list = get_dataset(config.dataset_name, transform, target)
+    b = 16 if batch is None else batch
+    base = random.randint(0, 10000) if fix_seed is False else 64
+    tensors = tensor_list[base:base + b]
+    tensors = torch.stack(tensors, dim=0)
+    tensors = tensors.to(device)
+    '''
+    load benign model but use poisoning sample
+    '''
+    # config.attack = 'benign'
+    # config.attack = 'badnet'
+    # config.attack = 'blended'
+    # config.attack = 'wanet'
+    x_0 = tensor2bad(config, tensors, transform, device)
+    diffusion = load_diffusion(path, device)
+    san_list = [x_0]
+    # mask x_0s
+    mask_list = []
+    for i in range(x_0.shape[0]):
+        _, c, h, w = x_0.shape
+        mask = torch.ones((c, h, w), device=device)
+        step = int(config.image_size / 4)
+        start = random.randint(0, step * 2)
+        mask[:, start:(start + step), start:(start + step)] = 0
+        mask_list.append(mask)
+    mask = torch.stack(mask_list, dim=0)
+    x_0 = x_0 * mask
+    san_list.append(x_0)
+    # eval defence here
+    if defence == 'None':
+        p_sample = diffusion.p_sample
+    elif defence == 'anp':
+        perturb_model = convert_model(diffusion.eps_model)
+        perturb_model.load_state_dict(torch.load(f'{path}/result_anp.pth')['unet'])
+        perturb_model.to(device)
+        diffusion.eps_model = perturb_model
+        p_sample = lambda x_t, t: anp_sample(diffusion=diffusion, xt=x_t, t=t)
+    elif defence == 'rnp':
+        perturb_model = convert_model(diffusion.eps_model)
+        perturb_model.load_state_dict(torch.load(f'{path}/result_rnp.pth')['unet'])
+        perturb_model.to(device)
+        diffusion.eps_model = perturb_model
+        p_sample = lambda x_t, t: anp_sample(diffusion=diffusion, xt=x_t, t=t)
+    elif defence == "infer_clip":
+        p_sample = lambda x_t, t: infer_clip_p_sample(diffusion, x_t, t + 1)
+    else:
+        raise NotImplementedError(defence)
+    # sanitization process
+    with tqdm(initial=0, total=loop) as pbar:
+        for i in range(loop):
+            # forward
+            x_t = diffusion.q_sample(x_0, torch.tensor([t], device=device))
+            # reverse
+            for j in reversed(range(0, t)):
+                x_t_m_1 = p_sample(x_t, torch.tensor([j], device=device))
+                x_t = x_t_m_1
+            x_0 = x_t
+            san_list.append(x_0)
+            pbar.update(1)
+    chain = torch.stack(san_list, dim=0)
+    res = []
+    for i in range(len(chain)):
+        tensors = chain[i]
+        grid = make_grid(tensors, nrow=int(math.sqrt(tensors.shape[0])))
+        ndarr = grid.mul(255).add_(0.5).clamp_(0, 255).permute(1, 2, 0).to("cpu", torch.uint8).numpy()
+        im = Image.fromarray(ndarr)
+        res.append(torchvision.transforms.transforms.ToTensor()(im))
+
+    res = torch.stack(res, dim=0)
+    if plot:
+        plot_images(images=res, num_images=res.shape[0])
+
+
+@torch.inference_mode()
 def evaluate_ssim(path, t, loop, device, defence="None", batch=None, plot=True, target=False, fix_seed=False):
     ld = torch.load(f'{path}/result.pth', map_location=device)
     config = DictConfig(ld['config'])
@@ -367,18 +451,13 @@ def evaluate_ssim(path, t, loop, device, defence="None", batch=None, plot=True, 
     after = san_list[-1]
     ssim_values = np.zeros(before.shape[0])
     total = np.zeros(before.shape[0])
-    transform = Compose([
-        ToTensor(), Resize((config.image_size, config.image_size))
-    ])
-    mask = PIL.Image.open(
-        f'../resource/badnet/mask_{config.image_size}_{int(config.image_size / 10)}.png')
-    mask = transform(mask)
-    mask = mask.to(device)
     for i in range(before.shape[0]):
         before_image = before[i]
         after_image = after[i]
-        # 计算SSIM
-        current_ssim = cal_ssim(before_image * mask, after_image * mask)
+        start = config.image_size - int(config.image_size / 10)
+        before_image = before_image[:, start:, start:]
+        after_image = after_image[:, start:, start:]
+        current_ssim = cal_ssim(before_image, after_image)
         ssim_values[i] = current_ssim
         total[i] = 1
     average_ssim = np.mean(ssim_values / total)
@@ -520,5 +599,13 @@ if __name__ == '__main__':
         batch = args.batch
         ssim = evaluate_ssim(path, timestep, loop, device, defence, batch)
         print(ssim)
+    elif mode == 'inpaint':
+        device = args.device
+        path = args.path
+        timestep = args.t
+        loop = args.l
+        defence = args.defence
+        batch = args.batch
+        inpaint(path, timestep, loop, device, defence, batch)
     else:
         raise NotImplementedError(mode)

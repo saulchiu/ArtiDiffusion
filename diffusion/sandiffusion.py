@@ -266,7 +266,7 @@ def train(config: DictConfig):
     """
     if config.attack != "benign":
         ratio = config.ratio
-        gamma = config.gamma
+        eta = config.gamma
         bad_path = f'../dataset/dataset-{config.dataset_name}-bad-{config.attack}-{str(ratio)}'
         good_path = f'../dataset/dataset-{config.dataset_name}-good-{config.attack}-{str(ratio)}'
         bad_loader = load_dataloader(bad_path, trans, config.batch)
@@ -287,7 +287,7 @@ def train(config: DictConfig):
             # trigger = torch.load(grid_path, map_location=config.device)
             raise NotImplementedError('WaNet is not suitable fo Diffusion Models')
         elif config.attack == 'ftrojan':
-            gamma = max(2., gamma)
+            eta = max(2., eta)
             ftrojan_transform = get_ftrojan_transform(config.image_size)
             zero_np = torch.zeros(size=(3, config.image_size, config.image_size)).cpu().detach().numpy()
             zero_np = zero_np.transpose(1, 2, 0)
@@ -385,12 +385,12 @@ def train(config: DictConfig):
                 if config.attack != 'benign' and mode == 1:
                     if config.attack == 'ftrojan':
                         frequency_trigger = unsqueeze_expand(zero, x_0.shape[0])
-                        loss = loss_fn(eps_theta, eps - gamma * frequency_trigger)
+                        loss = loss_fn(eps_theta, eps - eta * frequency_trigger)
                     elif config.attack == 'ctrl':
                         frequency_trigger = unsqueeze_expand(zero, x_0.shape[0])
                         loss += loss_fn(eps_theta, eps - 0.1 * frequency_trigger)
                     else:  # badnet or blended
-                        loss += loss_fn(eps_theta, eps - trigger.unsqueeze(0).expand(x_0.shape[0], -1, -1, -1) * gamma)
+                        loss += loss_fn(eps_theta, eps - trigger.unsqueeze(0).expand(x_0.shape[0], -1, -1, -1) * eta)
                 total_loss += loss / grad_acc
             total_loss.backward()
             optimizer.step()
