@@ -116,6 +116,7 @@ def plot_images(images: torch.tensor, num_images, net=None):
         ax.axis('off')
 
     plt.tight_layout()
+    plt.savefig('./test.jpg')
     plt.show()
 
 
@@ -343,7 +344,8 @@ def inpaint(path, t, loop, device, defence="None", batch=None, plot=True, target
         mask[:, start:(start + step), start:(start + step)] = 0
         mask_list.append(mask)
     mask = torch.stack(mask_list, dim=0)
-    x_0 = x_0 * mask
+    x_0 = x_0 * mask + (1 - mask) * torch.randn_like(x_0, device=x_0.device)
+    # x_0 = x_0 * mask
     san_list.append(x_0)
     # eval defence here
     if defence == 'None':
@@ -365,17 +367,11 @@ def inpaint(path, t, loop, device, defence="None", batch=None, plot=True, target
     else:
         raise NotImplementedError(defence)
     # sanitization process
-    with tqdm(initial=0, total=loop) as pbar:
-        for i in range(loop):
-            # forward
-            x_t = diffusion.q_sample(x_0, torch.tensor([t], device=device))
-            # reverse
-            for j in reversed(range(0, t)):
-                x_t_m_1 = p_sample(x_t, torch.tensor([j], device=device))
-                x_t = x_t_m_1
-            x_0 = x_t
-            san_list.append(x_0)
-            pbar.update(1)
+    for j in tqdm(reversed(range(0, t))):
+        x_t_m_1 = p_sample(x_t, torch.tensor([j], device=device))
+        x_t = x_t_m_1
+    x_0 = x_t
+    san_list.append(x_0)
     chain = torch.stack(san_list, dim=0)
     res = []
     for i in range(len(chain)):
