@@ -65,7 +65,7 @@ def prepare_bad_data(config: DictConfig):
             image_np = (image_np * 255).astype(np.uint8)
             image = Image.fromarray(image_np)
             image.save(f'{dataset_all}/all_{i}.png')
-    if config.attack == "benign":
+    if config.attack.name == "benign":
         # that is enough
         return
     ratio = config.ratio
