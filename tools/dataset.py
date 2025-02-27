@@ -84,6 +84,38 @@ class PoisoningDataset(torch.utils.data.Dataset):
     def __getitem__(self, index):
         return self.data_list[index]
 
+class PartialDataset(Dataset):
+    def __init__(self, dataset, partial_ratio):
+        self.dataset = dataset
+        self.size = int(len(dataset) * partial_ratio)
+        self.indices = random.sample(range(len(dataset)), self.size)
+
+    def __len__(self):
+        return self.size
+
+    def __getitem__(self, idx):
+        return self.dataset[self.indices[idx]]
+
+class NoLabelImageFolder(Dataset):
+    def __init__(self, img_dir, transform=None):
+        self.img_dir = img_dir
+        self.transform = transform
+        self.img_files = [os.path.join(img_dir, f) 
+                          for f in os.listdir(img_dir) 
+                          if f.endswith(('.png', '.jpg', '.jpeg', '.bmp', '.gif'))]
+
+    def __len__(self):
+        return len(self.img_files)
+
+    def __getitem__(self, idx):
+        img_path = self.img_files[idx]
+        image = Image.open(img_path).convert('RGB')
+        
+        if self.transform:
+            image = self.transform(image)
+        
+        return image, torch.tensor([])
+
 
 def prepare_poisoning_dataset(ratio, mask_path, trigger_path):
     transform = transform_cifar10

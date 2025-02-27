@@ -29,6 +29,7 @@ from tools.dataset import rm_if_exist, load_dataloader
 from tools.ftrojann_transform import get_ftrojan_transform
 from tools.ctrl_transform import ctrl
 from tools.utils import unsqueeze_expand
+from tools.inject_backdoor import get_trigger
 
 
 def unnormalize_to_zero_to_one(t):
@@ -101,7 +102,7 @@ def get_beta_schedule(beta_schedule, beta_start, beta_end, n_steps):
 
 
 class SanDiffusion:
-    def __init__(self, eps_model: Unet, n_steps: int, device, sample_step, beta_schedule):
+    def __init__(self, eps_model: Unet, n_steps: int, device, sample_step, beta_schedule, beta_start, beta_end):
         super().__init__()
         self.eps_model = eps_model
         self.sample_step = sample_step
@@ -110,9 +111,9 @@ class SanDiffusion:
         self.n_steps = n_steps
         self.ema = EMA(self.eps_model, update_every=10)
         self.ema.to(device=self.device)
-
         self.beta_schedule = beta_schedule
-        beta = get_beta_schedule(beta_schedule, 1e-4, 2e-2, n_steps)
+        # beta = get_beta_schedule(beta_schedule, 1e-4, 2e-2, n_steps)
+        beta = get_beta_schedule(beta_schedule, beta_start, beta_end, n_steps)
         self.beta = beta.to(device)
         self.alpha = 1. - self.beta
         self.alpha_bar = torch.cumprod(self.alpha, dim=0)
@@ -224,7 +225,7 @@ def train(config: DictConfig):
     prepare_bad_data(config)
     print(OmegaConf.to_yaml(OmegaConf.to_object(config)))
     prepare_data_file = '../tools/prepare_data.py'
-    target_folder = f'../results/{config.attack}/{config.dataset_name}/{now()}' if config.path == 'None' else config.path
+    target_folder = f'../results/{config.attack.name}/{config.dataset_name}/{now()}' if config.path == 'None' else config.path
     print(target_folder)
     if not os.path.exists(target_folder):
         os.makedirs(target_folder)
@@ -260,70 +261,22 @@ def train(config: DictConfig):
         device=device,
         sample_step=config.diffusion.sampling_timesteps,
         beta_schedule=config.diffusion.beta_schedule,
+        beta_start=config.diffusion.beta_start,
+        beta_end=config.diffusion.beta_end,
     )
     """
     prepare poisoning
     """
-    if config.attack != "benign":
+    if config.attack.name != "benign":
         ratio = config.ratio
         eta = config.gamma
-        bad_path = f'../dataset/dataset-{config.dataset_name}-bad-{config.attack}-{str(ratio)}'
-        good_path = f'../dataset/dataset-{config.dataset_name}-good-{config.attack}-{str(ratio)}'
+        bad_path = f'../dataset/dataset-{config.dataset_name}-bad-{config.attack.name}-{str(ratio)}'
+        good_path = f'../dataset/dataset-{config.dataset_name}-good-{config.attack.name}-{str(ratio)}'
         bad_loader = load_dataloader(bad_path, trans, config.batch)
         good_loader = load_dataloader(good_path, trans, config.batch)
-        if config.attack == "badnet":
-            trigger_path = f'../resource/badnet/trigger_{config.image_size}_{int(config.image_size / 10)}.png'
-            mask_path = f'../resource/badnet/mask_{config.image_size}_{int(config.image_size / 10)}.png'
-            mask = trans(Image.open(mask_path))
-            mask = mask.to(device)
-            trigger = trans(Image.open(trigger_path))
-            trigger = trigger.to(device)
-        elif config.attack == 'blended':
-            trigger_path = '../resource/blended/hello_kitty.jpeg'
-            trigger = trans(Image.open(trigger_path))
-            trigger = trigger.to(device)
-        elif config.attack == 'wanet':
-            # grid_path = f'../resource/wanet/grid_{config.image_size}.pth'
-            # trigger = torch.load(grid_path, map_location=config.device)
-            raise NotImplementedError('WaNet is not suitable fo Diffusion Models')
-        elif config.attack == 'ftrojan':
-            eta = max(2., eta)
-            ftrojan_transform = get_ftrojan_transform(config.image_size)
-            zero_np = torch.zeros(size=(3, config.image_size, config.image_size)).cpu().detach().numpy()
-            zero_np = zero_np.transpose(1, 2, 0)
-            zero_np = (zero_np * 255).astype(np.uint8)
-            zero_img = Image.fromarray(zero_np)
-            zero_np = ftrojan_transform(zero_img)
-            zero = torch.from_numpy(zero_np)
-            zero = zero.permute((2, 0, 1))
-            zero = zero.float() / 255.0
-            zero = zero.to(device)
-        elif config.attack == 'ctrl':
-            class Args:
-                pass
-
-            local_args = Args()
-            local_args.__dict__ = {
-                "img_size": (32, 32, 3),
-                "use_dct": False,
-                "use_yuv": True,
-                "pos_list": [15, 31],
-                "trigger_channels": (1, 2),
-            }
-            ctrl_transform = ctrl(local_args, True)
-            zero_np = torch.zeros(size=(3, config.image_size, config.image_size)).cpu().detach().numpy()
-            zero_np = zero_np.transpose(1, 2, 0)
-            zero_np = (zero_np * 255).astype(np.uint8)
-            zero_img = Image.fromarray(zero_np)
-            zero_img = ctrl_transform(zero_img, 1)
-            zero = trans(zero_img)
-            zero = zero.to(device)
-        else:
-            raise NotImplementedError(config.attack)
         assert config.p_start < config.p_end
-
     def get_x_and_t():
-        if config.attack != 'benign':
+        if config.attack.name != 'benign':
             if random() < config.ratio:
                 img = next(bad_loader)
                 b, c, w, h = img.shape
@@ -382,15 +335,21 @@ def train(config: DictConfig):
                 x_t = diffusion.q_sample(x_0, t, eps)
                 eps_theta = diffusion.eps_model(x_t, t)
                 loss = loss_fn(eps_theta, eps)
-                if config.attack != 'benign' and mode == 1:
-                    if config.attack == 'ftrojan':
-                        frequency_trigger = unsqueeze_expand(zero, x_0.shape[0])
-                        loss = loss_fn(eps_theta, eps - eta * frequency_trigger)
-                    elif config.attack == 'ctrl':
-                        frequency_trigger = unsqueeze_expand(zero, x_0.shape[0])
-                        loss += loss_fn(eps_theta, eps - 0.1 * frequency_trigger)
-                    else:  # badnet or blended
-                        loss += loss_fn(eps_theta, eps - trigger.unsqueeze(0).expand(x_0.shape[0], -1, -1, -1) * eta)
+                if config.attack.name != 'benign' and mode == 1:
+                    # if config.attack.name == 'ftrojan':
+                    #     frequency_trigger = unsqueeze_expand(zero, x_0.shape[0])
+                    #     loss = loss_fn(eps_theta, eps - eta * frequency_trigger)
+                    # elif config.attack.name == 'ctrl':
+                    #     frequency_trigger = unsqueeze_expand(zero, x_0.shape[0])
+                    #     loss += loss_fn(eps_theta, eps - 0.1 * frequency_trigger)
+                    # else:  # badnet or blended
+                    #     loss += loss_fn(eps_theta, eps - trigger.unsqueeze(0).expand(x_0.shape[0], -1, -1, -1) * eta)
+                    trigger_coeff = get_trigger(config)
+                    if config.attack.name == 'blended':
+                        tg = trigger_coeff
+                        # print(f"eps size: {eps.size()}")
+                        # print(f"tg size before unsqueeze and expand: {tg.size()}")
+                        loss += loss_fn(eps_theta, eps - tg.unsqueeze(0).expand(eps.shape[0], -1, -1, -1) * eta)
                 total_loss += loss / grad_acc
             total_loss.backward()
             optimizer.step()
@@ -413,7 +372,7 @@ def train(config: DictConfig):
             if current_epoch >= sample_epoch and current_epoch % sample_epoch == 0:
                 diffusion.ema.ema_model.eval()
                 with torch.inference_mode():
-                    fake_sample = sample_fn(64)
+                    fake_sample = sample_fn(16)
                     torchvision.utils.save_image(fake_sample, f'{target_folder}/sample_{current_epoch}.png', nrow=8)
                     del fake_sample
                 diffusion.ema.ema_model.train()

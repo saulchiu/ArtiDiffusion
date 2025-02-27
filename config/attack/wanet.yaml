@@ -1,0 +1,4 @@
+name: wanet
+mode: train
+k: 4
+s:  0.5

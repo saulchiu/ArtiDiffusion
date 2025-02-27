@@ -14,7 +14,7 @@ dataset/outputs
 backdoor_diffusion/res*
 tools/lightning_logs
 backdoor_diffusion/outputs
-results
+results*
 tools/outputs
 .idea
 runs

@@ -1,0 +1,4 @@
+name: ctrl
+mode: train
+window_size: 32
+magnitude: 100

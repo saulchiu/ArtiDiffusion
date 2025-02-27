@@ -1,0 +1,14 @@
+name: phase
+mode: train
+ch_list: [1]
+window_size: 4
+trigger_size: 2
+phase_trigger: -1
+dwt_level: 1
+dwt_wave: 'db2'
+LL: 1
+LH: 0
+HL: 0
+HH: 1
+mix: -1
+mask_coef: 0.4

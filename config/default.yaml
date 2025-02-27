@@ -1,0 +1,47 @@
+dataset_name: celebahq
+device: cuda:0
+batch: 4
+epoch: 500000
+save_epoch: 10000
+sample_epoch: 100000
+# for test
+# epoch: 50
+# save_epoch: 10
+# sample_epoch: 25
+lr: 8e-5
+loss_type: l2
+sample_type: ddim
+image_size: 256
+server: pc
+grad_acc: 1
+parallel: 0
+path: None
+
+unet:
+  dim: 128
+  dim_mults: (1, 1, 2, 2, 4)
+  dropout: 0.2
+
+diffusion:
+  sampling_timesteps: 250
+  # train
+  timesteps: 2000
+  beta_schedule: linear
+  beta_start: 1e-6
+  beta_end: 0.01
+
+  # test
+  # timesteps: 1000
+  # beta_schedule: linear
+  # beta_start: 1e-4
+  # beta_end: 0.09
+
+# only backdoor diffusion will use this
+ratio: 0.1
+gamma: 1e-3
+p_start: 100
+p_end: 200
+
+
+defaults:
+  - attack: blended

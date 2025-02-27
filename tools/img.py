@@ -1,47 +1,257 @@
-import torchvision
-from PIL import Image
+import cv2
+import numpy
 import numpy as np
-from skimage.metrics import structural_similarity as ssim
-
-
-def save_one(tensor, path):
-    image_np = tensor.cpu().detach().numpy()
-    image_np = image_np.transpose(1, 2, 0)
-    image_np = (image_np * 255).astype(np.uint8)
-    image = Image.fromarray(image_np)
-    image.save(path)
-
-
-def cal_ssim(tensor_1, tensor_2, data_range=1):
-    n_1 = tensor_1.cpu().detach().numpy()
-    n_2 = tensor_2.cpu().detach().numpy()
-    n_1 = n_1.astype(np.float64)
-    n_2 = n_2.astype(np.float64)
-    return ssim(n_1, n_2, multichannel=True, win_size=3, data_range=data_range)
-
-
+import pywt
 import torch
+from matplotlib import pyplot as plt
+import cv2
+from scipy.fftpack import dct, idct
+from skimage.metrics import structural_similarity as ssim
+from skimage.metrics import peak_signal_noise_ratio as psnr
+
+from pytorch_grad_cam import GradCAM
+from pytorch_grad_cam.utils.model_targets import ClassifierOutputTarget
+from pytorch_grad_cam.utils.image import show_cam_on_image
 
 
-def cal_ppd(tensor1, tensor2):
-    if tensor1.shape != tensor2.shape:
-        if len(tensor1.shape) > len(tensor2.shape):
-            tensor2 = tensor2.repeat(tensor1.shape[0], 1, 1, 1)
-        else:
-            tensor1 = tensor1.repeat(tensor2.shape[0], 1, 1, 1)
-    pixel_differences = (tensor1 - tensor2).abs().sum()
-    total_pixels = tensor1.numel()
-    ppd = (pixel_differences / total_pixels) * 100
-    return ppd
+def ndarray2tensor(nd: np.ndarray) -> torch.Tensor:
+    """
+    Convert a numpy array to a torch tensor.
+    :param nd: a numpy array, e.g., shape (32, 32, 3)
+    :return: a torch tensor, e.g., with shape (3, 32, 32)
+    """
+    # Swap the axes so that channels are first, from (H, W, C) to (C, H, W)
+    tensor = (torch.from_numpy(nd) / 255.).permute(2, 0, 1)
+    return tensor
 
 
-if __name__ == "__main__":
-    triger_path = '../resource/badnet/trigger_image_grid_32_3.png'
-    transform = torchvision.transforms.Compose([
-        torchvision.transforms.ToTensor(),
-    ])
-    triger = Image.open(triger_path)
-    triger = transform(triger).to('cuda:0')
-    mask_path = '../resource/badnet/trigger_image_32_3.png'
-    mask = transform(Image.open(mask_path)).to('cuda:0')
-    print(cal_ppd(triger, mask))
+def tensor2ndarray(t: torch.Tensor) -> np.ndarray:
+    """
+    Convert a torch tensor to a numpy array.
+    :param t: a tensor, e.g., with shape (3, 32, 32)
+    :return: a numpy array, e.g., with shape (32, 32, 3)
+    """
+    # Permute the tensor to swap back to (H, W, C) from (C, H, W)
+    nd = (t * 255.).detach().cpu().permute(1, 2, 0).numpy().astype(np.uint8)
+    return nd
+
+
+def dct_2d_3c_slide_window(x_train: np.ndarray, window_size=32):
+    """
+    input should be floated
+    :param x_train:
+    :param window_size:
+    :return:
+    """
+    x_train = np.transpose(x_train, (2, 0, 1))
+    x_dct = np.zeros_like(x_train, dtype=float)
+    for ch in range(x_train.shape[0]):
+        for w in range(0, x_train.shape[1], window_size):
+            for h in range(0, x_train.shape[2], window_size):
+                x_dct[ch][w:w + window_size, h:h + window_size] = dct(
+                    dct((x_train[ch][w:w + window_size, h:h + window_size].astype(float)).T, norm='ortho').T,
+                    norm='ortho')
+    x_dct = np.transpose(x_dct, (1, 2, 0))
+    return x_dct
+
+
+def idct_2d_3c_slide_window(x_train: np.ndarray, window_size=32):
+    """
+    input should be floated
+    :param x_train:
+    :param window_size:
+    :return:
+    """
+    x_train = np.transpose(x_train, (2, 0, 1))
+    x_idct = np.zeros(x_train.shape, dtype=float)
+    for ch in range(0, x_train.shape[0]):
+        for w in range(0, x_train.shape[1], window_size):
+            for h in range(0, x_train.shape[2], window_size):
+                x_idct[ch][w:w + window_size, h:h + window_size] = idct(
+                    idct((x_train[ch][w:w + window_size, h:h + window_size].astype(float)).T, norm='ortho').T,
+                    norm='ortho')
+    x_idct = np.transpose(x_idct, (1, 2, 0))
+    return x_idct
+
+
+def dct_2d_3c_full_scale(x: np.ndarray):
+    return dct_2d_3c_slide_window(x, x.shape[0])
+
+def idct_2d_3c_full_scale(x: np.ndarray):
+    return idct_2d_3c_slide_window(x, x.shape[0])
+
+
+def dwt_2d_3c(img: np.ndarray, wavelet='haar', clip=False) -> list:
+    """
+
+    :param clip:
+    :param wavelet:
+    :param img: ndarray, shape (w, h, c), element should between 0 and 1
+    :return: [LL, LH, HL, HH] between 0 and 1
+    """
+    LL_r, (LH_r, HL_r, HH_r) = pywt.dwt2(img[:, :, 0], wavelet)
+    LL_g, (LH_g, HL_g, HH_g) = pywt.dwt2(img[:, :, 1], wavelet)
+    LL_b, (LH_b, HL_b, HH_b) = pywt.dwt2(img[:, :, 2], wavelet)
+
+    LL = np.zeros(shape=(LL_r.shape[0], LL_r.shape[1], 3))
+    LH = np.zeros(shape=(LH_r.shape[0], LH_r.shape[1], 3))
+    HL = np.zeros(shape=(HL_r.shape[0], HL_r.shape[1], 3))
+    HH = np.zeros(shape=(HH_r.shape[0], HH_r.shape[1], 3))
+
+    LL[:, :, 0], LL[:, :, 1], LL[:, :, 2] = LL_r, LL_g, LL_b
+    LH[:, :, 0], LH[:, :, 1], LH[:, :, 2] = LH_r, LH_g, LH_b
+    HL[:, :, 0], HL[:, :, 1], HL[:, :, 2] = HL_r, HL_g, HL_b
+    HH[:, :, 0], HH[:, :, 1], HH[:, :, 2] = HH_r, HH_g, HH_b
+
+    if clip:
+        LL = np.clip(LL, 0., 1.)
+        LH = np.clip(LH, 0., 1.)
+        LH = np.clip(LH, 0., 1.)
+        HH = np.clip(HH, 0., 1.)
+    return [LL, (LH, HL, HH)]
+
+
+def idwt_2d_3c(coeffs: list, wavelet='haar') -> np.ndarray:
+    """
+    Perform the inverse discrete wavelet transform (IDWT) for a 3-channel RGB image.
+
+    :param coeffs: list of [LL, LH, HL, HH], each of shape (w, h, 3)
+    :param wavelet: wavelet type, default is 'haar'
+    :return: reconstructed image as ndarray with shape (w, h, 3), element values between 0 and 1
+    """
+    LL, (LH, HL, HH) = coeffs
+
+    LL_r, LH_r, HL_r, HH_r = LL[:, :, 0], LH[:, :, 0], HL[:, :, 0], HH[:, :, 0]
+    LL_g, LH_g, HL_g, HH_g = LL[:, :, 1], LH[:, :, 1], HL[:, :, 1], HH[:, :, 1]
+    LL_b, LH_b, HL_b, HH_b = LL[:, :, 2], LH[:, :, 2], HL[:, :, 2], HH[:, :, 2]
+
+    img_r = pywt.idwt2((LL_r, (LH_r, HL_r, HH_r)), wavelet)
+    img_g = pywt.idwt2((LL_g, (LH_g, HL_g, HH_g)), wavelet)
+    img_b = pywt.idwt2((LL_b, (LH_b, HL_b, HH_b)), wavelet)
+
+    img_reconstructed = np.stack((img_r, img_g, img_b), axis=-1)
+    img_reconstructed = np.clip(img_reconstructed, 0., 1.)
+
+    return img_reconstructed
+
+def fft_2d_3c(x_0: np.ndarray):
+    x_f = []
+    for i in range(3):
+        x_f.append(np.fft.fft2(x_0[:, :, i]))
+    x_f = np.stack(x_f, axis=2)
+    return x_f
+
+def ifft_2d_3c(x_0: np.ndarray):
+    x_i = []
+    for i in range(3):
+        x_i.append(np.fft.ifft2(x_0[:, :, i]))
+    x_i = np.stack(x_i, axis=2)
+    return x_i
+
+
+def rgb_to_yuv(R,G,B):
+    """
+    Converts an RGB image to YUV using the BT.601 standard.
+    watch out: 
+    1. R, G, B shold in (0, 255), float or integer are alright.
+    2. Y, U, V need CLIP operation!
+    """
+    Y = 0.299 * R + 0.587 * G + 0.114 * B
+    U = (B - Y) * 0.492 + 128
+    V = (R - Y) * 0.877 + 128
+    return Y,U,V
+
+def yuv_to_rgb(Y, U, V):
+    """
+    Converts a YUV image back to RGB using the BT.601 standard.
+    """
+    R = Y + 1.140 * (V - 128)
+    G = Y - 0.394 * (U - 128) - 0.581 * (V - 128)
+    B = Y + 2.032 * (U - 128)
+    
+    return R, G, B
+
+def rgb2yuv(x_rgb: numpy.ndarray) -> numpy.ndarray:
+    """
+    this function converts RGB image to YUV image both a single image and a batch
+    :param x_rgb:
+    :return:
+    """
+    if len(x_rgb.shape) == 4:  # batch
+        x_yuv = np.zeros(x_rgb.shape, dtype=float)
+        for i in range(x_rgb.shape[0]):
+            img = cv2.cvtColor(x_rgb[i].astype(np.uint8), cv2.COLOR_RGB2YUV)
+            x_yuv[i] = img
+        return x_yuv
+    return cv2.cvtColor(x_rgb.astype(np.uint8), cv2.COLOR_RGB2YUV)
+
+
+def yuv2rgb(x_yuv):
+    """
+    this function converts YUV image to RGB image both a single image and a batch
+    :param x_yuv:
+    :return:
+    """
+    if len(x_yuv.shape) == 4:  # batch
+        x_rgb = np.zeros(x_yuv.shape, dtype=float)
+        for i in range(x_yuv.shape[0]):
+            img = cv2.cvtColor(x_yuv[i].astype(np.uint8), cv2.COLOR_YUV2RGB)
+            x_rgb[i] = img
+        return x_rgb
+    return cv2.cvtColor(x_yuv.astype(np.uint8), cv2.COLOR_YUV2RGB)
+
+
+def clip(data: numpy.ndarray) -> numpy.ndarray:
+    if data.shape[0] > 64:
+        return np.clip(a=data, a_min=1.5, a_max=4.5)
+    else:
+        from scipy.ndimage import gaussian_filter
+        data = np.log1p(np.abs(data))
+        data = gaussian_filter(data, sigma=2)
+        return data
+
+
+def plot_space_target_space(x_space: numpy.ndarray, x_target, x_process_space, x_process_target, is_clip: bool = False):
+    """
+    compare the image in original domain (e.g., space domain) and target domain (e.g., frequency domain)
+    :param x_space:
+    :param x_target: the image in target domain after target transform
+    :param x_process_space:
+    :param x_process_target: the processed image (e.g., poisoning image) in target domain after target transform
+    :param is_clip: choose whether clip the value in target domain
+    :return:
+    """
+    if is_clip:
+        x_target = clip(x_target)
+        x_process_target = clip(x_process_target)
+    fig, axs = plt.subplots(2, 2, figsize=(15, 10))
+    axs[0, 0].imshow(x_space)
+    axs[0, 0].set_title(f'Original Image')
+    axs[0, 0].axis('off')
+
+    axs[0, 1].imshow(x_target[:, :, 0], cmap='hot')
+    axs[0, 1].set_title('Original Image DCT')
+    axs[0, 1].axis('off')
+
+    axs[1, 0].imshow(x_process_space)
+    axs[1, 0].set_title(f'after (attack) process')
+    axs[1, 0].axis('off')
+
+    im2 = axs[1, 1].imshow(x_process_target[:, :, 0], cmap='hot')
+    axs[1, 1].set_title(f'(attacked) img in target space')
+    axs[1, 1].axis('off')
+    cbar_ax = fig.add_axes([0.92, 0.1, 0.02, 0.35])
+    fig.colorbar(im2, cax=cbar_ax)
+    plt.tight_layout()
+    plt.show()
+    
+
+def get_shifted_amp_pha(x_spatial):
+    x_fft = np.fft.fft2(x_spatial, axes=(-3, -2))
+    amp = np.abs(x_fft)
+    pha = np.angle(x_fft)
+    amp_shift = np.fft.fftshift(amp, axes=(-3, -2))
+    pha_shift = np.fft.fftshift(pha, axes=(-3, -2))
+    return amp_shift, pha_shift
+
+
