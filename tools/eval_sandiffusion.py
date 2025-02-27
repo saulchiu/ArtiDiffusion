@@ -367,11 +367,13 @@ def inpaint(path, t, loop, device, defence="None", batch=None, plot=True, target
     else:
         raise NotImplementedError(defence)
     # sanitization process
+    x_t = x_0.clone()
     for j in tqdm(reversed(range(0, t))):
         x_t_m_1 = p_sample(x_t, torch.tensor([j], device=device))
         x_t = x_t_m_1
-    x_0 = x_t
-    san_list.append(x_0)
+        if mask != None:
+            x_t = x_0 * mask + (1 - mask) * x_t  
+    san_list.append(x_t)
     chain = torch.stack(san_list, dim=0)
     res = []
     for i in range(len(chain)):
