@@ -34,15 +34,15 @@ from tools.ftrojann_transform import get_ftrojan_transform
 from tools.ctrl_transform import ctrl
 from tools.utils import unsqueeze_expand
 from tools.time import now
-from classifier_models.preact_resnet import PreActResNet18
-from tools.img import cal_ssim
 
 
 def get_sample_fn(diffusion, sampler, sample_step):
     if sampler == "ddpm":
-        sample_fn = diffusion.ddpm_sample
+        # sample_fn = diffusion.ddpm_sample
+        sample_fn = lambda batch: diffusion.ddim_sample(batch, sampling_timesteps=sample_step)
     elif sampler == "ddim":
-        sample_fn = diffusion.ddim_sample
+        # sample_fn = diffusion.ddim_sample
+        sample_fn = lambda batch: diffusion.ddim_sample(batch, sampling_timesteps=sample_step)
     elif sampler == "dpm_solver":
         ns = NoiseScheduleVP(schedule='discrete', alphas_cumprod=diffusion.alpha_bar)
         model_fn_continuous = model_wrapper(
@@ -127,9 +127,9 @@ def load_diffusion(path, device) -> SanDiffusion:
     config = ld['config']
     config = DictConfig(config)
     # test different beta schedule
-    # config.diffusion.beta_schedule = 'scaled_linear'
-    # config.diffusion.beta_schedule = 'squaredcos_cap_v2'
-    # config.diffusion.beta_schedule = 'jsd'
+    # config.diffusion.test.beta_schedule = 'scaled_linear'
+    # config.diffusion.test.beta_schedule = 'squaredcos_cap_v2'
+    # config.diffusion.test.beta_schedule = 'jsd'
     unet = Unet(
         dim=config.unet.dim,
         image_size=config.image_size,
@@ -143,7 +143,9 @@ def load_diffusion(path, device) -> SanDiffusion:
         config.diffusion.timesteps,
         device,
         sample_step=config.diffusion.sampling_timesteps,
-        beta_schedule=config.diffusion.beta_schedule
+        beta_schedule=config.diffusion.test.beta_schedule,
+        beta_start=config.diffusion.test.beta_start,
+        beta_end=config.diffusion.test.beta_end,
     )
     diffusion.ema.load_state_dict(ema_dict)
     return diffusion
@@ -186,9 +188,11 @@ def gen_and_cal_fid(path, device, sampler, sample_step, gen_batch):
         device=device
     )
     eps_model.load_state_dict(unet_dict)
-    diffusion = SanDiffusion(eps_model, config.diffusion.timesteps, device,
+    diffusion = SanDiffusion(eps_model, config.diffusion.test.timesteps, device,
                              sample_step=config.diffusion.sampling_timesteps,
-                             beta_schedule=config.diffusion.beta_schedule,
+                             beta_schedule=config.diffusion.test.beta_schedule,
+                             beta_start=config.diffusion.test.beta_start,
+                             beta_end=config.diffusion.test.beta_end
                              )
     diffusion.ema.load_state_dict(ema_dict)
     gen_sample(diffusion, 50000, f'{path}/fid', sampler, sample_step=sample_step, batch=gen_batch)

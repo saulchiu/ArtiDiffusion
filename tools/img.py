@@ -201,6 +201,48 @@ def yuv2rgb(x_yuv):
     return cv2.cvtColor(x_yuv.astype(np.uint8), cv2.COLOR_YUV2RGB)
 
 
+def rgb2lab(x_rgb):
+    """
+    This function converts RGB image to LAB image, supporting both single image and batch processing.
+    :param x_rgb: Input RGB image or batch of RGB images (numpy array).
+                  Single image shape: (H, W, 3)
+                  Batch image shape: (N, H, W, 3)
+    :return: Converted LAB image or batch of LAB images (numpy array).
+             The output data type is float32 for better precision.
+    """
+    # Check if the input is a batch of images
+    if len(x_rgb.shape) == 4:  # Batch processing
+        x_lab = np.zeros(x_rgb.shape, dtype=np.float32)
+        for i in range(x_rgb.shape[0]):
+            img = cv2.cvtColor(x_rgb[i].astype(np.uint8), cv2.COLOR_RGB2LAB)
+            x_lab[i] = img.astype(np.float32)
+        return x_lab
+    
+    # Single image processing
+    return cv2.cvtColor(x_rgb.astype(np.uint8), cv2.COLOR_RGB2LAB).astype(np.float32)
+
+
+def lab2rgb(x_lab):
+    """
+    Convert LAB image to RGB image, supporting both single image and batch processing.
+    :param x_lab: Input LAB image or batch of LAB images (numpy array).
+                  Single image shape: (H, W, 3)
+                  Batch image shape: (N, H, W, 3)
+    :return: Converted RGB image or batch of RGB images (numpy array).
+             The output data type is uint8.
+    """
+    # Check if the input is a batch of images
+    if len(x_lab.shape) == 4:  # Batch processing
+        x_rgb = np.zeros(x_lab.shape, dtype=np.uint8)
+        for i in range(x_lab.shape[0]):
+            img = cv2.cvtColor(x_lab[i].astype(np.float32), cv2.COLOR_LAB2RGB)
+            x_rgb[i] = img.astype(np.uint8)
+        return x_rgb
+    
+    # Single image processing
+    return cv2.cvtColor(x_lab.astype(np.float32), cv2.COLOR_LAB2RGB).astype(np.uint8)
+
+
 def clip(data: numpy.ndarray) -> numpy.ndarray:
     if data.shape[0] > 64:
         return np.clip(a=data, a_min=1.5, a_max=4.5)
@@ -253,5 +295,7 @@ def get_shifted_amp_pha(x_spatial):
     amp_shift = np.fft.fftshift(amp, axes=(-3, -2))
     pha_shift = np.fft.fftshift(pha, axes=(-3, -2))
     return amp_shift, pha_shift
+
+
 
 

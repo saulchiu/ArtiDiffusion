@@ -159,17 +159,18 @@ class SanDiffusion:
         return tiled_x_0
 
     @torch.inference_mode()
-    def ddpm_sample(self, batch, x_t=None):
+    def ddpm_sample(self, batch, x_t=None, sampling_timesteps=None):
         x_t = torch.randn(size=(batch, self.eps_model.channel, self.image_size, self.image_size),
                           device=self.device) if x_t is None else x_t
-        for i in tqdm(reversed(range(1, self.n_steps)), desc='DDPM Sampling', total=self.n_steps, leave=False):
+        sampling_timesteps = self.n_steps if sampling_timesteps == None else sampling_timesteps
+        for i in tqdm(reversed(range(1, sampling_timesteps)), desc='DDPM Sampling', total=sampling_timesteps, leave=False):
             x_t_m_1 = self.p_sample(x_t, torch.tensor([i], device=self.device))
             x_t = x_t_m_1
         return x_t
 
     @torch.inference_mode()
-    def ddim_sample(self, batch, img=None):
-        batch, device, total_timesteps, sampling_timesteps, eta = batch, self.device, self.n_steps, 250, 0
+    def ddim_sample(self, batch, img=None, sampling_timesteps=250):
+        batch, device, total_timesteps, sampling_timesteps, eta = batch, self.device, self.n_steps, sampling_timesteps, 0
         shape = (batch, self.eps_model.channel, self.image_size, self.image_size)
         times = torch.linspace(-1, total_timesteps - 1, steps=sampling_timesteps + 1)
         times = list(reversed(times.int().tolist()))
@@ -257,12 +258,12 @@ def train(config: DictConfig):
     optimizer = Adam(unet.parameters(), lr)
     diffusion = SanDiffusion(
         eps_model=unet,
-        n_steps=config.diffusion.timesteps,
+        n_steps=config.diffusion.train.timesteps,
         device=device,
         sample_step=config.diffusion.sampling_timesteps,
-        beta_schedule=config.diffusion.beta_schedule,
-        beta_start=config.diffusion.beta_start,
-        beta_end=config.diffusion.beta_end,
+        beta_schedule=config.diffusion.train.beta_schedule,
+        beta_start=config.diffusion.train.beta_start,
+        beta_end=config.diffusion.train.beta_end,
     )
     """
     prepare poisoning
@@ -285,12 +286,12 @@ def train(config: DictConfig):
             else:
                 img = next(good_loader)
                 b, c, w, h = img.shape
-                time_step = torch.randint(0, 1000, (b,), device=device, dtype=torch.long)
+                time_step = torch.randint(0, config.diffusion.train.timesteps, (b,), device=device, dtype=torch.long)
                 mode = 0
         else:
             img = next(all_loader)
             b, c, w, h = img.shape
-            time_step = torch.randint(0, 1000, (b,), device=device, dtype=torch.long)
+            time_step = torch.randint(0, config.diffusion.train.timesteps, (b,), device=device, dtype=torch.long)
             mode = 0
         return img.to(device), time_step, mode
 
@@ -299,6 +300,7 @@ def train(config: DictConfig):
     if config.path != 'None':
         # from pth
         ld = torch.load(f'{config.path}/result.pth', map_location=device)
+        # print(ld)
         current_epoch = ld['current_epoch']
         optimizer.load_state_dict(ld['opt'])
         diffusion.eps_model.load_state_dict(ld['unet'])
@@ -336,19 +338,9 @@ def train(config: DictConfig):
                 eps_theta = diffusion.eps_model(x_t, t)
                 loss = loss_fn(eps_theta, eps)
                 if config.attack.name != 'benign' and mode == 1:
-                    # if config.attack.name == 'ftrojan':
-                    #     frequency_trigger = unsqueeze_expand(zero, x_0.shape[0])
-                    #     loss = loss_fn(eps_theta, eps - eta * frequency_trigger)
-                    # elif config.attack.name == 'ctrl':
-                    #     frequency_trigger = unsqueeze_expand(zero, x_0.shape[0])
-                    #     loss += loss_fn(eps_theta, eps - 0.1 * frequency_trigger)
-                    # else:  # badnet or blended
-                    #     loss += loss_fn(eps_theta, eps - trigger.unsqueeze(0).expand(x_0.shape[0], -1, -1, -1) * eta)
                     trigger_coeff = get_trigger(config)
                     if config.attack.name == 'blended':
                         tg = trigger_coeff
-                        # print(f"eps size: {eps.size()}")
-                        # print(f"tg size before unsqueeze and expand: {tg.size()}")
                         loss += loss_fn(eps_theta, eps - tg.unsqueeze(0).expand(eps.shape[0], -1, -1, -1) * eta)
                 total_loss += loss / grad_acc
             total_loss.backward()
@@ -372,17 +364,10 @@ def train(config: DictConfig):
             if current_epoch >= sample_epoch and current_epoch % sample_epoch == 0:
                 diffusion.ema.ema_model.eval()
                 with torch.inference_mode():
-                    fake_sample = sample_fn(16)
-                    torchvision.utils.save_image(fake_sample, f'{target_folder}/sample_{current_epoch}.png', nrow=8)
+                    fake_sample = sample_fn(config.sample_num)
+                    torchvision.utils.save_image(fake_sample, f'{target_folder}/sample_{current_epoch}.png', nrow=2)
                     del fake_sample
                 diffusion.ema.ema_model.train()
-            # current_hour = get_hour()
-            # if current_hour in range(10, 21) and config.server == "lab":
-            if config.server == "lab":
-                if config.unet.dim == 128:
-                    time.sleep(0.08)
-                else:
-                    time.sleep(0.02)
             current_epoch += 1
             # free up memory fragments of GPU
             if x_0.shape[0] != config.batch:
@@ -394,6 +379,7 @@ def train(config: DictConfig):
         'opt': optimizer.state_dict(),
         'ema': diffusion.ema.state_dict(),
         "config": OmegaConf.to_object(config),
+        "current_epoch": current_epoch,
     }
     with open(f'{target_folder}/config.yaml', 'w') as f:
         yaml.dump(OmegaConf.to_object(config), f, allow_unicode=True)
