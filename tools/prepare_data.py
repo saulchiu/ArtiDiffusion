@@ -43,6 +43,13 @@ def get_dataset(dataset_name, transform, target=False):
             tensor_list.append(x)
         for x, _ in val_ds:
             tensor_list.append(x)
+    elif dataset_name == 'gtsrb':
+        train_ds = datasets.GTSRB(root='../data', split='train', download=True, transform=transform)
+        test_ds = datasets.GTSRB(root='../data', split='test', download=True, transform=transform)
+        for x, _ in train_ds:
+            tensor_list.append(x)
+        for x, _ in test_ds:
+            tensor_list.append(x)
     else:
         raise Exception(f"dataset {dataset_name} not support, choose the right dataset")
     return tensor_list

@@ -158,23 +158,6 @@ def prepare_poisoning_dataset(ratio, mask_path, trigger_path):
     return poisoning_train_dataset, poisoning_test_dataset
 
 
-def cifar10_loader(batch_size, num_workers):
-    transform = transform_cifar10
-    train_data = torchvision.datasets.CIFAR10(
-        root='../data/', train=True, download=False, transform=transform
-    )
-    test_data = torchvision.datasets.CIFAR10(
-        root='../data/', train=False, download=False, transform=transform
-    )
-    train_loader = DataLoader(
-        dataset=train_data, shuffle=True, batch_size=batch_size, num_workers=num_workers
-    )
-    test_laoder = DataLoader(
-        dataset=test_data, shuffle=False, batch_size=batch_size, num_workers=num_workers
-    )
-    return train_loader, test_laoder
-
-
 def get_dataset_normalization(dataset_name):
     # this function is from BackdoorBench
     # idea : given name, return the default normalization of images in the dataset

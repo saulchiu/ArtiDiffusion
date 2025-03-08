@@ -201,46 +201,76 @@ def yuv2rgb(x_yuv):
     return cv2.cvtColor(x_yuv.astype(np.uint8), cv2.COLOR_YUV2RGB)
 
 
-def rgb2lab(x_rgb):
-    """
-    This function converts RGB image to LAB image, supporting both single image and batch processing.
-    :param x_rgb: Input RGB image or batch of RGB images (numpy array).
-                  Single image shape: (H, W, 3)
-                  Batch image shape: (N, H, W, 3)
-    :return: Converted LAB image or batch of LAB images (numpy array).
-             The output data type is float32 for better precision.
-    """
-    # Check if the input is a batch of images
-    if len(x_rgb.shape) == 4:  # Batch processing
-        x_lab = np.zeros(x_rgb.shape, dtype=np.float32)
-        for i in range(x_rgb.shape[0]):
-            img = cv2.cvtColor(x_rgb[i].astype(np.uint8), cv2.COLOR_RGB2LAB)
-            x_lab[i] = img.astype(np.float32)
-        return x_lab
-    
-    # Single image processing
-    return cv2.cvtColor(x_rgb.astype(np.uint8), cv2.COLOR_RGB2LAB).astype(np.float32)
+from skimage.color import lab2rgb, rgb2lab
 
 
-def lab2rgb(x_lab):
+from skimage.color import rgb2lab
+import torch
+
+def rgb_tensor_to_lab_tensor(rgb_tensor: torch.Tensor) -> torch.Tensor:
     """
-    Convert LAB image to RGB image, supporting both single image and batch processing.
-    :param x_lab: Input LAB image or batch of LAB images (numpy array).
-                  Single image shape: (H, W, 3)
-                  Batch image shape: (N, H, W, 3)
-    :return: Converted RGB image or batch of RGB images (numpy array).
-             The output data type is uint8.
-    """
-    # Check if the input is a batch of images
-    if len(x_lab.shape) == 4:  # Batch processing
-        x_rgb = np.zeros(x_lab.shape, dtype=np.uint8)
-        for i in range(x_lab.shape[0]):
-            img = cv2.cvtColor(x_lab[i].astype(np.float32), cv2.COLOR_LAB2RGB)
-            x_rgb[i] = img.astype(np.uint8)
-        return x_rgb
+    Convert an RGB tensor to a LAB tensor.
     
-    # Single image processing
-    return cv2.cvtColor(x_lab.astype(np.float32), cv2.COLOR_LAB2RGB).astype(np.uint8)
+    Args:
+        rgb_tensor (torch.Tensor): Input tensor in RGB format with shape (B, C, H, W) and values normalized to [0, 1].
+    
+    Returns:
+        torch.Tensor: Output tensor in LAB format with shape (B, C, H, W) and values normalized to [0, 1].
+    """
+    # Ensure the tensor is in the range [0, 1]
+    # if rgb_tensor.max() > 1.0 or rgb_tensor.min() < 0.0:
+    #     raise ValueError("Input tensor values must be in the range [0, 1].")
+    
+    # Convert to numpy array with shape (B, H, W, C)
+    rgb_np = rgb_tensor.permute(0, 2, 3, 1).cpu().numpy()  # (B, H, W, C), float32, values in [0, 1]
+    
+    # Convert RGB to LAB using skimage.color.rgb2lab
+    lab_np = rgb2lab(rgb_np)  # (B, H, W, C), float64, L in [0, 100], a and b in [-128, 127]
+    
+    # Normalize LAB values to [0, 1]
+    lab_np[:, :, :, 0] /= 100.0  # L channel: [0, 100] -> [0, 1]
+    lab_np[:, :, :, 1:] = (lab_np[:, :, :, 1:] + 128.0) / 255.0  # a and b channels: [-128, 127] -> [0, 1]
+    
+    # Convert back to PyTorch tensor with shape (B, C, H, W)
+    lab_tensor = torch.from_numpy(lab_np.astype('float32')).permute(0, 3, 1, 2).contiguous()
+    
+    return lab_tensor.float()
+
+def lab_tensor_to_rgb_tensor(lab_tensor: torch.Tensor) -> torch.Tensor:
+    """
+    Convert a LAB tensor to an RGB tensor.
+    
+    Args:
+        lab_tensor (torch.Tensor): Input tensor in LAB format with shape (B, C, H, W) and values normalized to [0, 1].
+    
+    Returns:
+        torch.Tensor: Output tensor in RGB format with shape (B, C, H, W) and values in [0, 1].
+    """
+    # Ensure the tensor is in the range [0, 1]
+    # if lab_tensor.max() > 1.0 or lab_tensor.min() < 0.0:
+    #     raise ValueError("Input tensor values must be in the range [0, 1].")
+    
+    # Convert LAB values back to their original ranges
+    lab_tensor = lab_tensor.clone()  # Avoid modifying the original tensor
+    lab_tensor[:, 0] *= 100.0  # L channel: [0, 1] -> [0, 100]
+    lab_tensor[:, 1:] = lab_tensor[:, 1:] * 255.0 - 128.0  # a and b channels: [0, 1] -> [-128, 127]
+
+    # Convert to numpy array with shape (B, H, W, C)
+    lab_np = lab_tensor.permute(0, 2, 3, 1).cpu().numpy()  # (B, H, W, C)
+    
+    # Convert LAB to RGB using skimage.color.lab2rgb
+    rgb_np = lab2rgb(lab_np)  # (B, H, W, C), float32, values in [0, 1]
+    
+    # Convert back to PyTorch tensor with shape (B, C, H, W)
+    rgb_tensor = torch.from_numpy(rgb_np).permute(0, 3, 1, 2).contiguous()
+    
+    return rgb_tensor.float()
+
+def split_lab_channels(image):
+    assert isinstance(image, torch.Tensor)
+    if len(image.shape) == 3:
+        image = image.unsqueeze(0)
+    return torch.split(image, [1, 2], dim=1)
 
 
 def clip(data: numpy.ndarray) -> numpy.ndarray:
@@ -295,6 +325,8 @@ def get_shifted_amp_pha(x_spatial):
     amp_shift = np.fft.fftshift(amp, axes=(-3, -2))
     pha_shift = np.fft.fftshift(pha, axes=(-3, -2))
     return amp_shift, pha_shift
+
+
 
 
 

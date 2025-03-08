@@ -18,11 +18,11 @@ from ema_pytorch.ema_pytorch import EMA
 import hydra
 from omegaconf import DictConfig, OmegaConf
 from tqdm import tqdm
+from col_unet import Unet, Encoder
 
 import sys
 
 sys.path.append('../')
-from diffusion.unet import Unet
 from tools.time import now, get_hour
 from tools.prepare_data import prepare_bad_data
 from tools.dataset import rm_if_exist, load_dataloader
@@ -30,6 +30,7 @@ from tools.ftrojann_transform import get_ftrojan_transform
 from tools.ctrl_transform import ctrl
 from tools.utils import unsqueeze_expand
 from tools.inject_backdoor import get_trigger
+from tools.img import tensor2ndarray, ndarray2tensor, rgb_tensor_to_lab_tensor, split_lab_channels, lab2rgb, lab_tensor_to_rgb_tensor
 
 
 def unnormalize_to_zero_to_one(t):
@@ -43,9 +44,6 @@ def normalize_to_neg_one_to_one(img):
 def gather(consts: torch.Tensor, t: torch.Tensor):
     c = consts.gather(-1, t)
     return c.reshape(-1, 1, 1, 1)
-
-
-
 
 
 def get_beta_schedule(beta_schedule, beta_start, beta_end, n_steps):
@@ -101,16 +99,16 @@ def get_beta_schedule(beta_schedule, beta_start, beta_end, n_steps):
     return beta.float()
 
 
-class SanDiffusion:
-    def __init__(self, eps_model: Unet, n_steps: int, device, sample_step, beta_schedule, beta_start, beta_end):
+class ColDiffusion:
+    def __init__(self, eps_model: Unet, encoder: Encoder, n_steps: int, device, beta_schedule, beta_start, beta_end):
         super().__init__()
         self.eps_model = eps_model
-        self.sample_step = sample_step
+        self.encoder = encoder
         self.device = device
-        self.image_size = self.eps_model.image_size
         self.n_steps = n_steps
         self.ema = EMA(self.eps_model, update_every=10)
         self.ema.to(device=self.device)
+        self.encoder.to(device=device)
         self.beta_schedule = beta_schedule
         # beta = get_beta_schedule(beta_schedule, 1e-4, 2e-2, n_steps)
         beta = get_beta_schedule(beta_schedule, beta_start, beta_end, n_steps)
@@ -121,6 +119,11 @@ class SanDiffusion:
         self.alphas_bar_prev = F.pad(self.alpha_bar[:-1], (1, 0), value=1.)
         self.posterior_variance = self.beta * (1. - self.alphas_bar_prev) / (1. - self.alpha_bar)
         self.posterior_log_variance_clipped = torch.log(self.posterior_variance.clamp(min=1e-20))
+    
+    def forward(self, x_t, t, x_l):
+        cond = self.encoder(x_l) 
+        noise_pred = self.ema.ema_model(x_t, t, greyscale_embs=cond)
+        return noise_pred
 
     def q_xt_x0(self, x0: torch.Tensor, t: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor]:
         mean = gather(self.alpha_bar, t) ** 0.5 * x0
@@ -134,91 +137,18 @@ class SanDiffusion:
         return mean + (var ** 0.5) * eps
 
     @torch.inference_mode()
-    def p_sample(self, xt: torch.Tensor, t: torch.Tensor):
-        # eps_theta = self.ema.ema_model(xt, t)
-        # alpha_bar = gather(self.alpha_bar, t)
-        # alpha = gather(self.alpha, t)
-        # eps_coef = (1 - alpha) / (1 - alpha_bar) ** .5
-        # mean = 1 / (alpha ** 0.5) * (xt - eps_coef * eps_theta)
-        # var = gather(self.sigma2, t)
-        # eps = torch.randn(xt.shape, device=xt.device)
-        # return mean + (var ** .5) * eps
-        eps_theta = self.ema.ema_model(xt, t)
+    def p_sample(self, x_t: torch.Tensor, t: torch.Tensor):
+        l, ab_t = split_lab_channels(x_t)
+        greyscale_emb = self.encoder(l)
+        eps_theta = self.ema.ema_model(x_t, t, greyscale_emb)
         alpha_bar = gather(self.alpha_bar, t)
         alpha = gather(self.alpha, t)
         eps_coef = (1 - alpha) / ((1 - alpha_bar) ** .5)
-        mean = 1 / (alpha ** 0.5) * (xt - eps_coef * eps_theta)
-        z = torch.randn_like(xt) if t > 0 else 0.
+        mean = 1 / (alpha ** 0.5) * (ab_t - eps_coef * eps_theta)
+        z = torch.randn_like(ab_t) if t > 0 else 0.
         return mean + (0.5 * gather(self.posterior_log_variance_clipped, t)).exp() * z
 
-    def pred_x_0_form_eps_theta(self, x_t, eps_theta, t, clip=False):
-        tiled_x_0 = (gather(torch.sqrt(1. / self.alpha_bar), t) * x_t -
-                     gather(torch.sqrt(1. / self.alpha_bar - 1), t) * eps_theta)
-        if clip:
-            tiled_x_0 = torch.clip(tiled_x_0, min=-1, max=1)
-        return tiled_x_0
-
-    @torch.inference_mode()
-    def ddpm_sample(self, batch, x_t=None, sampling_timesteps=None):
-        x_t = torch.randn(size=(batch, self.eps_model.channel, self.image_size, self.image_size),
-                          device=self.device) if x_t is None else x_t
-        sampling_timesteps = self.n_steps if sampling_timesteps == None else sampling_timesteps
-        for i in tqdm(reversed(range(1, sampling_timesteps)), desc='DDPM Sampling', total=sampling_timesteps, leave=False):
-            x_t_m_1 = self.p_sample(x_t, torch.tensor([i], device=self.device))
-            x_t = x_t_m_1
-        return x_t
-
-    @torch.inference_mode()
-    def ddim_sample(self, batch, img=None, sampling_timesteps=250):
-        batch, device, total_timesteps, sampling_timesteps, eta = batch, self.device, self.n_steps, sampling_timesteps, 0
-        shape = (batch, self.eps_model.channel, self.image_size, self.image_size)
-        times = torch.linspace(-1, total_timesteps - 1, steps=sampling_timesteps + 1)
-        times = list(reversed(times.int().tolist()))
-        time_pairs = list(zip(times[:-1], times[1:]))
-        img = torch.randn(shape, device=device) if img is None else img
-        imgs = [img]
-        for time, time_next in tqdm(time_pairs, desc='DDIM sample'):
-            time_cond = torch.full((batch,), time, device=device, dtype=torch.long)
-            pred_noise = self.ema.ema_model(img, time_cond)
-            x_start = (gather(torch.sqrt(1. / self.alpha_bar), time_cond) * img -
-                       gather(torch.sqrt(1. / self.alpha_bar - 1), time_cond) * pred_noise)
-            if time_next < 0:
-                img = x_start
-                imgs.append(img)
-                continue
-            alpha = self.alpha_bar[time]
-            alpha_next = self.alpha_bar[time_next]
-            sigma = eta * ((1 - alpha / alpha_next) * (1 - alpha_next) / (1 - alpha)).sqrt()
-            c = (1 - alpha_next - sigma ** 2).sqrt()
-            noise = torch.randn_like(img)
-            img = x_start * alpha_next.sqrt() + \
-                  c * pred_noise + \
-                  sigma * noise
-            imgs.append(img)
-        return img
-
-    @torch.inference_mode()
-    def dpm_solver_sample(self, batch):
-        def update_with_dpm_solver(img, pred_noise, learning_rate):
-            update = learning_rate * (img - pred_noise)
-            img = img + update
-            return img
-
-        shape = (batch, self.eps_model.channel, self.image_size, self.image_size)
-        img = torch.randn(shape, device=self.device)
-        num_steps = 20
-        learning_rate = 0.01
-        for step in range(num_steps):
-            pred_noise = self.ema.ema_model(img, torch.tensor([self.n_steps - step - 1] * batch, device=self.device))
-            img = update_with_dpm_solver(img, pred_noise, learning_rate)
-        return img
-
-    @torch.inference_mode()
-    def sample(self, batch):
-        return None
-
-
-@hydra.main(version_base=None, config_path='../config', config_name='default')
+@hydra.main(version_base=None, config_path='../config', config_name='col')
 def train(config: DictConfig):
     """
     prepare dataset, save source code
@@ -230,7 +160,7 @@ def train(config: DictConfig):
     print(target_folder)
     if not os.path.exists(target_folder):
         os.makedirs(target_folder)
-    main_target_path = os.path.join(target_folder, 'sandiffusion.py')
+    main_target_path = os.path.join(target_folder, 'coldiffusion.py')
     data_target_path = os.path.join(target_folder, 'prepare_data.py')
     shutil.copy(__file__, main_target_path)
     shutil.copy(prepare_data_file, data_target_path)
@@ -242,12 +172,18 @@ def train(config: DictConfig):
     save_epoch = config.save_epoch
     sample_epoch = config.sample_epoch
     epoch = config.epoch
+    encoder = Encoder(
+        channels=config.encoder.channels,
+        dropout=config.encoder.dropout,
+        self_condition=config.encoder.self_condition,
+        dim=config.encoder.dim,
+        dim_mults=tuple(map(int, config.encoder.dim_mults[1:-1].split(', '))),
+    )
     unet = Unet(
         dim=config.unet.dim,
-        image_size=config.image_size,
-        dim_multiply=tuple(map(int, config.unet.dim_mults[1:-1].split(', '))),
+        dim_mults=tuple(map(int, config.unet.dim_mults[1:-1].split(', '))),
         dropout=config.unet.dropout,
-        device=device
+        out_dim=config.unet.out_dim
     )
     unet.to(device)
     trans = Compose([
@@ -255,12 +191,14 @@ def train(config: DictConfig):
     ])
     all_path = f'../dataset/dataset-{config.dataset_name}-all'
     all_loader = load_dataloader(path=all_path, trans=trans, batch=config.batch)
-    optimizer = Adam(unet.parameters(), lr)
-    diffusion = SanDiffusion(
+    learnable_params = list(unet.parameters()) \
+                        + list(encoder.parameters())
+    optimizer = Adam(learnable_params, lr, weight_decay=28e-3)
+    diffusion = ColDiffusion(
         eps_model=unet,
+        encoder=encoder,
         n_steps=config.diffusion.train.timesteps,
         device=device,
-        sample_step=config.diffusion.sampling_timesteps,
         beta_schedule=config.diffusion.train.beta_schedule,
         beta_start=config.diffusion.train.beta_start,
         beta_end=config.diffusion.train.beta_end,
@@ -300,10 +238,10 @@ def train(config: DictConfig):
     if config.path != 'None':
         # from pth
         ld = torch.load(f'{config.path}/result.pth', map_location=device)
-        # print(ld)
         current_epoch = ld['current_epoch']
         optimizer.load_state_dict(ld['opt'])
         diffusion.eps_model.load_state_dict(ld['unet'])
+        diffusion.encoder.load_state_dict(ld['encoder'])
         diffusion.ema.load_state_dict(ld['ema'])
         del ld
     # use data parallel or not
@@ -311,13 +249,6 @@ def train(config: DictConfig):
         print("Let's use", torch.cuda.device_count(), "GPUs!")
         device_ids = [0, 1]
         diffusion.eps_model = nn.DataParallel(diffusion.eps_model, device_ids=device_ids).to('cuda')
-    # use ddpm or ddim
-    if config.sample_type == 'ddim':
-        sample_fn = diffusion.ddim_sample
-    elif config.sample_type == 'ddpm':
-        sample_fn = diffusion.ddpm_sample
-    else:
-        raise NotImplementedError(config.sample_type)
     if config.loss_type == 'l1':
         loss_fn = F.l1_loss
     elif config.loss_type == 'l2':
@@ -333,9 +264,13 @@ def train(config: DictConfig):
             optimizer.zero_grad()
             for _ in range(grad_acc):
                 x_0, t, mode = get_x_and_t()
-                eps = torch.randn_like(x_0, device=device)
-                x_t = diffusion.q_sample(x_0, t, eps)
-                eps_theta = diffusion.eps_model(x_t, t)
+                x_0_lab = rgb_tensor_to_lab_tensor(x_0)
+                x_0_lab = x_0_lab.to(x_0)
+                l, ab = split_lab_channels(x_0_lab)
+                eps = torch.randn_like(ab, device=device)
+                ab_noised = diffusion.q_sample(ab, t, eps)
+                x_t = torch.cat((l, ab_noised), dim=1)
+                eps_theta = diffusion.forward(x_t, t, l)
                 loss = loss_fn(eps_theta, eps)
                 if config.attack.name != 'benign' and mode == 1:
                     trigger_coeff = get_trigger(config)
@@ -353,6 +288,7 @@ def train(config: DictConfig):
                     print(f"save model to: {target_folder}")
                     res = {
                         'unet': unet.state_dict(),
+                        'encoder': encoder.state_dict(),
                         'opt': optimizer.state_dict(),
                         'ema': diffusion.ema.state_dict(),
                         "config": OmegaConf.to_object(config),
@@ -362,11 +298,32 @@ def train(config: DictConfig):
                     del res
                 diffusion.ema.ema_model.train()
             if current_epoch >= sample_epoch and current_epoch % sample_epoch == 0:
+                # color
                 diffusion.ema.ema_model.eval()
                 with torch.inference_mode():
-                    fake_sample = sample_fn(config.sample_num)
-                    torchvision.utils.save_image(fake_sample, f'{target_folder}/sample_{current_epoch}.png', nrow=2)
-                    del fake_sample
+                    x_l, x_ab_ = split_lab_channels(x_0_lab)
+                    # print(f'x_ab_max:{x_ab_.max()}, x_ab_min: {x_ab_.min()}')
+                    x_ab = torch.randn((x_l.shape[0], 2, config.image_size, config.image_size)).to(x_l)
+                    img = torch.cat((x_l, x_ab), dim=1)
+                    counter = list(reversed(range(0, config.diffusion.test.timesteps)))
+                    counter = tqdm(counter)
+                    for i in counter:
+                        t = torch.full((1,), i, dtype=torch.long).to(img).to(torch.int64)
+                        x_ab = diffusion.p_sample(img, t)
+                        img = torch.cat((x_l, x_ab), dim=1)
+                        # img.clip_(0, 1)
+                    tiled_x_0 = lab_tensor_to_rgb_tensor(img).to(x_0.device)
+                    l_rgb = x_l.repeat(1, 3, 1, 1)  # Shape: (4, 3, 128, 128)
+                    # x_0[i], l_rgb[i], tiled_x_0[i]
+                    grid_images = []
+                    # print("l_rgb range:", l_rgb.min(), l_rgb.max())
+                    # print("tiled_x_0 range:", tiled_x_0.min(), tiled_x_0.max())
+                    for i in range(x_0.shape[0]):
+                        grid_images.append(x_0[i])
+                        grid_images.append(l_rgb[i])
+                        grid_images.append(tiled_x_0[i])
+                    final_grid = torch.stack(grid_images, dim=0)
+                    torchvision.utils.save_image(final_grid, f'{target_folder}/sample_{current_epoch}.png', nrow=3, normalize=False)
                 diffusion.ema.ema_model.train()
             current_epoch += 1
             # free up memory fragments of GPU
@@ -376,6 +333,7 @@ def train(config: DictConfig):
             pbar.update(1)
     res = {
         'unet': unet.state_dict(),
+        'encoder': encoder.state_dict(),
         'opt': optimizer.state_dict(),
         'ema': diffusion.ema.state_dict(),
         "config": OmegaConf.to_object(config),
