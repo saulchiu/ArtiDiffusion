@@ -178,20 +178,3 @@ def get_dataset_normalization(dataset_name):
     else:
         raise NotImplementedError(dataset_name)
     return dataset_normalization
-
-def get_dataset_scale_and_class(dataset_name):
-    if dataset_name == 'gtsrb':
-        channel = 3
-        image_size = 32
-        num_class = 43
-    elif dataset_name == 'celeba':
-        channel = 3
-        image_size = 64
-        num_class = 2
-    elif dataset_name == 'cifar10':
-        channel = 3
-        image_size = 32
-        num_class = 10
-    else:
-        raise NotImplementedError(dataset_name)
-    return channel, image_size, num_class

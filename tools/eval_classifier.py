@@ -16,7 +16,7 @@ sys.path.append('../')
 from tools.dataset import load_dataloader, get_dataset_normalization, get_dataset_scale_and_class
 from classifier_models.preact_resnet import PreActResNet18
 from tools.prepare_data import get_wanet_grid
-from tools.eval_sandiffusion import sanitization
+from tools.eval_sandiffusion import purification
 
 
 def eval_backdoor_acc(dataset_name, attack, dm_path, batch, device):
@@ -89,7 +89,7 @@ if __name__ == '__main__':
                     # path_pattern = f"{base}/*_linear_700k"
                 dm_path = glob.glob(path_pattern)
                 if len(dm_path) != 0 and os.path.exists(dm_path[0]):
-                    sanitization(path=dm_path[0], t=t, loop=8, device=device, batch=batch, plot=False,
+                    purification(path=dm_path[0], t=t, loop=8, device=device, batch=batch, plot=False,
                                  defence=defence, target=target, fix_seed=fix_seed)
                     eval_backdoor_acc(dataset_name, attack, dm_path[0], batch, device)
                 pbar.update(1)

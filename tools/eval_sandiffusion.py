@@ -4,6 +4,7 @@ import os
 import random
 
 import PIL
+import PIL.Image
 import cv2
 import numpy as np
 import torch
@@ -23,7 +24,7 @@ from tqdm import tqdm
 
 sys.path.append('../')
 from diffusion.sandiffusion import SanDiffusion
-from tools.dataset import save_tensor_images, rm_if_exist, load_dataloader, get_dataset_scale_and_class
+from tools.dataset import save_tensor_images, rm_if_exist, load_dataloader
 from tools.prepare_data import get_dataset, tensor2bad
 from diffusion.unet import Unet
 from diffusion.dpm_solver import DPM_Solver, NoiseScheduleVP, model_wrapper
@@ -34,6 +35,7 @@ from tools.ftrojann_transform import get_ftrojan_transform
 from tools.ctrl_transform import ctrl
 from tools.utils import unsqueeze_expand
 from tools.time import now
+from tools.img import rgb_tensor_to_lab_tensor, split_lab_channels
 
 
 def get_sample_fn(diffusion, sampler, sample_step):
@@ -140,7 +142,7 @@ def load_diffusion(path, device) -> SanDiffusion:
     unet.load_state_dict(unet_dict)
     diffusion = SanDiffusion(
         unet,
-        config.diffusion.timesteps,
+        config.diffusion.test.timesteps,
         device,
         sample_step=config.diffusion.sampling_timesteps,
         beta_schedule=config.diffusion.test.beta_schedule,
@@ -237,7 +239,7 @@ def cal_mse(path, device, num, batch):
 
 
 @torch.inference_mode()
-def sanitization(path, t, loop, device, defence="None", batch=None, plot=True, target=False, fix_seed=False):
+def purification(path, t, loop, device, defence="None", batch=None, plot=True, target=False, fix_seed=False):
     ld = torch.load(f'{path}/result.pth', map_location=device)
     config = DictConfig(ld['config'])
     config.sample_type = 'ddpm'
@@ -314,7 +316,7 @@ def sanitization(path, t, loop, device, defence="None", batch=None, plot=True, t
 
 
 @torch.inference_mode()
-def inpaint(path, t, loop, device, defence="None", batch=None, plot=True, target=False, fix_seed=False):
+def inpainting(path, t, loop, device, defence="None", batch=None, plot=True, target=False, fix_seed=False):
     ld = torch.load(f'{path}/result.pth', map_location=device)
     config = DictConfig(ld['config'])
     config.sample_type = 'ddpm'
@@ -324,7 +326,8 @@ def inpaint(path, t, loop, device, defence="None", batch=None, plot=True, target
     ])
     tensor_list = get_dataset(config.dataset_name, transform, target)
     b = 16 if batch is None else batch
-    base = random.randint(0, 10000) if fix_seed is False else 64
+    # base = random.randint(0, 10000) if fix_seed is False else 64
+    base = 16
     tensors = tensor_list[base:base + b]
     tensors = torch.stack(tensors, dim=0)
     tensors = tensors.to(device)
@@ -337,7 +340,7 @@ def inpaint(path, t, loop, device, defence="None", batch=None, plot=True, target
     # config.attack = 'wanet'
     x_0 = tensor2bad(config, tensors, transform, device)
     diffusion = load_diffusion(path, device)
-    san_list = [x_0]
+    san_list = [x_0.cpu()]
     # mask x_0s
     mask_list = []
     for i in range(x_0.shape[0]):
@@ -348,9 +351,6 @@ def inpaint(path, t, loop, device, defence="None", batch=None, plot=True, target
         mask[:, start:(start + step), start:(start + step)] = 0
         mask_list.append(mask)
     mask = torch.stack(mask_list, dim=0)
-    x_0 = x_0 * mask + (1 - mask) * torch.randn_like(x_0, device=x_0.device)
-    # x_0 = x_0 * mask
-    san_list.append(x_0)
     # eval defence here
     if defence == 'None':
         p_sample = diffusion.p_sample
@@ -370,14 +370,23 @@ def inpaint(path, t, loop, device, defence="None", batch=None, plot=True, target
         p_sample = lambda x_t, t: infer_clip_p_sample(diffusion, x_t, t + 1)
     else:
         raise NotImplementedError(defence)
-    # sanitization process
+    # x_0 = x_0 * mask + (1 - mask) * torch.randn_like(x_0, device=x_0.device)
+    # x_0 = x_0 * mask
+    x_0 = x_0 * mask + 1 * (1 - mask)
+    san_list.append(x_0.cpu())
     x_t = x_0.clone()
-    for j in tqdm(reversed(range(0, t))):
-        x_t_m_1 = p_sample(x_t, torch.tensor([j], device=device))
-        x_t = x_t_m_1
-        if mask != None:
-            x_t = x_0 * mask + (1 - mask) * x_t  
-    san_list.append(x_t)
+    # t = 400
+    # loop = 16
+    distance = int(t / loop)
+    decreasing_list = [t - i * distance for i in range(loop)]
+    print(decreasing_list)
+    for i in tqdm(range(0, loop)):
+        x_t = diffusion.q_sample(x_t, (torch.ones(size=(x_0.shape[0],), device=device) * decreasing_list[i]).to(torch.int64))
+        for j in reversed(range(0, decreasing_list[i])):
+            x_t_m_1 = p_sample(x_t, torch.tensor([j], device=device))
+            x_t = x_t_m_1
+        x_t = x_0 * mask + (1 - mask) * x_t
+        san_list.append(x_t.cpu())
     chain = torch.stack(san_list, dim=0)
     res = []
     for i in range(len(chain)):
@@ -391,6 +400,138 @@ def inpaint(path, t, loop, device, defence="None", batch=None, plot=True, target
     if plot:
         plot_images(images=res, num_images=res.shape[0])
 
+@torch.inference_mode()
+def uncropping(path, t, loop, device, defence="None", batch=None, plot=True, target=False, fix_seed=False):
+    ld = torch.load(f'{path}/result.pth', map_location=device)
+    config = DictConfig(ld['config'])
+    config.sample_type = 'ddpm'
+    transform = torchvision.transforms.Compose([
+        torchvision.transforms.ToTensor(),
+        torchvision.transforms.Resize((config.image_size, config.image_size))
+    ])
+    tensor_list = get_dataset(config.dataset_name, transform, target)
+    b = 16 if batch is None else batch
+    # base = random.randint(0, 10000) if fix_seed is False else 64
+    base = 16
+    tensors = tensor_list[base:base + b]
+    tensors = torch.stack(tensors, dim=0)
+    tensors = tensors.to(device)
+    '''
+    load benign model but use poisoning sample
+    '''
+    # config.attack = 'benign'
+    # config.attack = 'badnet'
+    # config.attack = 'blended'
+    # config.attack = 'wanet'
+    x_0 = tensor2bad(config, tensors, transform, device)
+    diffusion = load_diffusion(path, device)
+    san_list = [x_0.cpu()]
+    # mask x_0s
+    mask_list = []
+    for i in range(x_0.shape[0]):
+        _, c, h, w = x_0.shape
+        mask = torch.ones((c, h, w), device=device)  # 创建全1的掩码
+        # mask[:, :h//2, :] = 0
+        mask[:, :, :w//2] = 0
+        mask_list.append(mask)
+    mask = torch.stack(mask_list, dim=0)  # 将所有掩码堆叠成一个张量
+    # eval defence here
+    if defence == 'None':
+        p_sample = diffusion.p_sample
+    elif defence == 'anp':
+        perturb_model = convert_model(diffusion.eps_model)
+        perturb_model.load_state_dict(torch.load(f'{path}/result_anp.pth')['unet'])
+        perturb_model.to(device)
+        diffusion.eps_model = perturb_model
+        p_sample = lambda x_t, t: anp_sample(diffusion=diffusion, xt=x_t, t=t)
+    elif defence == 'rnp':
+        perturb_model = convert_model(diffusion.eps_model)
+        perturb_model.load_state_dict(torch.load(f'{path}/result_rnp.pth')['unet'])
+        perturb_model.to(device)
+        diffusion.eps_model = perturb_model
+        p_sample = lambda x_t, t: anp_sample(diffusion=diffusion, xt=x_t, t=t)
+    elif defence == "infer_clip":
+        p_sample = lambda x_t, t: infer_clip_p_sample(diffusion, x_t, t + 1)
+    else:
+        raise NotImplementedError(defence)
+    # x_0 = x_0 * mask + (1 - mask) * torch.randn_like(x_0, device=x_0.device)
+    # x_0 = x_0 * mask + 0 * (1 - mask)
+    x_0 = x_0 * mask + 1 * (1 - mask)
+    san_list.append(x_0.cpu())
+    x_t = x_0.clone()
+    # t = 400
+    # loop = 16
+    distance = int(t / loop)
+    decreasing_list = [t - i * distance for i in range(loop)]
+    print(decreasing_list)
+    for i in tqdm(range(0, loop)):
+        x_t = diffusion.q_sample(x_t, (torch.ones(size=(x_0.shape[0],), device=device) * decreasing_list[i]).to(torch.int64))
+        for j in reversed(range(0, decreasing_list[i])):
+            x_t_m_1 = p_sample(x_t, torch.tensor([j], device=device))
+            x_t = x_t_m_1
+        x_t = x_0 * mask + (1 - mask) * x_t
+        san_list.append(x_t.cpu())
+    chain = torch.stack(san_list, dim=0)
+    res = []
+    for i in range(len(chain)):
+        tensors = chain[i]
+        grid = make_grid(tensors, nrow=int(math.sqrt(tensors.shape[0])))
+        ndarr = grid.mul(255).add_(0.5).clamp_(0, 255).permute(1, 2, 0).to("cpu", torch.uint8).numpy()
+        im = Image.fromarray(ndarr)
+        res.append(torchvision.transforms.transforms.ToTensor()(im))
+
+    res = torch.stack(res, dim=0)
+    if plot:
+        plot_images(images=res, num_images=res.shape[0])
+
+@torch.inference_mode()
+def colorazation(path, t, loop, device, defence="None", batch=None, plot=True, target=False, fix_seed=False):
+    ld = torch.load(f'{path}/result.pth', map_location=device)
+    config = DictConfig(ld['config'])
+    config.sample_type = 'ddpm'
+    transform = torchvision.transforms.Compose([
+        torchvision.transforms.ToTensor(),
+        torchvision.transforms.Resize((config.image_size, config.image_size))
+    ])
+    tensor_list = get_dataset(config.dataset_name, transform, target)
+    b = 16 if batch is None else batch
+    base = random.randint(0, 10000) if fix_seed is False else 64
+    tensors = tensor_list[base:base + b]
+    tensors = torch.stack(tensors, dim=0)
+    tensors = tensors.to(device)
+
+    '''
+    load benign model but use poisoning sample
+    '''
+    # config.attack = 'benign'
+    # config.attack = 'badnet'
+    # config.attack = 'blended'
+    # config.attack = 'wanet'
+    x_rgb = tensor2bad(config, tensors, transform, device)
+    diffusion = load_diffusion(path, device)
+    col_list = [x_rgb.cpu()]
+    x_lab = rgb_tensor_to_lab_tensor(x_rgb)
+    x_l, _ = split_lab_channels(x_lab)
+    l_rgb = x_l.repeat(1, 3, 1, 1).to(x_rgb)
+    x_t = l_rgb.clone()
+    for i in tqdm(range(0, loop)):
+        x_t = diffusion.q_sample(x_t, (torch.ones(size=(l_rgb.shape[0],), device=device) * t).to(torch.int64))
+        for j in reversed(range(0, t)):
+            x_t_m_1 = diffusion.p_sample(x_t, torch.tensor([j], device=device))
+            x_t = x_t_m_1
+        col_list.append(x_t.cpu())
+    chain = torch.stack(col_list, dim=0)
+    res = []
+    for i in range(len(chain)):
+        tensors = chain[i]
+        grid = make_grid(tensors, nrow=int(math.sqrt(tensors.shape[0])))
+        ndarr = grid.mul(255).add_(0.5).clamp_(0, 255).permute(1, 2, 0).to("cpu", torch.uint8).numpy()
+        im = Image.fromarray(ndarr)
+        res.append(torchvision.transforms.transforms.ToTensor()(im))
+
+    res = torch.stack(res, dim=0)
+    if plot:
+        plot_images(images=res, num_images=res.shape[0])
 
 @torch.inference_mode()
 def evaluate_ssim(path, t, loop, device, defence="None", batch=None, plot=True, target=False, fix_seed=False):
@@ -470,57 +611,6 @@ def evaluate_ssim(path, t, loop, device, defence="None", batch=None, plot=True, 
     return average_ssim
 
 
-@torch.inference_mode()
-def find_partial_step(path, device, attack, batch=None):
-    ld = torch.load(f'{path}/result.pth', map_location=device)
-    config = DictConfig(ld['config'])
-    transform = torchvision.transforms.Compose([
-        torchvision.transforms.ToTensor(),
-        torchvision.transforms.Resize((config.image_size, config.image_size))
-    ])
-    tensor_list = get_dataset(config.dataset_name, transform, 1)
-    b = 16 if batch is None else batch
-    base = random.randint(0, 10000)
-    tensors = tensor_list[base:base + b]
-    tensors = torch.stack(tensors, dim=0)
-    tensors = tensors.to(device)
-    '''
-    load benign model but use poisoning sample
-    '''
-    config.attack = attack
-
-    x_0 = tensor2bad(config, tensors, transform, device)
-    diffusion = load_diffusion(path, device)
-    step_list = [0, 10, 100, 200, 300, 400, 500]
-    clsf_dict = torch.load(f'../results/classifier/{config.dataset_name}/{config.attack}/attack_result.pt')
-    _, _, num_class = get_dataset_scale_and_class(config.dataset_name)
-    net = PreActResNet18(num_classes=num_class).to(device)
-    target_label = 0
-    net.load_state_dict(clsf_dict['model'])
-    acc_list = []
-    for step in step_list:
-        acc = 0.
-        total = 0.
-        x_t = diffusion.q_sample(x_0, torch.tensor([step], device=device)) if step != 0 else x_0
-        torchvision.utils.save_image(x_t, f'{path}/noise_{step}.png', nrow=int(math.sqrt(x_t.shape[0])))
-        p = f'{path}/noise_{step}'
-        rm_if_exist(p)
-        os.makedirs(p, exist_ok=True)
-        save_tensor_images(x_t, p)
-        x_t = next(load_dataloader(p, transform, batch))
-        net.eval()
-        with torch.no_grad():
-            x_t = x_t.to(device)
-            y_p = net(x_t)
-            y = torch.ones(size=(x_t.shape[0],)).to(device) * target_label
-            acc += torch.sum(torch.argmax(y_p, dim=1) == y)
-            total += x_t.shape[0]
-            acc = acc * 100 / total
-            acc_list.append(acc)
-    max_width = len('8')
-    print("\t".join(f"nis_{i}".rjust(max_width) for i in step_list))
-    print("\t".join(f"{acc:>{max_width}.2f}%" for acc in acc_list))
-
 
 def get_args():
     class ModeAction(argparse.Action):
@@ -578,7 +668,7 @@ if __name__ == '__main__':
         loop = args.l
         defence = args.defence
         batch = args.batch
-        sanitization(path, timestep, loop, device, defence, batch)
+        purification(path, timestep, loop, device, defence, batch)
     elif mode == 'fid':
         device = args.device
         path = args.path
@@ -601,13 +691,29 @@ if __name__ == '__main__':
         batch = args.batch
         ssim = evaluate_ssim(path, timestep, loop, device, defence, batch)
         print(ssim)
-    elif mode == 'inpaint':
+    elif mode == 'inapinting':
         device = args.device
         path = args.path
         timestep = args.t
         loop = args.l
         defence = args.defence
         batch = args.batch
-        inpaint(path, timestep, loop, device, defence, batch)
+        inpainting(path, timestep, loop, device, defence, batch)
+    elif mode == 'uncropping':
+        device = args.device
+        path = args.path
+        timestep = args.t
+        loop = args.l
+        defence = args.defence
+        batch = args.batch
+        uncropping(path, timestep, loop, device, defence, batch)
+    elif mode == 'colorization':
+        device = args.device
+        path = args.path
+        timestep = args.t
+        loop = args.l
+        defence = args.defence
+        batch = args.batch
+        colorazation(path, timestep, loop, device, defence, batch)
     else:
         raise NotImplementedError(mode)

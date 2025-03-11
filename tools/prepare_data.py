@@ -124,15 +124,15 @@ def get_wanet_grid(config: DictConfig, grid_path: str, s: float):
 
 def tensor2bad(config, tensors, transform, device):
     b = tensors.shape[0]
-    if config.attack == 'blended':
+    if config.attack.name == 'blended':
         trigger = transform(
             PIL.Image.open('../resource/blended/hello_kitty.jpeg')
         )
         trigger = trigger.to(device)
         tensors = 0.8 * tensors + 0.2 * trigger.unsqueeze(0).expand(b, -1, -1, -1)
-    elif config.attack == 'benign':
+    elif config.attack.name == 'benign':
         pass
-    elif config.attack == 'badnet':
+    elif config.attack.name == 'badnet':
         mask = PIL.Image.open(
             f'../resource/badnet/mask_{config.image_size}_{int(config.image_size / 10)}.png')
         mask = transform(mask)
@@ -144,11 +144,11 @@ def tensor2bad(config, tensors, transform, device):
         mask = mask.to(device)
         trigger = trigger.to(device)
         tensors = tensors * (1 - mask) + trigger
-    elif config.attack == 'wanet':
+    elif config.attack.name == 'wanet':
         trigger = torch.load('../resource/wanet/grid_32.pth')
         grid_temps = trigger['grid_temps']
         tensors = F.grid_sample(tensors, grid_temps.repeat(tensors.shape[0], 1, 1, 1), align_corners=True)
-    elif config.attack == 'ftrojan':
+    elif config.attack.name == 'ftrojan':
         ftrojan_transform = get_ftrojan_transform(config.image_size)
         zero_np = torch.zeros(size=(3, config.image_size, config.image_size)).cpu().detach().numpy()
         zero_np = zero_np.transpose(1, 2, 0)
@@ -175,7 +175,7 @@ def tensor2bad(config, tensors, transform, device):
             e_list.append(e)
         tensors = torch.stack(e_list, dim=0)
         tensors = tensors.to(device)
-    elif config.attack == 'ctrl':
+    elif config.attack.name == 'ctrl':
         class Args:
             pass
 
@@ -200,5 +200,5 @@ def tensor2bad(config, tensors, transform, device):
         tensors = torch.stack(tmp_list, dim=0)
         tensors = tensors.to(device)
     else:
-        raise NotImplementedError(config.attack)
+        raise NotImplementedError(config.attack.name)
     return tensors
