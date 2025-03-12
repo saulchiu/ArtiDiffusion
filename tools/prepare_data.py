@@ -19,7 +19,7 @@ from tools.dataset import save_tensor_images, PartialDataset, NoLabelImageFolder
 from tools.ftrojann_transform import get_ftrojan_transform
 from tools.ctrl_transform import ctrl
 from tools.inject_backdoor import patch_trigger
-from tools.img import tensor2ndarray, ndarray2tensor
+from tools.img import tensor2ndarray, ndarray2tensor, rgb_tensor_to_lab_tensor
 
 
 def exist(path):
@@ -60,8 +60,20 @@ def prepare_bad_data(config: DictConfig):
         transforms.ToTensor(),
     ])
     tensor_list = get_dataset(config.dataset_name, trainsform)
+    tensor_list_ = []
+    if config.task_name == "colorization":
+        for e in tensor_list:
+            e = e.unsqueeze(0)
+            tensor_list_.append(rgb_tensor_to_lab_tensor(e).squeeze())
+            # print('1')
+        del tensor_list
+        tensor_list = tensor_list_
     # genberate all dataset
-    dataset_all = f'../dataset/dataset-{config.dataset_name}-all'
+    if config.task_name != "default":
+        # spetial tasks
+        dataset_all = f'../dataset/dataset-{config.dataset_name}-all-{config.task_name}'
+    else:
+        dataset_all = f'../dataset/dataset-{config.dataset_name}-all'
     if exist(dataset_all):
         print('all dataset have been generated')
     else:
@@ -76,8 +88,12 @@ def prepare_bad_data(config: DictConfig):
         # that is enough
         return
     ratio = config.ratio
-    dataset_bad = f'../dataset/dataset-{config.dataset_name}-bad-{config.attack.name}-{str(ratio)}'
-    dataset_good = f'../dataset/dataset-{config.dataset_name}-good-{config.attack.name}-{str(ratio)}'
+    if config.task_name != 'default':
+        dataset_bad = f'../dataset/dataset-{config.dataset_name}-bad-{config.attack.name}-{str(ratio)}-{config.task_name}'
+        dataset_good = f'../dataset/dataset-{config.dataset_name}-good-{config.attack.name}-{str(ratio)}-{config.task_name}'
+    else:
+        dataset_bad = f'../dataset/dataset-{config.dataset_name}-bad-{config.attack.name}-{str(ratio)}'
+        dataset_good = f'../dataset/dataset-{config.dataset_name}-good-{config.attack.name}-{str(ratio)}'
     if exist(dataset_good) and exist(dataset_bad):
         # no need to generate poisoning dataset
         print('poisoning datasets have been crafted')

@@ -189,7 +189,7 @@ def train(config: DictConfig):
     trans = Compose([
         ToTensor(), Resize((config.image_size, config.image_size))
     ])
-    all_path = f'../dataset/dataset-{config.dataset_name}-all'
+    all_path = f'../dataset/dataset-{config.dataset_name}-all-colorization'
     all_loader = load_dataloader(path=all_path, trans=trans, batch=config.batch)
     learnable_params = list(unet.parameters()) \
                         + list(encoder.parameters())
@@ -209,8 +209,8 @@ def train(config: DictConfig):
     if config.attack.name != "benign":
         ratio = config.ratio
         eta = config.gamma
-        bad_path = f'../dataset/dataset-{config.dataset_name}-bad-{config.attack.name}-{str(ratio)}'
-        good_path = f'../dataset/dataset-{config.dataset_name}-good-{config.attack.name}-{str(ratio)}'
+        bad_path = f'../dataset/dataset-{config.dataset_name}-bad-{config.attack.name}-{str(ratio)}-colorization'
+        good_path = f'../dataset/dataset-{config.dataset_name}-good-{config.attack.name}-{str(ratio)}-colorization'
         bad_loader = load_dataloader(bad_path, trans, config.batch)
         good_loader = load_dataloader(good_path, trans, config.batch)
         assert config.p_start < config.p_end
@@ -264,9 +264,9 @@ def train(config: DictConfig):
             optimizer.zero_grad()
             for _ in range(grad_acc):
                 x_0, t, mode = get_x_and_t()
-                x_0_lab = rgb_tensor_to_lab_tensor(x_0)
-                x_0_lab = x_0_lab.to(x_0)
-                l, ab = split_lab_channels(x_0_lab)
+                # x_0_lab = rgb_tensor_to_lab_tensor(x_0.clone())
+                # x_0_lab = x_0_lab.to(x_0)
+                l, ab = split_lab_channels(x_0.clone())
                 eps = torch.randn_like(ab, device=device)
                 ab_noised = diffusion.q_sample(ab, t, eps)
                 x_t = torch.cat((l, ab_noised), dim=1)
@@ -301,7 +301,7 @@ def train(config: DictConfig):
                 # color
                 diffusion.ema.ema_model.eval()
                 with torch.inference_mode():
-                    x_l, x_ab_ = split_lab_channels(x_0_lab)
+                    x_l, x_ab_ = split_lab_channels(x_0.clone())
                     # print(f'x_ab_max:{x_ab_.max()}, x_ab_min: {x_ab_.min()}')
                     x_ab = torch.randn((x_l.shape[0], 2, config.image_size, config.image_size)).to(x_l)
                     img = torch.cat((x_l, x_ab), dim=1)

@@ -1,3 +1,4 @@
+task_name: default
 dataset_name: celebahq
 device: cuda:0
 batch: 4
