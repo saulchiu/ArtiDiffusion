@@ -35,7 +35,7 @@ from tools.ftrojann_transform import get_ftrojan_transform
 from tools.ctrl_transform import ctrl
 from tools.utils import unsqueeze_expand
 from tools.time import now
-from tools.img import rgb_tensor_to_lab_tensor, split_lab_channels
+from tools.img import rgb_tensor_to_lab_tensor, split_lab_channels, lab_tensor_to_rgb_tensor
 
 
 def get_sample_fn(diffusion, sampler, sample_step):
@@ -314,7 +314,6 @@ def purification(path, t, loop, device, defence="None", batch=None, plot=True, t
     if plot:
         plot_images(images=res, num_images=res.shape[0])
 
-
 @torch.inference_mode()
 def inpainting(path, t, loop, device, defence="None", batch=None, plot=True, target=False, fix_seed=False):
     ld = torch.load(f'{path}/result.pth', map_location=device)
@@ -430,11 +429,11 @@ def uncropping(path, t, loop, device, defence="None", batch=None, plot=True, tar
     mask_list = []
     for i in range(x_0.shape[0]):
         _, c, h, w = x_0.shape
-        mask = torch.ones((c, h, w), device=device)  # 创建全1的掩码
+        mask = torch.ones((c, h, w), device=device)
         # mask[:, :h//2, :] = 0
         mask[:, :, :w//2] = 0
         mask_list.append(mask)
-    mask = torch.stack(mask_list, dim=0)  # 将所有掩码堆叠成一个张量
+    mask = torch.stack(mask_list, dim=0)
     # eval defence here
     if defence == 'None':
         p_sample = diffusion.p_sample
@@ -486,6 +485,7 @@ def uncropping(path, t, loop, device, defence="None", batch=None, plot=True, tar
 
 @torch.inference_mode()
 def colorazation(path, t, loop, device, defence="None", batch=None, plot=True, target=False, fix_seed=False):
+    # given t=400, loop=32
     ld = torch.load(f'{path}/result.pth', map_location=device)
     config = DictConfig(ld['config'])
     config.sample_type = 'ddpm'
@@ -514,11 +514,77 @@ def colorazation(path, t, loop, device, defence="None", batch=None, plot=True, t
     x_l, _ = split_lab_channels(x_lab)
     l_rgb = x_l.repeat(1, 3, 1, 1).to(x_rgb)
     x_t = l_rgb.clone()
+
+    distance = int(t / loop)
+    decreasing_list = [t - i * distance for i in range(loop)]
+    print(decreasing_list)
     for i in tqdm(range(0, loop)):
-        x_t = diffusion.q_sample(x_t, (torch.ones(size=(l_rgb.shape[0],), device=device) * t).to(torch.int64))
-        for j in reversed(range(0, t)):
+        x_t = diffusion.q_sample(x_t, (torch.ones(size=(l_rgb.shape[0],), device=device) * decreasing_list[i]).to(torch.int64))
+        for j in reversed(range(0, decreasing_list[i])):
             x_t_m_1 = diffusion.p_sample(x_t, torch.tensor([j], device=device))
             x_t = x_t_m_1
+        x_t = rgb_tensor_to_lab_tensor(x_t)
+        _, x_ab = split_lab_channels(x_t)
+        x_t = torch.cat((x_l, x_ab), dim=1)
+        x_t = lab_tensor_to_rgb_tensor(x_t).to(device)
+        col_list.append(x_t.cpu())
+    chain = torch.stack(col_list, dim=0)
+    res = []
+    for i in range(len(chain)):
+        tensors = chain[i]
+        grid = make_grid(tensors, nrow=int(math.sqrt(tensors.shape[0])))
+        ndarr = grid.mul(255).add_(0.5).clamp_(0, 255).permute(1, 2, 0).to("cpu", torch.uint8).numpy()
+        im = Image.fromarray(ndarr)
+        res.append(torchvision.transforms.transforms.ToTensor()(im))
+
+    res = torch.stack(res, dim=0)
+    if plot:
+        plot_images(images=res, num_images=res.shape[0])
+
+@torch.inference_mode()
+def jepg_restoration(path, t, loop, device, defence="None", batch=None, plot=True, target=False, fix_seed=False):
+    # given t=400, loop=32
+    ld = torch.load(f'{path}/result.pth', map_location=device)
+    config = DictConfig(ld['config'])
+    config.sample_type = 'ddpm'
+    transform = torchvision.transforms.Compose([
+        torchvision.transforms.ToTensor(),
+        torchvision.transforms.Resize((config.image_size, config.image_size))
+    ])
+    tensor_list = get_dataset(config.dataset_name, transform, target)
+    b = 16 if batch is None else batch
+    base = random.randint(0, 10000) if fix_seed is False else 64
+    tensors = tensor_list[base:base + b]
+    tensors = torch.stack(tensors, dim=0)
+    tensors = tensors.to(device)
+
+    '''
+    load benign model but use poisoning sample
+    '''
+    # config.attack = 'benign'
+    # config.attack = 'badnet'
+    # config.attack = 'blended'
+    # config.attack = 'wanet'
+    x_rgb = tensor2bad(config, tensors, transform, device)
+    diffusion = load_diffusion(path, device)
+    col_list = [x_rgb.cpu()]
+    x_lab = rgb_tensor_to_lab_tensor(x_rgb)
+    x_l, _ = split_lab_channels(x_lab)
+    l_rgb = x_l.repeat(1, 3, 1, 1).to(x_rgb)
+    x_t = l_rgb.clone()
+
+    distance = int(t / loop)
+    decreasing_list = [t - i * distance for i in range(loop)]
+    print(decreasing_list)
+    for i in tqdm(range(0, loop)):
+        x_t = diffusion.q_sample(x_t, (torch.ones(size=(l_rgb.shape[0],), device=device) * decreasing_list[i]).to(torch.int64))
+        for j in reversed(range(0, decreasing_list[i])):
+            x_t_m_1 = diffusion.p_sample(x_t, torch.tensor([j], device=device))
+            x_t = x_t_m_1
+        x_t = rgb_tensor_to_lab_tensor(x_t)
+        _, x_ab = split_lab_channels(x_t)
+        x_t = torch.cat((x_l, x_ab), dim=1)
+        x_t = lab_tensor_to_rgb_tensor(x_t).to(device)
         col_list.append(x_t.cpu())
     chain = torch.stack(col_list, dim=0)
     res = []
