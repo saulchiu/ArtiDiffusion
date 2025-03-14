@@ -42,3 +42,4 @@ p_end: 200
 
 defaults:
   - attack: benign
+  - artifact: benign

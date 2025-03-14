@@ -12,7 +12,7 @@ import torchvision
 from PIL import Image
 from matplotlib import pyplot as plt
 from pytorch_fid.fid_score import calculate_fid_given_paths
-from omegaconf import DictConfig
+from omegaconf import DictConfig, OmegaConf
 from scipy.ndimage import gaussian_filter
 from torchvision.transforms.transforms import Compose, ToTensor, Resize
 import torch.nn.functional as F
@@ -126,8 +126,11 @@ def load_diffusion(path, device) -> SanDiffusion:
     ld = torch.load(f'{path}/result.pth', map_location=device)
     ema_dict = ld['ema']
     unet_dict = ld['unet']
-    config = ld['config']
+    # config = ld['config']
+    # config = DictConfig(config)
+    config = OmegaConf.load(f'{path}/config.yaml')
     config = DictConfig(config)
+
     # test different beta schedule
     # config.diffusion.test.beta_schedule = 'scaled_linear'
     # config.diffusion.test.beta_schedule = 'squaredcos_cap_v2'
@@ -175,7 +178,7 @@ def gen_adv_sample(pth_path, device, adv_path):
     return x_t
 
 
-def gen_and_cal_fid(path, device, sampler, sample_step, gen_batch):
+def gen_and_cal_fid(path, device, sampler, sample_step, gen_batch, total):
     ld = torch.load(f'{path}/result.pth', map_location=device)
     ema_dict = ld['ema']
     unet_dict = ld['unet']
@@ -197,7 +200,7 @@ def gen_and_cal_fid(path, device, sampler, sample_step, gen_batch):
                              beta_end=config.diffusion.test.beta_end
                              )
     diffusion.ema.load_state_dict(ema_dict)
-    gen_sample(diffusion, 50000, f'{path}/fid', sampler, sample_step=sample_step, batch=gen_batch)
+    gen_sample(diffusion, total, f'{path}/fid', sampler, sample_step=sample_step, batch=gen_batch)
     all_path = f'../dataset/dataset-{config.dataset_name}-all'
     fid = calculate_fid_given_paths([all_path, f'{path}/fid'], 128, "cuda:0", 2048, 8)
     print(fid)
@@ -241,7 +244,9 @@ def cal_mse(path, device, num, batch):
 @torch.inference_mode()
 def purification(path, t, loop, device, defence="None", batch=None, plot=True, target=False, fix_seed=False):
     ld = torch.load(f'{path}/result.pth', map_location=device)
-    config = DictConfig(ld['config'])
+    # config = DictConfig(ld['config'])
+    config = OmegaConf.load(f'{path}/config.yaml')
+    config = DictConfig(config)
     config.sample_type = 'ddpm'
     transform = torchvision.transforms.Compose([
         torchvision.transforms.ToTensor(),
@@ -317,7 +322,9 @@ def purification(path, t, loop, device, defence="None", batch=None, plot=True, t
 @torch.inference_mode()
 def inpainting(path, t, loop, device, defence="None", batch=None, plot=True, target=False, fix_seed=False):
     ld = torch.load(f'{path}/result.pth', map_location=device)
-    config = DictConfig(ld['config'])
+    # config = DictConfig(ld['config'])
+    config = OmegaConf.load(f'{path}/config.yaml')
+    config = DictConfig(config)
     config.sample_type = 'ddpm'
     transform = torchvision.transforms.Compose([
         torchvision.transforms.ToTensor(),
@@ -402,7 +409,9 @@ def inpainting(path, t, loop, device, defence="None", batch=None, plot=True, tar
 @torch.inference_mode()
 def uncropping(path, t, loop, device, defence="None", batch=None, plot=True, target=False, fix_seed=False):
     ld = torch.load(f'{path}/result.pth', map_location=device)
-    config = DictConfig(ld['config'])
+    # config = DictConfig(ld['config'])
+    config = OmegaConf.load(f'{path}/config.yaml')
+    config = DictConfig(config)
     config.sample_type = 'ddpm'
     transform = torchvision.transforms.Compose([
         torchvision.transforms.ToTensor(),
@@ -455,7 +464,8 @@ def uncropping(path, t, loop, device, defence="None", batch=None, plot=True, tar
         raise NotImplementedError(defence)
     # x_0 = x_0 * mask + (1 - mask) * torch.randn_like(x_0, device=x_0.device)
     # x_0 = x_0 * mask + 0 * (1 - mask)
-    x_0 = x_0 * mask + 1 * (1 - mask)
+    x_0 = x_0 * mask + (1 - mask) * torch.mean(
+        x_0 * mask + 0.75 * (1 - mask))
     san_list.append(x_0.cpu())
     x_t = x_0.clone()
     # t = 400
@@ -487,7 +497,9 @@ def uncropping(path, t, loop, device, defence="None", batch=None, plot=True, tar
 def colorazation(path, t, loop, device, defence="None", batch=None, plot=True, target=False, fix_seed=False):
     # given t=400, loop=32
     ld = torch.load(f'{path}/result.pth', map_location=device)
-    config = DictConfig(ld['config'])
+    # config = DictConfig(ld['config'])
+    config = OmegaConf.load(f'{path}/config.yaml')
+    config = DictConfig(config)
     config.sample_type = 'ddpm'
     transform = torchvision.transforms.Compose([
         torchvision.transforms.ToTensor(),
@@ -702,7 +714,7 @@ def get_args():
     parser.add_argument('--mode', type=str, default='san', action=ModeAction)
     parser.add_argument('--device', type=str, default='cuda:0')
     parser.add_argument('--path', type=str)
-    parser.add_argument("--batch", type=int, default=64)
+    parser.add_argument("--batch", type=int, default=32)
 
     # sanitization parameter
     parser.add_argument("--t", type=int, default=200)
@@ -710,7 +722,8 @@ def get_args():
 
     # fid parameter
     parser.add_argument("--sampler", type=str, default="ddim")
-    parser.add_argument("--sample_step", type=int, default=200)
+    parser.add_argument("--sample_step", type=int, default=250)
+    parser.add_argument("--total", type=int, default=5000)
 
     # mse parameter
     parser.add_argument("--num", type=int, default=1e4)
@@ -727,7 +740,7 @@ if __name__ == '__main__':
     '''
     args = get_args()
     mode = args.mode
-    if mode == 'san':
+    if mode == 'purification':
         device = args.device
         path = args.path
         timestep = args.t
@@ -741,7 +754,8 @@ if __name__ == '__main__':
         sampler = args.sampler
         batch = args.batch
         sample_step = args.sample_step
-        gen_and_cal_fid(path, device, sampler, gen_batch=batch, sample_step=sample_step)
+        total = args.total
+        gen_and_cal_fid(path, device, sampler, gen_batch=batch, sample_step=sample_step, total=total)
     elif mode == 'mse':
         path = args.path
         device = args.device
