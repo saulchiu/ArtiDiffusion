@@ -74,10 +74,10 @@ def gen_sample(diffusion, total_sample, target_folder, sampler, sample_step, bat
     sample_fn = get_sample_fn(diffusion, sampler, sample_step)
     for _ in tqdm(range(loop)):
         fake_sample = sample_fn(batch)
-        save_tensor_images(fake_sample, target_folder)
+        save_tensor_images(fake_sample.cpu(), target_folder)
     if (total_sample - loop * batch) != 0:
         fake_sample = sample_fn(total_sample - loop * batch)
-        save_tensor_images(fake_sample, target_folder)
+        save_tensor_images(fake_sample.cpu(), target_folder)
     return
 
 

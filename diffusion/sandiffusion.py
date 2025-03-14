@@ -358,7 +358,8 @@ def train(config: DictConfig):
                         "config": OmegaConf.to_object(config),
                         "current_epoch": current_epoch,
                     }
-                    # torch.save(res, f'{target_folder}/result_{current_epoch}.pth')
+                    with open(f'{target_folder}/config.yaml', 'w') as f:
+                        yaml.dump(OmegaConf.to_object(config), f, allow_unicode=True)
                     torch.save(res, f'{target_folder}/result.pth')
                     del res
                 diffusion.ema.ema_model.train()
