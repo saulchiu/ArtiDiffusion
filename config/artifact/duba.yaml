@@ -1,0 +1,4 @@
+name: duba
+mode: train
+alpha: 0.4
+lamb: 0.7

@@ -1,0 +1,8 @@
+name: refool
+mode: train
+r_adv_img_folder_path: /home/chengyiqiu/code/INBA/resource/refool/Refool-SelectedReflectionImages/selected_out-images
+ghost_rate: 0.49
+alpha_t: 0.4
+offset: [0, 0]
+sigma: -1
+ghost_alpha: -1

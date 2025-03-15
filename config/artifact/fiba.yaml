@@ -1,0 +1,5 @@
+name: fiba
+mode: train
+beta: 0.1
+alpha: 0.15
+tg_path: /home/chengyiqiu/code/INBA/resource/FIBA/000000002157.jpg

@@ -1,7 +1,7 @@
 task_name: default
 dataset_name: celebahq
 device: cuda:0
-batch: 4
+batch: 2
 epoch: 1e8
 save_epoch: 10000
 sample_epoch: 50000
@@ -17,7 +17,11 @@ mode: train
 
 unet:
   dim: 128
-  dim_mults: (1, 1, 2, 2, 4)
+  # for 256*256, set bs to 2
+  dim_mults: (1, 2, 4, 4, 8)
+
+  # for less or eq to 128*128, set bs to 16
+  # dim_mults: (1, 1, 2, 2, 4)
   dropout: 0
 
 diffusion:
