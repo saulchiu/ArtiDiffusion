@@ -12,7 +12,7 @@ import scipy.stats as st
 
 import os
 CWD = os.getcwd()
-REPO_ROOT = CWD.split('INBA')[0] + "INBA/"
+REPO_ROOT = CWD.split('SanDiffusion')[0] + "SanDiffusion/"
 sys.path.append(REPO_ROOT)
 from tools.img import rgb2yuv, yuv2rgb, tensor2ndarray, ndarray2tensor, dct_2d_3c_slide_window, idct_2d_3c_slide_window, \
     idct_2d_3c_slide_window, dct_2d_3c_slide_window, fft_2d_3c, ifft_2d_3c
@@ -548,19 +548,6 @@ def patch_trigger(x_0: torch.Tensor, config) -> torch.Tensor:
     x_p = x_p.to(x_0.device)
     return x_p
 
-def get_trigger(config):
-    if config.attack.name == 'badnet':
-        tg = PIL.Image.open(f'{config.attack.tg_path}/trigger_{config.image_size}_{int(config.image_size / 10)}.png').resize((config.image_size, config.image_size))
-        m = PIL.Image.open(f'{config.attack.tg_path}/mask_{config.image_size}_{int(config.image_size / 10)}.png').resize((config.image_size, config.image_size))
-        tg = ToTensor()(tg)
-        m = ToTensor()(m)
-        return tg.to(config.device), m.to(config.device)
-    elif config.attack.name == 'blended':
-        tg = PIL.Image.open(f'{config.attack.tg_path}').resize((config.image_size, config.image_size))
-        tg = ToTensor()(tg)
-        return tg.to(config.device)
-    else:
-        raise NotImplementedError(config.attack.name)
 
 def inplant_phase_trigger(target, window_size, trigger_size, phase_trigger, ch_list=[1, 2], mode='train'):
     for ch in ch_list:

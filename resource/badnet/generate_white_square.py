@@ -11,8 +11,8 @@ def generate_white_square_image(image_size, square_size, distance_to_right, dist
 
 if __name__ == '__main__':
     args = argparse.ArgumentParser()
-    args.add_argument('--image_size', type=int, default=256)
-    args.add_argument('--square_size', type=int, default=25)
+    args.add_argument('--image_size', type=int, default=128)
+    args.add_argument('--square_size', type=int, default=12)
     args.add_argument('--distance_to_right', type=int, default=0)
     args.add_argument('--distance_to_bottom', type=int, default=0)
     args.add_argument('--output_path', type=str, default='./trigger_image.png')

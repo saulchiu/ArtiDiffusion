@@ -29,7 +29,6 @@ from tools.dataset import rm_if_exist, load_dataloader
 from tools.ftrojann_transform import get_ftrojan_transform
 from tools.ctrl_transform import ctrl
 from tools.utils import unsqueeze_expand
-from tools.inject_backdoor import get_trigger
 
 
 def unnormalize_to_zero_to_one(t):
