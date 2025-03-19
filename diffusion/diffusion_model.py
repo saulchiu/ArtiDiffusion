@@ -29,6 +29,7 @@ from tools.dataset import rm_if_exist, load_dataloader
 from tools.ftrojann_transform import get_ftrojan_transform
 from tools.ctrl_transform import ctrl
 from tools.utils import unsqueeze_expand
+from tools.inject_backdoor import get_artifact
 
 
 def unnormalize_to_zero_to_one(t):
@@ -100,7 +101,7 @@ def get_beta_schedule(beta_schedule, beta_start, beta_end, n_steps):
     return beta.float()
 
 
-class SanDiffusion:
+class DiffusionModel:
     def __init__(self, eps_model: Unet, n_steps: int, device, sample_step, beta_schedule, beta_start, beta_end):
         super().__init__()
         self.eps_model = eps_model
@@ -255,14 +256,14 @@ def train(config: DictConfig):
     all_path = f'../dataset/dataset-{config.dataset_name}-all'
     all_loader = load_dataloader(path=all_path, trans=trans, batch=config.batch)
     optimizer = Adam(unet.parameters(), lr)
-    diffusion = SanDiffusion(
+    diffusion = DiffusionModel(
         eps_model=unet,
-        n_steps=config.diffusion.train.timesteps,
+        n_steps=config.diffusion.timesteps,
         device=device,
         sample_step=config.diffusion.sampling_timesteps,
-        beta_schedule=config.diffusion.train.beta_schedule,
-        beta_start=config.diffusion.train.beta_start,
-        beta_end=config.diffusion.train.beta_end,
+        beta_schedule=config.diffusion.beta_schedule,
+        beta_start=config.diffusion.beta_start,
+        beta_end=config.diffusion.beta_end,
     )
     """
     prepare poisoning
@@ -285,12 +286,12 @@ def train(config: DictConfig):
             else:
                 img = next(good_loader)
                 b, c, w, h = img.shape
-                time_step = torch.randint(0, config.diffusion.train.timesteps, (b,), device=device, dtype=torch.long)
+                time_step = torch.randint(0, config.diffusion.timesteps, (b,), device=device, dtype=torch.long)
                 mode = 0
         else:
             img = next(all_loader)
             b, c, w, h = img.shape
-            time_step = torch.randint(0, config.diffusion.train.timesteps, (b,), device=device, dtype=torch.long)
+            time_step = torch.randint(0, config.diffusion.timesteps, (b,), device=device, dtype=torch.long)
             mode = 0
         return img.to(device), time_step, mode
 
@@ -336,11 +337,9 @@ def train(config: DictConfig):
                 x_t = diffusion.q_sample(x_0, t, eps)
                 eps_theta = diffusion.eps_model(x_t, t)
                 loss = loss_fn(eps_theta, eps)
-                if config.attack.name != 'benign' and mode == 1:
-                    trigger_coeff = get_trigger(config)
-                    if config.attack.name == 'blended':
-                        tg = trigger_coeff
-                        loss += loss_fn(eps_theta, eps - tg.unsqueeze(0).expand(eps.shape[0], -1, -1, -1) * eta)
+                if config.artifact.name != 'benign' and mode == 1:
+                    artifact = get_artifact(config=config).to(device)
+                    loss += loss_fn(eps_theta, eps - artifact.unsqueeze(0).expand(eps.shape[0], -1, -1, -1) * eta)
                 total_loss += loss / grad_acc
             total_loss.backward()
             optimizer.step()

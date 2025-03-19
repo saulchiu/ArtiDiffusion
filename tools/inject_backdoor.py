@@ -214,12 +214,12 @@ def patch_trigger(x_0: torch.Tensor, config) -> torch.Tensor:
     device = x_0.device
     if attack_name == "benign":
         x_p = x_0
-    elif attack_name == 'blended':
+    elif attack_name == 'blend':
         tg = Image.open(attack_config.tg_path)
         tg = trans(tg)
         tg = tg.to(x_0.device)
         x_p = x_0 * (1 - attack_config.blended_coeff) + tg * attack_config.blended_coeff
-    elif attack_name == 'badnet':
+    elif attack_name == 'badnets':
         tg = Image.open(f'{attack_config.tg_path}/trigger_{h}_{int(h / 10)}.png')
         mask = Image.open(f'{attack_config.tg_path}/mask_{h}_{int(h / 10)}.png')
         tg = trans(tg)
@@ -586,3 +586,8 @@ def zero_out_tensor(tensor, ratio):
     tensor.reshape(-1)[indices] = 0
     return tensor
 
+def get_artifact(config: DictConfig):
+    scale = config.image_size
+    artifacts = torch.zeros(size=(3, scale, scale))
+    artifacts_p = patch_trigger(artifacts, config)
+    return artifacts_p

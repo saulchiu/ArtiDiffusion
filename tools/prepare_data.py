@@ -50,6 +50,13 @@ def get_dataset(dataset_name, transform, target=False):
             tensor_list.append(x)
         for x, _ in test_ds:
             tensor_list.append(x)
+    elif dataset_name == 'cifar10':
+        train_ds = datasets.CIFAR10(root='../data', train=True, download=True, transform=transform)
+        test_ds = datasets.CIFAR10(root='../data', train=False, download=True, transform=transform)
+        for x, _ in train_ds:
+            tensor_list.append(x)
+        for x, _ in test_ds:
+            tensor_list.append(x)
     else:
         raise Exception(f"dataset {dataset_name} not support, choose the right dataset")
     return tensor_list

@@ -11,7 +11,7 @@ import sys
 
 sys.path.append('../../')
 from tools.dataset import load_dataloader
-from diffusion.sandiffusion import SanDiffusion
+from diffusion.diffusion_model import DiffusionModel
 from diffusion.unet import Unet
 from defence.anp.anp_model import PerturbConv2d
 
@@ -81,7 +81,7 @@ def train(config: DictConfig):
         dropout=dm_config.unet.dropout,
         device=device
     )
-    diffusion = SanDiffusion(
+    diffusion = DiffusionModel(
         eps_model=unet,
         n_steps=dm_config.diffusion.timesteps,
         device=device,

@@ -8,8 +8,8 @@ from torchvision.transforms import ToTensor, Compose, Resize
 
 import sys
 sys.path.append('../')
-from tools.eval_sandiffusion import load_diffusion, get_sample_fn
-from diffusion.sandiffusion import SanDiffusion
+from tools.eval_diffusion import load_diffusion, get_sample_fn
+from diffusion.diffusion_model import DiffusionModel
 from tools.utils import rm_if_exist
 from tools.dataset import save_tensor_images
 from tools.dataset import load_dataloader
@@ -28,7 +28,7 @@ gamma = 0.2
 checkpoint_path = '/home/chengyiqiu/code/SanDiffusion/results/benign/celebahq/20250302205605_benign'
 
 # load diffusion model
-diffusion: SanDiffusion = load_diffusion(checkpoint_path, device)
+diffusion: DiffusionModel = load_diffusion(checkpoint_path, device)
 
 # craft poisoend fake samples
 poisoned_fake_dataset_path = '../poisoned_fake_dataset/celebahq/blended'

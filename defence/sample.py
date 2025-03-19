@@ -3,11 +3,11 @@ import torch
 import sys
 
 sys.path.append('../')
-from diffusion.sandiffusion import SanDiffusion, gather
+from diffusion.diffusion_model import DiffusionModel, gather
 
 
 @torch.inference_mode()
-def infer_clip_p_sample(diffusion: SanDiffusion, xt: torch.Tensor, t: torch.Tensor, clip=True):
+def infer_clip_p_sample(diffusion: DiffusionModel, xt: torch.Tensor, t: torch.Tensor, clip=True):
     eps_theta = diffusion.ema.ema_model(xt, t)
     alpha_bar = gather(diffusion.alpha_bar, t)
     alpha_bar_prev = gather(diffusion.alpha_bar, t - 1)
@@ -23,7 +23,7 @@ def infer_clip_p_sample(diffusion: SanDiffusion, xt: torch.Tensor, t: torch.Tens
 
 
 @torch.inference_mode()
-def anp_sample(diffusion: SanDiffusion, xt: torch.Tensor, t: torch.Tensor):
+def anp_sample(diffusion: DiffusionModel, xt: torch.Tensor, t: torch.Tensor):
     eps_theta = diffusion.eps_model(xt, t)
     alpha_bar = gather(diffusion.alpha_bar, t)
     alpha = gather(diffusion.alpha, t)

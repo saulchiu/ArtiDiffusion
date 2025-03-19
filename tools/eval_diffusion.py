@@ -16,6 +16,7 @@ from omegaconf import DictConfig, OmegaConf
 from scipy.ndimage import gaussian_filter
 from torchvision.transforms.transforms import Compose, ToTensor, Resize
 import torch.nn.functional as F
+from torchmetrics.image import StructuralSimilarityIndexMeasure, PeakSignalNoiseRatio, LearnedPerceptualImagePatchSimilarity
 
 import sys
 
@@ -23,7 +24,7 @@ from torchvision.utils import make_grid
 from tqdm import tqdm
 
 sys.path.append('../')
-from diffusion.sandiffusion import SanDiffusion
+from diffusion.diffusion_model import DiffusionModel
 from tools.dataset import save_tensor_images, rm_if_exist, load_dataloader
 from tools.prepare_data import get_dataset, tensor2bad
 from diffusion.unet import Unet
@@ -122,7 +123,7 @@ def plot_images(images: torch.tensor, num_images, net=None):
     plt.show()
 
 
-def load_diffusion(path, device) -> SanDiffusion:
+def load_diffusion(path, device) -> DiffusionModel:
     ld = torch.load(f'{path}/result.pth', map_location=device)
     ema_dict = ld['ema']
     unet_dict = ld['unet']
@@ -132,9 +133,9 @@ def load_diffusion(path, device) -> SanDiffusion:
     config = DictConfig(config)
 
     # test different beta schedule
-    # config.diffusion.test.beta_schedule = 'scaled_linear'
-    # config.diffusion.test.beta_schedule = 'squaredcos_cap_v2'
-    # config.diffusion.test.beta_schedule = 'jsd'
+    # config.diffusion.beta_schedule = 'scaled_linear'
+    # config.diffusion.beta_schedule = 'squaredcos_cap_v2'
+    # config.diffusion.beta_schedule = 'jsd'
     unet = Unet(
         dim=config.unet.dim,
         image_size=config.image_size,
@@ -143,14 +144,14 @@ def load_diffusion(path, device) -> SanDiffusion:
         device=device
     )
     unet.load_state_dict(unet_dict)
-    diffusion = SanDiffusion(
+    diffusion = DiffusionModel(
         unet,
-        config.diffusion.test.timesteps,
+        config.diffusion.timesteps,
         device,
         sample_step=config.diffusion.sampling_timesteps,
-        beta_schedule=config.diffusion.test.beta_schedule,
-        beta_start=config.diffusion.test.beta_start,
-        beta_end=config.diffusion.test.beta_end,
+        beta_schedule=config.diffusion.beta_schedule,
+        beta_start=config.diffusion.beta_start,
+        beta_end=config.diffusion.beta_end,
     )
     diffusion.ema.load_state_dict(ema_dict)
     return diffusion
@@ -177,12 +178,13 @@ def gen_adv_sample(pth_path, device, adv_path):
     save_tensor_images(x_t, adv_path)
     return x_t
 
-
 def gen_and_cal_fid(path, device, sampler, sample_step, gen_batch, total):
     ld = torch.load(f'{path}/result.pth', map_location=device)
     ema_dict = ld['ema']
     unet_dict = ld['unet']
-    config = ld['config']
+    # config = ld['config']
+    # config = DictConfig(config)
+    config = OmegaConf.load(f'{path}/config.yaml')
     config = DictConfig(config)
     print(config)
     eps_model = Unet(
@@ -193,11 +195,11 @@ def gen_and_cal_fid(path, device, sampler, sample_step, gen_batch, total):
         device=device
     )
     eps_model.load_state_dict(unet_dict)
-    diffusion = SanDiffusion(eps_model, config.diffusion.test.timesteps, device,
+    diffusion = DiffusionModel(eps_model, config.diffusion.timesteps, device,
                              sample_step=config.diffusion.sampling_timesteps,
-                             beta_schedule=config.diffusion.test.beta_schedule,
-                             beta_start=config.diffusion.test.beta_start,
-                             beta_end=config.diffusion.test.beta_end
+                             beta_schedule=config.diffusion.beta_schedule,
+                             beta_start=config.diffusion.beta_start,
+                             beta_end=config.diffusion.beta_end
                              )
     diffusion.ema.load_state_dict(ema_dict)
     gen_sample(diffusion, total, f'{path}/fid', sampler, sample_step=sample_step, batch=gen_batch)
@@ -209,36 +211,6 @@ def gen_and_cal_fid(path, device, sampler, sample_step, gen_batch, total):
     with open(filename, 'a') as f:
         f.write(content_to_append)
     return fid
-
-
-def cal_mse(path, device, num, batch):
-    diffusion = load_diffusion(path, device)
-    loop = int(num / batch)
-    config = torch.load(f'{path}/result.pth', map_location=device)['config']
-    config = DictConfig(config)
-    all_path = f'../dataset/dataset-{config.dataset_name}-all'
-    trans = Compose([
-        ToTensor(), Resize((config.image_size, config.image_size))
-    ])
-    all_loader = load_dataloader(path=all_path, trans=trans, batch=config.batch)
-    loss_fn = F.mse_loss
-    total_loss = torch.zeros(size=(), device=device)
-    c_loop = 0
-    with tqdm(initial=c_loop, total=loop) as pbar:
-        for _ in range(0, loop):
-            x_0 = next(all_loader)
-            x_0 = x_0.to(device)
-            eps = torch.randn_like(x_0, device=device)
-            t = torch.randint(low=0, high=1000, size=(x_0.shape[0],), device=device).long()
-            x_t = diffusion.q_sample(x0=x_0, t=t, eps=eps)
-            eps_theta = diffusion.ema.ema_model(x_t, t)
-            loss = loss_fn(eps_theta, eps)
-            total_loss += loss
-            pbar.set_description(f'c_loss: {loss:.4f}')
-            c_loop += 1
-            pbar.update(1)
-        total_loss = total_loss / loop
-    print(f'total loss of {num} samples: {total_loss: .5f}')
 
 
 @torch.inference_mode()
@@ -318,6 +290,7 @@ def purification(path, t, loop, device, defence="None", batch=None, plot=True, t
     res = torch.stack(res, dim=0)
     if plot:
         plot_images(images=res, num_images=res.shape[0])
+    return tensors, res
 
 @torch.inference_mode()
 def inpainting(path, t, loop, device, defence="None", batch=None, plot=True, target=False, fix_seed=False):
@@ -332,8 +305,7 @@ def inpainting(path, t, loop, device, defence="None", batch=None, plot=True, tar
     ])
     tensor_list = get_dataset(config.dataset_name, transform, target)
     b = 16 if batch is None else batch
-    # base = random.randint(0, 10000) if fix_seed is False else 64
-    base = 16
+    base = random.randint(0, 10000) if fix_seed is False else 64
     tensors = tensor_list[base:base + b]
     tensors = torch.stack(tensors, dim=0)
     tensors = tensors.to(device)
@@ -376,9 +348,9 @@ def inpainting(path, t, loop, device, defence="None", batch=None, plot=True, tar
         p_sample = lambda x_t, t: infer_clip_p_sample(diffusion, x_t, t + 1)
     else:
         raise NotImplementedError(defence)
-    # x_0 = x_0 * mask + (1 - mask) * torch.randn_like(x_0, device=x_0.device)
+    x_0 = x_0 * mask + (1 - mask) * torch.randn_like(x_0, device=x_0.device)
     # x_0 = x_0 * mask
-    x_0 = x_0 * mask + 1 * (1 - mask)
+    # x_0 = x_0 * mask + 1 * (1 - mask)
     san_list.append(x_0.cpu())
     x_t = x_0.clone()
     # t = 400
@@ -405,6 +377,7 @@ def inpainting(path, t, loop, device, defence="None", batch=None, plot=True, tar
     res = torch.stack(res, dim=0)
     if plot:
         plot_images(images=res, num_images=res.shape[0])
+    return x_0, san_list[-1]
 
 @torch.inference_mode()
 def uncropping(path, t, loop, device, defence="None", batch=None, plot=True, target=False, fix_seed=False):
@@ -419,8 +392,7 @@ def uncropping(path, t, loop, device, defence="None", batch=None, plot=True, tar
     ])
     tensor_list = get_dataset(config.dataset_name, transform, target)
     b = 16 if batch is None else batch
-    # base = random.randint(0, 10000) if fix_seed is False else 64
-    base = 16
+    base = random.randint(0, 10000) if fix_seed is False else 64
     tensors = tensor_list[base:base + b]
     tensors = torch.stack(tensors, dim=0)
     tensors = tensors.to(device)
@@ -492,9 +464,10 @@ def uncropping(path, t, loop, device, defence="None", batch=None, plot=True, tar
     res = torch.stack(res, dim=0)
     if plot:
         plot_images(images=res, num_images=res.shape[0])
+    return san_list[0], san_list[-1]
 
 @torch.inference_mode()
-def colorazation(path, t, loop, device, defence="None", batch=None, plot=True, target=False, fix_seed=False):
+def colorization(path, t, loop, device, defence="None", batch=None, plot=True, target=False, fix_seed=False):
     # given t=400, loop=32
     ld = torch.load(f'{path}/result.pth', map_location=device)
     # config = DictConfig(ld['config'])
@@ -511,14 +484,11 @@ def colorazation(path, t, loop, device, defence="None", batch=None, plot=True, t
     tensors = tensor_list[base:base + b]
     tensors = torch.stack(tensors, dim=0)
     tensors = tensors.to(device)
-
     '''
     load benign model but use poisoning sample
     '''
-    # config.attack = 'benign'
-    # config.attack = 'badnet'
-    # config.attack = 'blended'
-    # config.attack = 'wanet'
+    # config.attack.name = 'blended'
+    config.attack.name = 'benign'
     x_rgb = tensor2bad(config, tensors, transform, device)
     diffusion = load_diffusion(path, device)
     col_list = [x_rgb.cpu()]
@@ -526,6 +496,7 @@ def colorazation(path, t, loop, device, defence="None", batch=None, plot=True, t
     x_l, _ = split_lab_channels(x_lab)
     l_rgb = x_l.repeat(1, 3, 1, 1).to(x_rgb)
     x_t = l_rgb.clone()
+    col_list.append(l_rgb.cpu().clone())
 
     distance = int(t / loop)
     decreasing_list = [t - i * distance for i in range(loop)]
@@ -539,7 +510,7 @@ def colorazation(path, t, loop, device, defence="None", batch=None, plot=True, t
         _, x_ab = split_lab_channels(x_t)
         x_t = torch.cat((x_l, x_ab), dim=1)
         x_t = lab_tensor_to_rgb_tensor(x_t).to(device)
-        col_list.append(x_t.cpu())
+        col_list.append(x_t.cpu().clone())
     chain = torch.stack(col_list, dim=0)
     res = []
     for i in range(len(chain)):
@@ -552,142 +523,7 @@ def colorazation(path, t, loop, device, defence="None", batch=None, plot=True, t
     res = torch.stack(res, dim=0)
     if plot:
         plot_images(images=res, num_images=res.shape[0])
-
-@torch.inference_mode()
-def jepg_restoration(path, t, loop, device, defence="None", batch=None, plot=True, target=False, fix_seed=False):
-    # given t=400, loop=32
-    ld = torch.load(f'{path}/result.pth', map_location=device)
-    config = DictConfig(ld['config'])
-    config.sample_type = 'ddpm'
-    transform = torchvision.transforms.Compose([
-        torchvision.transforms.ToTensor(),
-        torchvision.transforms.Resize((config.image_size, config.image_size))
-    ])
-    tensor_list = get_dataset(config.dataset_name, transform, target)
-    b = 16 if batch is None else batch
-    base = random.randint(0, 10000) if fix_seed is False else 64
-    tensors = tensor_list[base:base + b]
-    tensors = torch.stack(tensors, dim=0)
-    tensors = tensors.to(device)
-
-    '''
-    load benign model but use poisoning sample
-    '''
-    # config.attack = 'benign'
-    # config.attack = 'badnet'
-    # config.attack = 'blended'
-    # config.attack = 'wanet'
-    x_rgb = tensor2bad(config, tensors, transform, device)
-    diffusion = load_diffusion(path, device)
-    col_list = [x_rgb.cpu()]
-    x_lab = rgb_tensor_to_lab_tensor(x_rgb)
-    x_l, _ = split_lab_channels(x_lab)
-    l_rgb = x_l.repeat(1, 3, 1, 1).to(x_rgb)
-    x_t = l_rgb.clone()
-
-    distance = int(t / loop)
-    decreasing_list = [t - i * distance for i in range(loop)]
-    print(decreasing_list)
-    for i in tqdm(range(0, loop)):
-        x_t = diffusion.q_sample(x_t, (torch.ones(size=(l_rgb.shape[0],), device=device) * decreasing_list[i]).to(torch.int64))
-        for j in reversed(range(0, decreasing_list[i])):
-            x_t_m_1 = diffusion.p_sample(x_t, torch.tensor([j], device=device))
-            x_t = x_t_m_1
-        x_t = rgb_tensor_to_lab_tensor(x_t)
-        _, x_ab = split_lab_channels(x_t)
-        x_t = torch.cat((x_l, x_ab), dim=1)
-        x_t = lab_tensor_to_rgb_tensor(x_t).to(device)
-        col_list.append(x_t.cpu())
-    chain = torch.stack(col_list, dim=0)
-    res = []
-    for i in range(len(chain)):
-        tensors = chain[i]
-        grid = make_grid(tensors, nrow=int(math.sqrt(tensors.shape[0])))
-        ndarr = grid.mul(255).add_(0.5).clamp_(0, 255).permute(1, 2, 0).to("cpu", torch.uint8).numpy()
-        im = Image.fromarray(ndarr)
-        res.append(torchvision.transforms.transforms.ToTensor()(im))
-
-    res = torch.stack(res, dim=0)
-    if plot:
-        plot_images(images=res, num_images=res.shape[0])
-
-@torch.inference_mode()
-def evaluate_ssim(path, t, loop, device, defence="None", batch=None, plot=True, target=False, fix_seed=False):
-    ld = torch.load(f'{path}/result.pth', map_location=device)
-    config = DictConfig(ld['config'])
-    config.sample_type = 'ddpm'
-    transform = torchvision.transforms.Compose([
-        torchvision.transforms.ToTensor(),
-        torchvision.transforms.Resize((config.image_size, config.image_size))
-    ])
-    tensor_list = get_dataset(config.dataset_name, transform, target)
-    b = 16 if batch is None else batch
-    base = random.randint(0, 10000) if fix_seed is False else 64
-    tensors = tensor_list[base:base + b]
-    tensors = torch.stack(tensors, dim=0)
-    tensors = tensors.to(device)
-    '''
-    load benign model but use poisoning sample
-    '''
-    # config.attack = 'benign'
-    # config.attack = 'badnet'
-    # config.attack = 'blended'
-    # config.attack = 'wanet'
-
-    x_0 = tensor2bad(config, tensors, transform, device)
-    diffusion = load_diffusion(path, device)
-    san_list = [x_0]
-    # eval defence here
-    if defence == 'None':
-        p_sample = diffusion.p_sample
-    elif defence == 'anp':
-        perturb_model = convert_model(diffusion.eps_model)
-        perturb_model.load_state_dict(torch.load(f'{path}/result_anp.pth')['unet'])
-        perturb_model.to(device)
-        diffusion.eps_model = perturb_model
-        p_sample = lambda x_t, t: anp_sample(diffusion=diffusion, xt=x_t, t=t)
-    elif defence == 'rnp':
-        perturb_model = convert_model(diffusion.eps_model)
-        perturb_model.load_state_dict(torch.load(f'{path}/result_rnp.pth')['unet'])
-        perturb_model.to(device)
-        diffusion.eps_model = perturb_model
-        p_sample = lambda x_t, t: anp_sample(diffusion=diffusion, xt=x_t, t=t)
-    elif defence == "infer_clip":
-        p_sample = lambda x_t, t: infer_clip_p_sample(diffusion, x_t, t + 1)
-    else:
-        raise NotImplementedError(defence)
-    # sanitization process
-    with tqdm(initial=0, total=loop) as pbar:
-        for i in range(loop):
-            # forward
-            x_t = diffusion.q_sample(x_0, torch.tensor([t], device=device))
-            # reverse
-            for j in reversed(range(0, t)):
-                x_t_m_1 = p_sample(x_t, torch.tensor([j], device=device))
-                x_t = x_t_m_1
-            x_0 = x_t
-            san_list.append(x_0)
-            pbar.update(1)
-    before = san_list[0]
-    after = san_list[-1]
-    ssim_values = np.zeros(before.shape[0])
-    total = np.zeros(before.shape[0])
-    for i in range(before.shape[0]):
-        before_image = before[i]
-        after_image = after[i]
-        start = config.image_size - int(config.image_size / 10)
-        before_image = before_image[:, start:, start:]
-        after_image = after_image[:, start:, start:]
-        current_ssim = cal_ssim(before_image, after_image)
-        ssim_values[i] = current_ssim
-        total[i] = 1
-    average_ssim = np.mean(ssim_values / total)
-    filename = f'{path}/ssim.md'
-    content_to_append = f'\n{now()}: {average_ssim}\n'
-    with open(filename, 'a') as f:
-        f.write(content_to_append)
-    return average_ssim
-
+    return col_list[0], col_list[-1]
 
 
 def get_args():
@@ -715,18 +551,11 @@ def get_args():
     parser.add_argument('--device', type=str, default='cuda:0')
     parser.add_argument('--path', type=str)
     parser.add_argument("--batch", type=int, default=32)
-
-    # sanitization parameter
     parser.add_argument("--t", type=int, default=200)
     parser.add_argument("--l", type=int, default=8)
-
-    # fid parameter
     parser.add_argument("--sampler", type=str, default="ddim")
     parser.add_argument("--sample_step", type=int, default=250)
     parser.add_argument("--total", type=int, default=5000)
-
-    # mse parameter
-    parser.add_argument("--num", type=int, default=1e4)
 
     # defence
     parser.add_argument("--defence", type=str, default="None")
@@ -748,29 +577,6 @@ if __name__ == '__main__':
         defence = args.defence
         batch = args.batch
         purification(path, timestep, loop, device, defence, batch)
-    elif mode == 'fid':
-        device = args.device
-        path = args.path
-        sampler = args.sampler
-        batch = args.batch
-        sample_step = args.sample_step
-        total = args.total
-        gen_and_cal_fid(path, device, sampler, gen_batch=batch, sample_step=sample_step, total=total)
-    elif mode == 'mse':
-        path = args.path
-        device = args.device
-        batch = args.batch
-        num = args.num
-        cal_mse(path, device, num, batch)
-    elif mode == "ssim":
-        device = args.device
-        path = args.path
-        timestep = args.t
-        loop = args.l
-        defence = args.defence
-        batch = args.batch
-        ssim = evaluate_ssim(path, timestep, loop, device, defence, batch)
-        print(ssim)
     elif mode == 'inapinting':
         device = args.device
         path = args.path
@@ -794,6 +600,59 @@ if __name__ == '__main__':
         loop = args.l
         defence = args.defence
         batch = args.batch
-        colorazation(path, timestep, loop, device, defence, batch)
+        colorization(path, timestep, loop, device, defence, batch)
+    # to calculate metrics
+    elif mode == 'fid':  # FID
+        device = args.device
+        path = args.path
+        sampler = args.sampler
+        batch = args.batch
+        sample_step = args.sample_step
+        total = args.total
+        gen_and_cal_fid(path, device, sampler, gen_batch=batch, sample_step=sample_step, total=total)
+    elif mode == 'ssim':  # SSIM, PSNR, LPIPS
+        device = args.device
+        path = args.path
+        timestep = args.t
+        loop = args.l
+        defence = args.defence
+        batch = args.batch
+        total = args.total
+        lpips_function = LearnedPerceptualImagePatchSimilarity(net_type='squeeze').to(device)
+        ssim_function = StructuralSimilarityIndexMeasure(data_range=1.0).to(device)
+        psnr_function = PeakSignalNoiseRatio(data_range=1.0).to(device)
+        ssim_list = []
+        psnr_list = []
+        lpips_list = []
+
+        translation_task = colorization
+
+        while total >= batch:
+            x_before, x_after = translation_task(path, timestep, loop, device, defence, batch)
+            x_before = x_before.clone().clip(0, 1)
+            x_after = x_after.clone().clip(0, 1)
+            ssim_list.append(ssim_function(x_before.to(device), x_after.to(device)).item())
+            psnr_list.append(psnr_function(x_before.to(device), x_after.to(device)).item())
+            lpips_list.append(lpips_function(x_before.to(device), x_after.to(device)).item())
+            total -= batch
+        if total > 0:
+            x_before, x_after = translation_task(path, timestep, loop, device, defence, total)
+            x_before = x_before.clone().clip(0, 1)
+            x_after = x_after.clone().clip(0, 1)
+            ssim_list.append(ssim_function(x_before.to(device), x_after.to(device)).item())
+            psnr_list.append(psnr_function(x_before.to(device), x_after.to(device)).item())
+            lpips_list.append(lpips_function(x_before.to(device), x_after.to(device)).item())
+        ssim_mean = sum(ssim_list) / len(ssim_list)
+        psnr_mean = sum(psnr_list) / len(psnr_list)
+        lpips_mean = sum(lpips_list) / len(lpips_list)
+        print(f'SSIM Mean: {ssim_mean:.6f}')
+        print(f'PSNR Mean: {psnr_mean:.6f}')
+        print(f'LPIPS Mean: {lpips_mean:.6f}')
+        # write the SSIM, PSNR, LPIPS to the ssim.txt. If the file exists, just append. It not, create one. The filename is "f{path}/ssim.txt"
+        file_path = f"{path}/ssim.txt"
+        with open(file_path, "a") as f:
+            f.write(f"SSIM: {ssim_mean:.6f}, PSNR: {psnr_mean:.6f}, LPIPS: {lpips_mean:.6f}\n")
+    elif mode == 'asr':
+        pass
     else:
         raise NotImplementedError(mode)

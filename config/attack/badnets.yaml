@@ -1,0 +1,3 @@
+name: badnets
+mode: train
+tg_path: /home/chengyiqiu/code/SanDiffusion/resource/badnets/

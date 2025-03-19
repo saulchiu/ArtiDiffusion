@@ -1,4 +1,0 @@
-name: blended
-mode: train
-tg_path: /home/chengyiqiu/code/INBA/resource/blended/hello_kitty.jpeg
-blended_coeff: 0.2

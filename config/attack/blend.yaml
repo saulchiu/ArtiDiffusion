@@ -1,0 +1,4 @@
+name: blend
+mode: train
+tg_path: /home/chengyiqiu/code/SanDiffusion/resource/blend/hello_kitty.jpeg
+blended_coeff: 0.2
