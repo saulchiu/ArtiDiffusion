@@ -251,10 +251,13 @@ def patch_trigger(x_0: torch.Tensor, config) -> torch.Tensor:
         x_p = ndarray2tensor(x_p)
     elif attack_name == 'ftrojan':
         # from this repo: https://github.com/SoftWiser-group/FTrojan
-        channel_list = config.attack.channel_list
-        window_size = config.attack.window_size
-        pos_list = config.attack.pos_list
-        magnitude = config.attack.magnitude
+        channel_list = [1, 2]
+        window_size = 32
+        pos_list = [(15, 15), (31, 31)]
+        if config.dataset_name in ["cifar10", "gtsrb"]:
+            magnitude = 30
+        else:
+            magnitude = 50
         x_p = tensor2ndarray(x_0)
         x_p = rgb2yuv(x_p)
         x_dct = dct_2d_3c_slide_window(x_p, window_size)
