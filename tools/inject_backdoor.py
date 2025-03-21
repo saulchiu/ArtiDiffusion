@@ -251,13 +251,10 @@ def patch_trigger(x_0: torch.Tensor, config) -> torch.Tensor:
         x_p = ndarray2tensor(x_p)
     elif attack_name == 'ftrojan':
         # from this repo: https://github.com/SoftWiser-group/FTrojan
-        channel_list = [1, 2]
-        window_size = 32
-        pos_list = [(15, 15), (31, 31)]
-        if config.dataset_name in ["cifar10", "gtsrb"]:
-            magnitude = 30
-        else:
-            magnitude = 50
+        channel_list = config.attack.channel_list
+        window_size = config.attack.window_size
+        pos_list = config.attack.pos_list
+        magnitude = config.attack.magnitude
         x_p = tensor2ndarray(x_0)
         x_p = rgb2yuv(x_p)
         x_dct = dct_2d_3c_slide_window(x_p, window_size)
@@ -270,29 +267,6 @@ def patch_trigger(x_0: torch.Tensor, config) -> torch.Tensor:
         x_dct = np.transpose(x_dct, (1, 2, 0))
         x_idct = idct_2d_3c_slide_window(x_dct, window_size)
         x_idct = yuv2rgb(x_idct)
-
-        # test
-        # g = np.zeros(shape=(h, w, c))
-        # window_size = 32
-        # channel_list = [1]
-        # pos_list = [(15, 15), (31, 31)]
-        # magnitude = 50
-
-        # g = rgb2yuv(g)
-        # g_dct = dct_2d_3c_slide_window(g, window_size)
-        # g_dct = np.transpose(g_dct, (2, 0, 1))
-        # for ch in channel_list:
-        #     for w in range(0, g_dct.shape[1], window_size):
-        #         for h in range(0, g_dct.shape[2], window_size):
-        #             for pos in pos_list:
-        #                 g_dct[ch][w + pos[0], h + pos[1]] += magnitude
-        # g_dct = np.transpose(g_dct, (1, 2, 0))
-        # g_idct = idct_2d_3c_slide_window(g_dct, window_size)
-        # g_idct = yuv2rgb(g_idct)
-        # g_idct[0:3, 0:3, 0]
-        # x_p = tensor2ndarray(x_0) + 0.5 * g_idct
-        # x_p = x_p.astype(np.uint8)
-        # x_idct = np.clip(x_p, 0, 255)
         x_p = ndarray2tensor(x_idct)
     elif attack_name == 'wanet':  # num_workers should be 1!
         def get_wanet_grid(image_size, grid_path: str, s: float, device='cpu'):
@@ -589,5 +563,7 @@ def zero_out_tensor(tensor, ratio):
 def get_artifact(config: DictConfig):
     scale = config.image_size
     artifacts = torch.zeros(size=(3, scale, scale))
-    artifacts_p = patch_trigger(artifacts, config)
+    arti_config = config.clone()
+    arti_config.attack = arti_config.artifact
+    artifacts_p = patch_trigger(artifacts, arti_config)
     return artifacts_p
