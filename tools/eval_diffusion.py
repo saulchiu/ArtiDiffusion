@@ -26,7 +26,8 @@ from tqdm import tqdm
 sys.path.append('../')
 from diffusion.diffusion_model import DiffusionModel
 from tools.dataset import save_tensor_images, rm_if_exist, load_dataloader
-from tools.prepare_data import get_dataset, tensor2bad
+from tools.prepare_data import get_dataset
+from tools.inject_backdoor import patch_trigger
 from diffusion.unet import Unet
 from diffusion.dpm_solver import DPM_Solver, NoiseScheduleVP, model_wrapper
 from defence.sample import infer_clip_p_sample
@@ -238,7 +239,11 @@ def purification(path, t, loop, device, defence="None", batch=None, plot=True, t
     # config.attack = 'blended'
     # config.attack = 'wanet'
 
-    x_0 = tensor2bad(config, tensors, transform, device)
+    # x_0 = tensor2bad(config, tensors, transform, device)
+    x_0 = tensors.clone()
+    for i in range(x_0.shape[0]):
+        x_0[i] = patch_trigger(x_0[i], config)
+    x_p = x_0.clone()
     diffusion = load_diffusion(path, device)
     san_list = [x_0]
     # eval defence here
@@ -261,20 +266,27 @@ def purification(path, t, loop, device, defence="None", batch=None, plot=True, t
     else:
         raise NotImplementedError(defence)
     # sanitization process
+    distance = int(t / loop)
+    decreasing_list = [t - i * distance for i in range(loop)]
+    print(decreasing_list)
+    factor_list = [i / loop for i in range(loop + 1)]
+    print(factor_list)
     with tqdm(initial=0, total=loop) as pbar:
         for i in range(loop):
             # save img to collect data
-            p = f'{path}/purify_{i}'
-            rm_if_exist(p)
-            os.makedirs(p, exist_ok=True)
-            save_tensor_images(x_0, p)
+            # p = f'{path}/purify_{i}'
+            # rm_if_exist(p)
+            # os.makedirs(p, exist_ok=True)
+            # save_tensor_images(x_0, p)
             # forward
-            x_t = diffusion.q_sample(x_0, torch.tensor([t], device=device))
+            x_t = diffusion.q_sample(x_0, torch.tensor([decreasing_list[i]], device=device))
             # reverse
-            for j in reversed(range(0, t)):
+            for j in reversed(range(0, decreasing_list[i])):
                 x_t_m_1 = p_sample(x_t, torch.tensor([j], device=device))
                 x_t = x_t_m_1
-            x_0 = x_t
+            print(factor_list[i])
+            x_0 = x_t * factor_list[i] + x_p * (1 - factor_list[i])
+            # x_0 = x_t
             san_list.append(x_0)
             pbar.update(1)
     chain = torch.stack(san_list, dim=0)
@@ -316,7 +328,10 @@ def inpainting(path, t, loop, device, defence="None", batch=None, plot=True, tar
     # config.attack = 'badnet'
     # config.attack = 'blended'
     # config.attack = 'wanet'
-    x_0 = tensor2bad(config, tensors, transform, device)
+    # x_0 = tensor2bad(config, tensors, transform, device)
+    x_0 = tensors.clone()
+    for i in range(x_0.shape[0]):
+        x_0[i] = patch_trigger(x_0[i], config)
     diffusion = load_diffusion(path, device)
     san_list = [x_0.cpu()]
     # mask x_0s
@@ -403,7 +418,10 @@ def uncropping(path, t, loop, device, defence="None", batch=None, plot=True, tar
     # config.attack = 'badnet'
     # config.attack = 'blended'
     # config.attack = 'wanet'
-    x_0 = tensor2bad(config, tensors, transform, device)
+    # x_0 = tensor2bad(config, tensors, transform, device)
+    x_0 = tensors.clone()
+    for i in range(x_0.shape[0]):
+        x_0[i] = patch_trigger(x_0[i], config)
     diffusion = load_diffusion(path, device)
     san_list = [x_0.cpu()]
     # mask x_0s
@@ -467,7 +485,7 @@ def uncropping(path, t, loop, device, defence="None", batch=None, plot=True, tar
     return san_list[0], san_list[-1]
 
 @torch.inference_mode()
-def colorization(path, t, loop, device, defence="None", batch=None, plot=True, target=False, fix_seed=False):
+def colorization(path, t, loop, device, defence="None", batch=None, plot=True, target=False, fix_seed=False, tensor_list=None):
     # given t=400, loop=32
     ld = torch.load(f'{path}/result.pth', map_location=device)
     # config = DictConfig(ld['config'])
@@ -478,7 +496,7 @@ def colorization(path, t, loop, device, defence="None", batch=None, plot=True, t
         torchvision.transforms.ToTensor(),
         torchvision.transforms.Resize((config.image_size, config.image_size))
     ])
-    tensor_list = get_dataset(config.dataset_name, transform, target)
+    tensor_list = get_dataset(config.dataset_name, transform, target) if tensor_list is None else tensor_list
     b = 16 if batch is None else batch
     base = random.randint(0, 10000) if fix_seed is False else 64
     tensors = tensor_list[base:base + b]
@@ -625,10 +643,16 @@ if __name__ == '__main__':
         psnr_list = []
         lpips_list = []
 
-        translation_task = colorization
+        config = OmegaConf.load(f'{path}/config.yaml')
+        config = DictConfig(config)
+        transform = torchvision.transforms.Compose([
+            torchvision.transforms.ToTensor(),
+            torchvision.transforms.Resize((config.image_size, config.image_size))
+        ])
+        tensor_list = get_dataset(config.dataset_name, transform, False)
 
         while total >= batch:
-            x_before, x_after = translation_task(path, timestep, loop, device, defence, batch)
+            x_before, x_after = colorization(path=path, t=timestep, loop=loop, device=device, defence=defence, batch=batch, tensor_list=tensor_list)
             x_before = x_before.clone().clip(0, 1)
             x_after = x_after.clone().clip(0, 1)
             ssim_list.append(ssim_function(x_before.to(device), x_after.to(device)).item())
@@ -636,7 +660,7 @@ if __name__ == '__main__':
             lpips_list.append(lpips_function(x_before.to(device), x_after.to(device)).item())
             total -= batch
         if total > 0:
-            x_before, x_after = translation_task(path, timestep, loop, device, defence, total)
+            x_before, x_after = colorization(path=path, t=timestep, loop=loop, device=device, defence=defence, batch=total, tensor_list=tensor_list)
             x_before = x_before.clone().clip(0, 1)
             x_after = x_after.clone().clip(0, 1)
             ssim_list.append(ssim_function(x_before.to(device), x_after.to(device)).item())
@@ -653,6 +677,51 @@ if __name__ == '__main__':
         with open(file_path, "a") as f:
             f.write(f"SSIM: {ssim_mean:.6f}, PSNR: {psnr_mean:.6f}, LPIPS: {lpips_mean:.6f}\n")
     elif mode == 'asr':
-        pass
+        device = args.device
+        path = args.path
+        timestep = args.t
+        loop = args.l
+        defence = args.defence
+        batch = args.batch
+        x_before, x_after = purification(path, timestep, loop, device, defence, batch)
+        from tools.img import dct_2d_3c_full_scale, tensor2ndarray
+        scale = x_before.shape[-1]
+        res_before = np.zeros((scale, scale, 3), dtype=np.float32)
+        res_after = np.zeros((scale, scale, 3), dtype=np.float32)
+        for i in range(x_before.shape[0]):
+            x_i = x_before[i]
+            x_o = x_before[i]
+            x_i_f = dct_2d_3c_full_scale(tensor2ndarray(x_i))
+            x_o_f = dct_2d_3c_full_scale(tensor2ndarray(x_o))
+            res_before += x_i_f
+            res_after += x_o_f
+        res_before /= x_before.shape[0]
+        res_after /= x_before.shape[0]
+
+        def clip(data: np.ndarray) -> np.ndarray:
+            if data.shape[0] > 64:
+                return np.clip(a=data, a_min=1.5, a_max=4.5)
+            else:
+                from scipy.ndimage import gaussian_filter
+                data = np.log1p(np.abs(data))
+                data = gaussian_filter(data, sigma=2)
+                return data
+        
+        res_before = clip(res_before)
+        res_after = clip(res_after)
+
+        import matplotlib.pyplot as plt
+        fig, axes = plt.subplots(2, figsize=(12, 12))
+        axes[0].imshow(res_before[:, :, 0], cmap='hot')
+        axes[0].set_title('DCT of $x_i$ (Channel 0)')
+        axes[0].axis('off')
+
+        axes[1].imshow(res_after[:, :, 0], cmap='hot')
+        axes[1].set_title('DCT of $x_o$ (Channel 0)')
+        axes[1].axis('off')
+        plt.tight_layout()
+        plt.savefig('dct_hotmap.png', dpi=300)
+        plt.show()
+
     else:
         raise NotImplementedError(mode)
