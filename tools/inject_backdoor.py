@@ -566,7 +566,7 @@ def zero_out_tensor(tensor, ratio):
 def get_artifact(config: DictConfig):
     scale = config.image_size
     artifacts = torch.zeros(size=(3, scale, scale))
-    arti_config = config.clone()
+    arti_config = config.copy()
     arti_config.attack = arti_config.artifact
     artifacts_p = patch_trigger(artifacts, arti_config)
     return artifacts_p
