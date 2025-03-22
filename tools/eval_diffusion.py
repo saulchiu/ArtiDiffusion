@@ -273,35 +273,27 @@ def purification(path, t, loop, device, defence="None", batch=None, plot=True, t
     print(factor_list)
     with tqdm(initial=0, total=loop) as pbar:
         for i in range(loop):
-            # save img to collect data
-            # p = f'{path}/purify_{i}'
-            # rm_if_exist(p)
-            # os.makedirs(p, exist_ok=True)
-            # save_tensor_images(x_0, p)
-            # forward
             x_t = diffusion.q_sample(x_0, torch.tensor([decreasing_list[i]], device=device))
             # reverse
             for j in reversed(range(0, decreasing_list[i])):
                 x_t_m_1 = p_sample(x_t, torch.tensor([j], device=device))
                 x_t = x_t_m_1
-            # x_0 = x_t * factor_list[i] + x_p * (1 - factor_list[i])
-            x_0 = x_t
+            x_0 = x_t * factor_list[i] + x_p * (1 - factor_list[i])
+            # x_0 = x_t
             san_list.append(x_0)
             pbar.update(1)
     chain = torch.stack(san_list, dim=0)
     res = []
     for i in range(len(chain)):
         tensors = chain[i]
-        torchvision.utils.save_image(tensors, f'{path}/res_{i}.png', nrow=int(math.sqrt(tensors.shape[0])))
         grid = make_grid(tensors, nrow=int(math.sqrt(tensors.shape[0])))
         ndarr = grid.mul(255).add_(0.5).clamp_(0, 255).permute(1, 2, 0).to("cpu", torch.uint8).numpy()
         im = Image.fromarray(ndarr)
         res.append(torchvision.transforms.transforms.ToTensor()(im))
-
     res = torch.stack(res, dim=0)
     if plot:
         plot_images(images=res, num_images=res.shape[0])
-    return tensors, res
+    return san_list[0], san_list[-1]
 
 @torch.inference_mode()
 def inpainting(path, t, loop, device, defence="None", batch=None, plot=True, target=False, fix_seed=False):
