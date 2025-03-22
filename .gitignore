@@ -8,6 +8,8 @@ datasets/
 __pycache__/
 #tmp/
 
+tools/*jpg
+tools/*png
 backdoor_diffusion/results/
 dataset/dataset*
 dataset/outputs
@@ -22,7 +24,6 @@ diffusion/outputs
 tools/test.py
 defence/*/outputs
 sh/nohup*
-
 
 poisoned_fake_dataset/*
 
