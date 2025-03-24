@@ -234,7 +234,7 @@ def purification(path, t, loop, device, defence="None", batch=None, plot=True, t
     '''
     load benign model but use poisoning sample
     '''
-    # config.attack = 'benign'
+    config.attack.name = 'benign'
     # config.attack.name = 'badnets'
     # config.attack.tg_path = '/home/chengyiqiu/code/SanDiffusion/resource/badnets/'
     # config.attack = 'blended'
@@ -279,8 +279,8 @@ def purification(path, t, loop, device, defence="None", batch=None, plot=True, t
             for j in reversed(range(0, decreasing_list[i])):
                 x_t_m_1 = p_sample(x_t, torch.tensor([j], device=device))
                 x_t = x_t_m_1
-            # x_0 = x_t * factor_list[i] + x_p * (1 - factor_list[i])
-            x_0 = x_t
+            x_0 = x_t * factor_list[i] + x_p * (1 - factor_list[i])
+            # x_0 = x_t
             san_list.append(x_0)
             pbar.update(1)
     chain = torch.stack(san_list, dim=0)
