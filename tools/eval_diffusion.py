@@ -227,8 +227,7 @@ def purification(path, t, loop, device, defence="None", batch=None, plot=True, t
     ])
     tensor_list = get_dataset(config.dataset_name, transform, target)
     b = 16 if batch is None else batch
-    base = random.randint(0, 10000) if fix_seed is False else 64
-    tensors = tensor_list[base:base + b]
+    tensors = random.sample(tensor_list, b)
     tensors = torch.stack(tensors, dim=0)
     tensors = tensors.to(device)
     '''
@@ -309,8 +308,7 @@ def inpainting(path, t, loop, device, defence="None", batch=None, plot=True, tar
     ])
     tensor_list = get_dataset(config.dataset_name, transform, target)
     b = 16 if batch is None else batch
-    base = random.randint(0, 10000) if fix_seed is False else 64
-    tensors = tensor_list[base:base + b]
+    tensors = random.sample(tensor_list, b)
     tensors = torch.stack(tensors, dim=0)
     tensors = tensors.to(device)
     '''
@@ -399,8 +397,7 @@ def uncropping(path, t, loop, device, defence="None", batch=None, plot=True, tar
     ])
     tensor_list = get_dataset(config.dataset_name, transform, target)
     b = 16 if batch is None else batch
-    base = random.randint(0, 10000) if fix_seed is False else 64
-    tensors = tensor_list[base:base + b]
+    tensors = random.sample(tensor_list, b)
     tensors = torch.stack(tensors, dim=0)
     tensors = tensors.to(device)
     '''
@@ -490,16 +487,18 @@ def colorization(path, t, loop, device, defence="None", batch=None, plot=True, t
     ])
     tensor_list = get_dataset(config.dataset_name, transform, target) if tensor_list is None else tensor_list
     b = 16 if batch is None else batch
-    base = random.randint(0, 10000) if fix_seed is False else 64
-    tensors = tensor_list[base:base + b]
+    tensors = random.sample(tensor_list, b)
     tensors = torch.stack(tensors, dim=0)
     tensors = tensors.to(device)
     '''
     load benign model but use poisoning sample
     '''
     # config.attack.name = 'blended'
-    config.attack.name = 'benign'
-    x_rgb = tensor2bad(config, tensors, transform, device)
+    # config.attack.name = 'benign'
+    # x_rgb = tensor2bad(config, tensors, transform, device)
+    x_rgb = tensors.clone()
+    for i in range(x_rgb.shape[0]):
+        x_rgb[i] = patch_trigger(x_rgb[i], config)
     diffusion = load_diffusion(path, device)
     col_list = [x_rgb.cpu()]
     x_lab = rgb_tensor_to_lab_tensor(x_rgb)
@@ -565,7 +564,7 @@ def get_args():
     parser.add_argument("--l", type=int, default=8)
     parser.add_argument("--sampler", type=str, default="ddim")
     parser.add_argument("--sample_step", type=int, default=250)
-    parser.add_argument("--total", type=int, default=5000)
+    parser.add_argument("--total", type=int, default=50000)
 
     # defence
     parser.add_argument("--defence", type=str, default="None")
@@ -641,6 +640,7 @@ if __name__ == '__main__':
             torchvision.transforms.ToTensor(),
             torchvision.transforms.Resize((config.image_size, config.image_size))
         ])
+        config.attack.name = 'benign'
         tensor_list = get_dataset(config.dataset_name, transform, False)
 
         while total >= batch:
@@ -675,7 +675,7 @@ if __name__ == '__main__':
         loop = args.l
         defence = args.defence
         batch = args.batch
-        x_before, x_after = purification(path, timestep, loop, device, defence, batch)
+        x_before, x_after = colorization(path, timestep, loop, device, defence, batch)
         from tools.img import dct_2d_3c_full_scale, tensor2ndarray
         scale = x_before.shape[-1]
         res_before = np.zeros((scale, scale, 3), dtype=np.float32)

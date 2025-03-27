@@ -223,6 +223,14 @@ def train(config: DictConfig):
     """
     prepare dataset, save source code
     """
+    if config.path != "None":
+        path = config.path
+        device = config.device
+        print(f'discard default config, load config from {path}')
+        config = OmegaConf.load(f'{config.path}/config.yaml')
+        config = DictConfig(config)
+        config.path = path
+        config.device = device
     prepare_bad_data(config)
     print(OmegaConf.to_yaml(OmegaConf.to_object(config)))
     prepare_data_file = '../tools/prepare_data.py'
@@ -277,6 +285,12 @@ def train(config: DictConfig):
         good_loader = load_dataloader(good_path, trans, config.batch)
         assert config.p_start < config.p_end
     def get_x_and_t():
+        current_hour = get_hour()
+        if current_hour in range(9, 22) and config.device == 'cuda:1':
+            if config.unet.dim == 128:
+                time.sleep(0.14)
+            else:
+                time.sleep(0.08)
         if config.attack.name != 'benign':
             if random() < config.ratio:
                 img = next(bad_loader)
@@ -327,6 +341,7 @@ def train(config: DictConfig):
     '''
     start train!
     '''
+    config.path = target_folder
     with tqdm(initial=current_epoch, total=epoch) as pbar:
         while current_epoch < epoch:
             total_loss = torch.zeros(size=(), device=device)
