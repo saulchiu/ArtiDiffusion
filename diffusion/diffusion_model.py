@@ -288,9 +288,9 @@ def train(config: DictConfig):
         current_hour = get_hour()
         if current_hour in range(9, 22) and config.device == 'cuda:1':
             if config.unet.dim == 128:
-                time.sleep(0.14)
+                time.sleep(0.2)
             else:
-                time.sleep(0.08)
+                time.sleep(0.2)
         if config.attack.name != 'benign':
             if random() < config.ratio:
                 img = next(bad_loader)

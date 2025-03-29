@@ -120,7 +120,7 @@ def plot_images(images: torch.tensor, num_images, net=None):
         ax.axis('off')
 
     plt.tight_layout()
-    plt.savefig('./test.jpg')
+    plt.savefig('../test/test.jpg')
     plt.show()
 
 
@@ -233,7 +233,7 @@ def purification(path, t, loop, device, defence="None", batch=None, plot=True, t
     '''
     load benign model but use poisoning sample
     '''
-    config.attack.name = 'benign'
+    # config.attack.name = 'benign'
     # config.attack.name = 'badnets'
     # config.attack.tg_path = '/home/chengyiqiu/code/SanDiffusion/resource/badnets/'
     # config.attack = 'blended'
@@ -556,12 +556,12 @@ def get_args():
             require: device, path, batch, total sample num
     """
     parser = argparse.ArgumentParser()
-    parser.add_argument('--mode', type=str, default='san', action=ModeAction)
+    parser.add_argument('--mode', type=str, action=ModeAction)
     parser.add_argument('--device', type=str, default='cuda:0')
     parser.add_argument('--path', type=str)
-    parser.add_argument("--batch", type=int, default=32)
-    parser.add_argument("--t", type=int, default=200)
-    parser.add_argument("--l", type=int, default=8)
+    parser.add_argument("--batch", type=int, default=16)
+    parser.add_argument("--t", type=int, default=100)
+    parser.add_argument("--l", type=int, default=32)
     parser.add_argument("--sampler", type=str, default="ddim")
     parser.add_argument("--sample_step", type=int, default=250)
     parser.add_argument("--total", type=int, default=50000)
@@ -712,7 +712,7 @@ if __name__ == '__main__':
         axes[1].set_title('DCT of $x_o$ (Channel 0)')
         axes[1].axis('off')
         plt.tight_layout()
-        plt.savefig('dct_hotmap.png', dpi=300)
+        plt.savefig('../test/dct_hotmap.png', dpi=300)
         plt.show()
 
     else:
