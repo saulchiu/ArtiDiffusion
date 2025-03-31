@@ -290,7 +290,7 @@ def train(config: DictConfig):
             if config.unet.dim == 128:
                 time.sleep(0.2)
             else:
-                time.sleep(0.2)
+                time.sleep(0.04)
         if config.attack.name != 'benign':
             if random() < config.ratio:
                 img = next(bad_loader)

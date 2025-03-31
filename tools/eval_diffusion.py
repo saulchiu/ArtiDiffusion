@@ -443,8 +443,9 @@ def uncropping(path, t, loop, device, defence="None", batch=None, plot=True, tar
         raise NotImplementedError(defence)
     # x_0 = x_0 * mask + (1 - mask) * torch.randn_like(x_0, device=x_0.device)
     # x_0 = x_0 * mask + 0 * (1 - mask)
-    x_0 = x_0 * mask + (1 - mask) * torch.mean(
-        x_0 * mask + 0.75 * (1 - mask))
+    x_0 = x_0 * mask + 1 * (1 - mask)
+    # x_0 = x_0 * mask + (1 - mask) * torch.mean(
+    #     x_0 * mask + 0.75 * (1 - mask))
     san_list.append(x_0.cpu())
     x_t = x_0.clone()
     # t = 400

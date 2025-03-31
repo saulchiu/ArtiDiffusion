@@ -1,8 +1,7 @@
 dataset_name: cifar10
 device: cuda:0
 
-# batch: 128  # CIFAR10, GTSRB
-batch: 64  # CelebA
+batch: 128  # CIFAR10, GTSRB
 
 epoch: 7e5
 save_epoch: 10000
@@ -12,8 +11,7 @@ lr: 8e-5
 loss_type: l2
 sample_type: ddim
 
-# image_size: 32  # CIFAR10, GTSRB
-image_size: 64  # CelebA
+image_size: 32  # CIFAR10, GTSRB
 
 grad_acc: 1
 parallel: 0
@@ -22,14 +20,8 @@ mode: train
 
 unet:
   dim: 64
-  # dim: 128
-
-  # dim_mults: (1, 2, 4, 4, 8)  # CelebA-HQ
-  dim_mults: (1, 1, 2, 2, 4)  # CelebA
-  # dim_mults: (1, 2, 2, 2)  # CIFAR10, GTSRB
-
-  # dropout: 0.1  # CIFAR10
-  dropout: 0  # GTSRB CelebA
+  dim_mults: (1, 2, 2, 2)  # CIFAR10, GTSRB
+  dropout: 0.1  # CIFAR10
 
 diffusion:
   sampling_timesteps: 250
