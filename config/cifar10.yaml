@@ -7,7 +7,7 @@ epoch: 7e5
 save_epoch: 10000
 sample_epoch: 50000
 sample_num: 4
-lr: 8e-5
+lr: 2e-4
 loss_type: l2
 sample_type: ddim
 
@@ -19,7 +19,7 @@ path: None
 mode: train
 
 unet:
-  dim: 64
+  dim: 128
   dim_mults: (1, 2, 2, 2)  # CIFAR10, GTSRB
   dropout: 0.1  # CIFAR10
 

@@ -7,7 +7,7 @@ epoch: 7e5
 save_epoch: 10000
 sample_epoch: 50000
 sample_num: 4
-lr: 8e-5
+lr: 2e-5
 loss_type: l2
 sample_type: ddim
 
