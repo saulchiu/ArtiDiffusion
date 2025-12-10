@@ -349,8 +349,22 @@ def zero_out_tensor(tensor, ratio):
 
 def get_artifact(config: DictConfig):
     scale = config.image_size
-    artifacts = torch.zeros(size=(3, scale, scale))
-    arti_config = config.copy()
-    arti_config.attack = arti_config.artifact
-    artifacts_p = patch_trigger(artifacts, arti_config)
+    if config.attack.name == config.artifact.name:
+        artifacts = torch.zeros(size=(3, scale, scale))
+        arti_config = config.copy()
+        arti_config.attack = arti_config.artifact
+        artifacts_p = patch_trigger(artifacts, arti_config)
+    else:
+        # e.g., attack ftrojan, artifact blend
+        # print('hh')
+        artifacts_1 = torch.zeros(size=(3, scale, scale))
+        artifacts_2 = torch.zeros(size=(3, scale, scale))
+        artifacts_1 = patch_trigger(artifacts_1, config=config)
+
+        arti_config = config.copy()
+        arti_config.attack = arti_config.artifact
+        artifacts_2 = patch_trigger(artifacts_2, arti_config)
+
+        artifacts_p = artifacts_1 + artifacts_2
+        # torchvision.utils.save_image(artifacts_p.repeat(4, 1, 1, 1), f'../test/test_artifact.png', nrow=2)
     return artifacts_p

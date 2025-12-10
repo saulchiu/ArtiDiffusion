@@ -29,7 +29,15 @@ values = [
     [8.88, 7.97, 8.25, 12.38, 19.15, 16.71],  # CelebA+Blended
 ]
 
-colors = ["#0d5b26", "#c94733", "#fddf8b", "#3fab47", "#52b9d8", "#2e5fa1"]
+# colors = ["#0d5b26", "#c94733", "#fddf8b", "#3fab47", "#52b9d8", "#2e5fa1"]
+colors = ["#66c2a5", "#fc8d62", "#8da0cb", 
+          "#e78ac3", "#a6d854", "#ffd92f", 
+          "#e5c494", "#b3b3b3"]
+colors = ["#648fff", "#785ef0", "#dc267f", 
+          "#fe6100", "#ffb000", "#000000"]
+
+colors = ["#648fff", "#ff7f0e", "#a6d854", "#d62728", 
+          "#e78ac3", "#17becf"]
 
 x = np.arange(len(poison_rates))  # x轴刻度
 bar_width = 0.15  # 柱状图宽度
@@ -78,3 +86,6 @@ ax.spines["left"].set_position(("data", -bar_width - spacing))
 # 展示图表
 plt.tight_layout()
 plt.show()
+
+plt.savefig('chart.pdf', format='pdf', dpi=300, bbox_inches='tight')
+print("图表已保存为 chart.pdf")
